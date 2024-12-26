@@ -1,0 +1,14 @@
+{
+  "extras": [
+    "lazyvim.plugins.extras.ai.copilot",
+    "lazyvim.plugins.extras.coding.mini-surround",
+    "lazyvim.plugins.extras.coding.yanky",
+    "lazyvim.plugins.extras.editor.refactoring",
+    "lazyvim.plugins.extras.lang.omnisharp",
+    "lazyvim.plugins.extras.test.core"
+  ],
+  "news": {
+    "NEWS.md": "10960"
+  },
+  "version": 7
+}
