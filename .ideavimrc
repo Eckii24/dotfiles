@@ -1,0 +1,57 @@
+source ~/.vimrc
+
+map <leader>w [w
+map <leader>e ]w
+map <leader>b [b
+map <leader>ge ]b
+
+map <leader>g1 <action>(ActivateProjectToolWindow)
+map <leader>g2 <action>(ActivateFindToolWindow)
+map <leader>g3 <action>(ActivateCommitToolWindow)
+map <leader>g4 <action>(RunAnything)
+map <leader>g5 <action>(ActivateTerminalToolWindow)
+map <leader>gq <action>(QuickJavaDoc)
+map <leader>gw <action>(FindUsages)
+map <leader>ge <action>(RecentFiles)
+map <leader>gr <action>(RenameElement)
+map <leader>gt <action>(Refactorings.QuickListPopupAction)
+map <leader>ga <action>(GotoAction)
+map <leader>gs <action>(SurroundWith)
+map <leader>gd <action>(FileStructurePopup)
+map <leader>gf <action>(FindInPath)
+map <leader>gg <action>(Generate)
+map <leader>gy <action>(HideAllWindows)
+map <leader>gx <action>(PasteMultiple)
+map <leader>gc <action>(SelectInProjectView)
+map <leader>gv <action>(VimPluginToggle)
+map <leader>gb <action>(GotoDeclaration)
+map <leader>gB <action>(GotoImplementation)
+map <leader>g^ <action>(ReSharperGotoNextErrorInSolution)
+map <leader>g<left> <action>(Back)
+map <leader>g<right> <action>(Forward)
+map <leader>g<up> <action>(VcsShowPrevChangeMarker)
+map <leader>g<down> <action>(VcsShowNextChangeMarker)
+map <leader>g<leader> <action>(CodeCompletion)
+map <leader>g<cr> <action>(showintentionactions)
+map <leader>g7 <action>(StepInto)
+map <leader>g8 <action>(StepOver)
+map <leader>g9 <action>(Resume)
+map <leader>gp <action>(ParameterInfo)
+map <leader>gj <action>(SelectNextOccurrence)
+map <leader>gk <action>(Vcs.Push)
+map <leader>gl <action>(ReformatCode)
+map <leader>gn <action>(copilot.requestCompletions)
+map <leader>gm <action>(copilot.applyInlays)
+map <leader>g, <action>(copilot.applyInlays)
+map <leader>g. <action>(copilot.applyInlays)
+
+set ideaput
+set ideamarks
+
+set argtextobj
+set commentary
+set easymotion
+set highlightedyank
+set surround
+set textobj-entire
+set textobj-indent
