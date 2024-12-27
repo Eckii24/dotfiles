@@ -14,6 +14,17 @@ backup-proxmox() {
     find "$DESTINATION_PATH" -maxdepth 1 -type f -name 'vzdump-lxc-102*' -mtime +7 -exec rm {} \;
 }
 
+if [[  -x "/opt/homebrew/bin/brew"  ]]; then
+  # Apple Silicon (ARM)
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[  -x "/usr/local/bin/brew"  ]]; then
+  # Intel Mac
+  eval "$(/usr/local/bin/brew shellenv)"
+elif [[  -x "/home/linuxbrew/.linuxbrew/bin/brew"  ]]; then
+  # Linux
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
 # Used plugins via brew
 source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
 zvm_after_init_commands+=('source <(fzf --zsh)')
@@ -42,11 +53,6 @@ alias la='ls --long --all --git'
 
 # docker aliases
 alias mitmweb='docker run -it --rm -v ~/.mitmproxy:/home/mitmproxy/.mitmproxy -p 8080:8080 -p 127.0.0.1:8081:8081 mitmproxy/mitmproxy mitmweb --web-host 0.0.0.0'
-
-# PATH
-if [[ ! ":$PATH:" =~ ":$(brew --prefix)/bin:" ]]; then
-  export PATH="$PATH:$(brew --prefix)/bin"
-fi
 
 # Setup fzf
 source <(fzf --zsh)
