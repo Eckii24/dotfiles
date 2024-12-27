@@ -21,10 +21,15 @@ if ! command -v brew &>/dev/null; then
   echo "Homebrew not found. Installing Homebrew..."
   export NONINTERACTIVE=1
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  add_brew_to_path # Ensure Homebrew is in the PATH after installation
+  add_brew_to_path 
 else
   echo "Homebrew is already installed."
-  add_brew_to_path # Ensure Homebrew is in the PATH
+fi
+
+# Run before bootstrap script if it exists
+if [ -d "bootstrap.before"]; then
+  echo "Running before bootstrap script..."
+  ./bootstrap.before
 fi
 
 # Install dependencies using Brewfile
@@ -35,8 +40,14 @@ else
   echo "No Brewfile found. Skipping dependency installation."
 fi
 
+# Run after bootstrap script if it exists
+if [ -d "bootstrap.after"]; then
+  echo "Running after bootstrap script..."
+  ./bootstrap.after
+fi
+
 echo "Updating the yadm repo origin URL"
-yadm remote set-url origin "git@github.com:MyUser/dotfiles.git"
+yadm remote set-url origin "git@github.com:Eckii24/dotfiles.git"
 
 echo "Install Neovim plugins"
 nvim --headless "+Lazy! sync" +qa
