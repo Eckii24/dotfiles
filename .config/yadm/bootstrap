@@ -4,13 +4,13 @@ set -eu
 
 # Function to add Homebrew to PATH
 add_brew_to_path() {
-  if [ -x "/opt/homebrew/bin/brew" ]; then
+  if [[  -x "/opt/homebrew/bin/brew"  ]]; then
     # Apple Silicon (ARM)
     eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [ -x "/usr/local/bin/brew" ]; then
+  elif [[  -x "/usr/local/bin/brew"  ]]; then
     # Intel Mac
     eval "$(/usr/local/bin/brew shellenv)"
-  elif [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+  elif [[  -x "/home/linuxbrew/.linuxbrew/bin/brew"  ]]; then
     # Linux
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
   fi
@@ -27,13 +27,13 @@ else
 fi
 
 # Run before bootstrap script if it exists
-if [ -x "bootstrap.before"]; then
+if [[  -x "./bootstrap.before"  ]]; then
   echo "Running before bootstrap script..."
   ./bootstrap.before
 fi
 
 # Install dependencies using Brewfile
-if [ -f "$HOME/.config/yadm/Brewfile" ]; then
+if [[  -f "$HOME/.config/yadm/Brewfile"  ]]; then
   echo "Installing dependencies from Brewfile..."
   brew bundle --file="$HOME/.config/yadm/Brewfile"
 else
@@ -41,7 +41,7 @@ else
 fi
 
 # Run after bootstrap script if it exists
-if [ -x "bootstrap.after"]; then
+if [[  -x "./bootstrap.after"  ]]; then
   echo "Running after bootstrap script..."
   ./bootstrap.after
 fi
