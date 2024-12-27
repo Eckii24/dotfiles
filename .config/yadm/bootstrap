@@ -1,29 +1,44 @@
 #!/bin/bash
 
-# Save this file as ~/.config/yadm/bootstrap and make it executable. It will
-# execute all executable files (excluding templates and editor backups) in the
-# ~/.config/yadm/bootstrap.d directory when run.
-
 set -eu
 
-# Directory to look for bootstrap executables in
-BOOTSTRAP_D="${BASH_SOURCE[0]}.d"
+# Function to add Homebrew to PATH
+add_brew_to_path() {
+  if [ -x "/opt/homebrew/bin/brew" ]; then
+    # Apple Silicon (ARM)
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x "/usr/local/bin/brew" ]; then
+    # Intel Mac
+    eval "$(/usr/local/bin/brew shellenv)"
+  elif [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+    # Linux
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  fi
+}
 
-if [[ ! -d "$BOOTSTRAP_D" ]]; then
-    echo "Error: bootstrap directory '$BOOTSTRAP_D' not found" >&2
-    exit 1
+# Install Homebrew if not already installed
+if ! command -v brew &>/dev/null; then
+  echo "Homebrew not found. Installing Homebrew..."
+  export NONINTERACTIVE=1
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  add_brew_to_path # Ensure Homebrew is in the PATH after installation
+else
+  echo "Homebrew is already installed."
+  add_brew_to_path # Ensure Homebrew is in the PATH
 fi
 
-declare -a bootstraps
-while IFS= read -r bootstrap; do
-    if [[ -x "$bootstrap" && ! "$bootstrap" =~ "##" && ! "$bootstrap" =~ ~$ ]]; then
-        bootstraps+=("$bootstrap")
-    fi
-done < <(find -L "$BOOTSTRAP_D" -type f | sort)
+# Install dependencies using Brewfile
+if [ -f "$HOME/.config/yadm/Brewfile" ]; then
+  echo "Installing dependencies from Brewfile..."
+  brew bundle --file="$HOME/.config/yadm/Brewfile"
+else
+  echo "No Brewfile found. Skipping dependency installation."
+fi
 
-for bootstrap in "${bootstraps[@]}"; do
-    if ! "$bootstrap"; then
-        echo "Error: bootstrap '$bootstrap' failed" >&2
-        exit 1
-    fi
-done
+echo "Updating the yadm repo origin URL"
+yadm remote set-url origin "git@github.com:MyUser/dotfiles.git"
+
+echo "Install Neovim plugins"
+nvim --headless "+Lazy! sync" +qa
+
+echo "Bootstrap complete!"

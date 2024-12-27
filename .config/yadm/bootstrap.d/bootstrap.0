@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu
+
 # Function to add Homebrew to PATH
 add_brew_to_path() {
   if [ -x "/opt/homebrew/bin/brew" ]; then
@@ -33,6 +35,11 @@ else
   echo "No Brewfile found. Skipping dependency installation."
 fi
 
-echo "Bootstrap complete!"
+echo "Updating the yadm repo origin URL"
+yadm remote set-url origin "git@github.com:MyUser/dotfiles.git"
 
+echo "Install Neovim plugins"
+nvim --headless "+Lazy! sync" +qa
+
+echo "Bootstrap complete!"
 
