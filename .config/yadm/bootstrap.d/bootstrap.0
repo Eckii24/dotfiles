@@ -1,10 +1,29 @@
+
+#!/bin/bash
+
+# Function to add Homebrew to PATH
+add_brew_to_path() {
+  if [ -d "/opt/homebrew/bin" ]; then
+    # Apple Silicon (ARM)
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -d "/usr/local/bin" ]; then
+    # Intel Mac
+    eval "$(/usr/local/bin/brew shellenv)"
+  elif [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
+    # Linux
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  fi
+}
+
 # Install Homebrew if not already installed
 if ! command -v brew &>/dev/null; then
   echo "Homebrew not found. Installing Homebrew..."
+  export NONINTERACTIVE=1
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  eval "$(/opt/homebrew/bin/brew shellenv)" # Ensure Homebrew is in the PATH
+  add_brew_to_path # Ensure Homebrew is in the PATH after installation
 else
   echo "Homebrew is already installed."
+  add_brew_to_path # Ensure Homebrew is in the PATH
 fi
 
 # Install dependencies using Brewfile
@@ -16,3 +35,4 @@ else
 fi
 
 echo "Bootstrap complete!"
+
