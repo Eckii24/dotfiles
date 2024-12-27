@@ -1,7 +1,3 @@
-#!/bin/bash
-
-set -eu
-
 # Function to add Homebrew to PATH
 add_brew_to_path() {
   if [[  -x "/opt/homebrew/bin/brew"  ]]; then
@@ -16,12 +12,3 @@ add_brew_to_path() {
   fi
 }
 
-# Install Homebrew if not already installed
-if ! command -v brew &>/dev/null; then
-  echo "Homebrew not found. Installing Homebrew..."
-  export NONINTERACTIVE=1
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  add_brew_to_path 
-else
-  echo "Homebrew is already installed."
-fi

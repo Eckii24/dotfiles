@@ -3,10 +3,12 @@
 
 set -eu
 
+source $HOME/.config/yadm/bootstrap.d/bootstrap_functions##class.never,e.sh
+
 echo "Updating the yadm repo origin URL"
-yadm remote set-url origin "git@github.com:Eckii24/dotfiles.git"
+$(brew -prefix)/bin/yadm remote set-url origin "git@github.com:Eckii24/dotfiles.git"
 
 echo "Install Neovim plugins"
-nvim --headless "+Lazy! sync" +qa
+$(brew --prefix)/bin/nvim --headless "+Lazy! sync" +qa
 
 echo "Finishing up bootstrapping"
