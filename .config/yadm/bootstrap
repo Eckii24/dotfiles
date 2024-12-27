@@ -27,7 +27,7 @@ else
 fi
 
 # Run before bootstrap script if it exists
-if [ -d "bootstrap.before"]; then
+if [ -x "bootstrap.before"]; then
   echo "Running before bootstrap script..."
   ./bootstrap.before
 fi
@@ -41,7 +41,7 @@ else
 fi
 
 # Run after bootstrap script if it exists
-if [ -d "bootstrap.after"]; then
+if [ -x "bootstrap.after"]; then
   echo "Running after bootstrap script..."
   ./bootstrap.after
 fi
