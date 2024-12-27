@@ -5,7 +5,7 @@ echo "Starting setup..."
 # Download and temporarily install YADM
 install_temp_yadm() {
     echo "Installing temporary YADM..."
-    curl -fLo /tmp/yadm https://github.com/TheLocehiliosan/yadm/raw/master/yadm
+    curl -fLo /tmp/yadm https://github.com/yadm-dev/yadm/raw/master/yadm
     chmod +x /tmp/yadm
 }
 
