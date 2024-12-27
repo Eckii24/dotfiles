@@ -1,0 +1,16 @@
+# Install YADM if not already installed
+if ! command -v yadm &>/dev/null; then
+    echo "Installing YADM..."
+    sudo apt-get update
+    sudo apt-get install -y yadm
+else
+    echo "YADM is already installed."
+fi
+
+# Install dependencies using dependencies.txt
+if [ -f "$HOME/.config/yadm/dependencies.txt" ]; then
+    echo "Installing dependencies from dependencies.txt..."
+    xargs sudo apt-get install -y < "$HOME/.yadm/dependencies.txt"
+else
+    echo "No dependencies.txt found. Skipping dependency installation."
+fi
