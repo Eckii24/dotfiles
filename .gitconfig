@@ -17,3 +17,6 @@ lg = !"git lg1"
 
 [delta]
   side-by-side = true
+
+[rebase]
+  updateRefs = true
