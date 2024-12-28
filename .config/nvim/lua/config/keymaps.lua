@@ -8,4 +8,5 @@ vim.keymap.set("n", "<c-t>", function() Snacks.terminal(nil) end, { desc = "Term
 vim.keymap.set("t", "<C-t>", "<cmd>close<cr>", { desc = "Hide Terminal" })
 
 -- AI completion
--- vim.keymap.set("i", "<C-M>", require("copilot.suggestion").next, { desc = "Next AI suggestion" })
+vim.keymap.set("i", ",,m", require("copilot.suggestion").next, { desc = "Next AI suggestion" })
+vim.keymap.set("i", ",,n", require("copilot.suggestion").prev, { desc = "Previous AI suggestion" })
