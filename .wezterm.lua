@@ -1,12 +1,19 @@
 local wezterm = require "wezterm"
 local config = wezterm.config_builder()
 
+if wezterm.target_triple:find("darwin") ~= nil then
+  config.window_decorations = "RESIZE"
+end
+
+if wezterm.target_triple:find("windows") ~= nil then
+  config.default_domain = "WSL:Debian"
+  config.prefer_egl = true
+end
+
 config.color_scheme = "tokyonight_moon"
 config.font = wezterm.font "Hack Nerd Font"
 
 config.hide_tab_bar_if_only_one_tab = true
-config.window_decorations = "RESIZE"
-
 config.window_close_confirmation = "NeverPrompt"
 
 config.leader = { key = "w", mods = "ALT", timeout_milliseconds = 2000 }
