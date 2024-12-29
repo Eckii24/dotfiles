@@ -1,6 +1,5 @@
-[user]
-	name = Matthias Eck
-	email = matthias.eck93@gmail.com
+[include]
+  path = .gitconfig.local
 
 [alias]
 lg1 = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all
