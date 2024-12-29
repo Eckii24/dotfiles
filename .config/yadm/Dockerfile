@@ -4,8 +4,8 @@ FROM --platform=linux/amd64 ubuntu:24.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install required dependencies (curl, git, and others)
-RUN apt-get update && apt-get install -y build-essential procps curl file git
+# Install required dependencies for yadm
+RUN apt-get update && apt-get install -y curl git
 
 # Create dockerenv file to tell brew, this is a automated script
 # Otherwise brew is complaining, that it can not be executed as root
