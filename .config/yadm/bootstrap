@@ -49,3 +49,5 @@ for bootstrap in "${bootstraps[@]}"; do
     # if they are not already set.
     add_brew_to_path
 done
+
+echo "Finishing up bootstrapping"
