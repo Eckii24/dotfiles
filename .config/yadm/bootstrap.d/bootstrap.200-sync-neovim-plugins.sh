@@ -2,5 +2,5 @@
 
 set -eu
 
-echo "Install Neovim plugins"
+echo "Sync Neovim plugins"
 nvim --headless "+Lazy! sync" +qa
