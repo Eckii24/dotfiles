@@ -3,7 +3,7 @@
 set -eu
 
 install_brew_dependencies_on_linux(){
-  if [[ uname == "Linux" ]]; then
+  if [[ "$(uname)" == "Linux" ]]; then
     echo "Install dependencies for Homebrew..."
 
     if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
