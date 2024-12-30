@@ -6,7 +6,7 @@ This repository contains my dotfiles to setup my development environment.
 
 Just execute the following command:
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/yadm/setup.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
 ```
 
 HINT: Make sure curl and git are available, when executing the command.

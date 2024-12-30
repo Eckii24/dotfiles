@@ -12,6 +12,6 @@ RUN apt-get update && apt-get install -y curl git
 RUN touch /.dockerenv
 
 # Run the setup script (YADM handles the rest via bootstrap)
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/yadm/setup.sh)"
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
 
 CMD ["/home/linuxbrew/.linuxbrew/bin/zsh"]
