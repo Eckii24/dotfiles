@@ -21,11 +21,9 @@ brew "zsh-vi-mode"
 brew "zsh-you-should-use"
 brew "jandedobbeleer/oh-my-posh/oh-my-posh"
 cask "docker"
-cask "dotnet-sdk"
 cask "font-hack-nerd-font"
 cask "keymapp"
 cask "notion"
-cask "powershell"
 cask "wezterm"
 mas "Notion Web Clipper", id: 1559269364
 mas "WireGuard", id: 1451685025
