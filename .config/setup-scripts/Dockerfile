@@ -7,6 +7,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install required dependencies for yadm
 RUN apt-get update && apt-get install -y curl git
 
+# Setup ssh server (must be used with a mounted key)
+# use '-v ~/.ssh/id_rsa.pub:/root/.ssh/authorized_keys/id_rsa.pub:ro'
+RUN apt-get update && apt-get install -y openssh-server
+RUN mkdir /var/run/sshd
+
 # Create dockerenv file to tell brew, this is a automated script
 # Otherwise brew is complaining, that it can not be executed as root
 RUN touch /.dockerenv
@@ -14,4 +19,5 @@ RUN touch /.dockerenv
 # Run the setup script (YADM handles the rest via bootstrap)
 RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
 
-CMD ["/home/linuxbrew/.linuxbrew/bin/zsh"]
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
