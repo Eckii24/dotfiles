@@ -19,3 +19,4 @@ lg = !"git lg1"
 
 [rebase]
   updateRefs = true
+  autosquash = true
