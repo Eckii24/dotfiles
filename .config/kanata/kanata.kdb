@@ -1,0 +1,20 @@
+(defsrc
+)
+
+(deftemplate charmod (char mod)
+  (switch 
+    ((key-timing 3 less-than 450)) $char break
+    () (tap-hold-release-timeout 200 500 $char $mod $char) break
+  )
+)
+
+(deflayermap (main)
+  a (t! charmod a lmet)
+  s (t! charmod s lalt)
+  d (t! charmod d lsft)
+  f (t! charmod f lctl)
+  j (t! charmod j rctl)
+  k (t! charmod k rsft)
+  l (t! charmod l ralt)
+  ; (t! charmod ; rmet)
+)
