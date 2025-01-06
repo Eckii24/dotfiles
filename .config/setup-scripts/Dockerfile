@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y curl git
 # Setup ssh server (must be used with a mounted key)
 # use '-v ~/.ssh/id_rsa.pub:/root/.ssh/authorized_keys/id_rsa.pub:ro'
 RUN apt-get update && apt-get install -y openssh-server
+
 RUN mkdir /var/run/sshd
+RUN echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
 
 # Create dockerenv file to tell brew, this is a automated script
 # Otherwise brew is complaining, that it can not be executed as root
