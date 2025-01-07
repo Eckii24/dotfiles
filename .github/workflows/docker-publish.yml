@@ -5,6 +5,7 @@ on:
   push:
     tags: # Trigger the workflow only when a tag is pushed
       - '*' # Matches all tags (e.g., v1.0.0, 1.0.0, etc.)
+  workflow_dispatch: # Allows the workflow to be triggered manually
 
 jobs:
   build-and-push:
@@ -15,10 +16,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Extract the Git tag
-    - name: Get Git Tag
+# Set the image tag based on the trigger type
+    - name: Set Image Tag
       id: vars
-      run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+      run: |
+        if [ "${{ github.event_name }}" == "push" ]; then
+          # For Git tag push, use the tag name
+          echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+        else
+          # For manual trigger, use the commit SHA as a suffix
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "TAG=manual-${SHORT_SHA}" >> $GITHUB_ENV
+        fi
 
     # Log in to Docker Hub
     - name: Log in to Docker Hub
