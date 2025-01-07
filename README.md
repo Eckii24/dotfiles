@@ -30,3 +30,10 @@ docker run --rm -d \
   -v <path-to-project>:/root/ \
   eckii24/dev-base:latest
 ```
+
+The container should be accessed via SSH:
+```bash
+ssh-add
+
+ssh -p 2222 root@localhost
+```
