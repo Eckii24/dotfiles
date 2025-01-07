@@ -2,8 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - main  # Change to your default branch, e.g., `main` or `master`
+    branches: [ "master" ]
 
 jobs:
   build-and-push:
@@ -12,7 +11,7 @@ jobs:
     steps:
     # Checkout the repository code
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # Log in to Docker Hub
     - name: Log in to Docker Hub
@@ -24,7 +23,7 @@ jobs:
     # Build the Docker image
     - name: Build Base Docker image
       run: |
-        docker build -t eckii24/dev-base:latest -f .config/setup-scripts/base.Dockerfile --progress=plain -
+        docker build -t eckii24/dev-base:latest -f ./.config/setup-scripts/base.Dockerfile --progress=plain .
 
     # Push the Docker image to Docker Hub
     - name: Push Base Docker image
