@@ -38,5 +38,9 @@ else
   brew install --cask dotnet-sdk
 fi
 
-echo "Sync Neovim plugins"
+echo "Install dotnet tools..."
+dotnet tool install -g csharpier
+dotnet tool install -g dotnet-outdated-tool
+
+echo "Sync Neovim plugins..."
 nvim --headless "+Lazy! sync" +qa
