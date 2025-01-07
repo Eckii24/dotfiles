@@ -18,3 +18,14 @@ Install the required tools on windows level:
 choco install wezterm
 choco install nerd-fonts-hack
 ```
+
+## Docker enviroments
+
+The repo also provides preconfigured docker files to work inside them.
+
+```bash
+docker run --rm -d \
+  -p 2222:22 \
+  -v ~/.ssh/<id-file>.pub:/root/.ssh/authorized_keys:ro
+  -v <path-to-project>:/root/
+```
