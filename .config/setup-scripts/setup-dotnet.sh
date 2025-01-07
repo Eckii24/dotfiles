@@ -37,3 +37,6 @@ if [[ "$(uname)" == "Linux" ]]; then
 else
   brew install --cask dotnet-sdk
 fi
+
+echo "Sync Neovim plugins"
+nvim --headless "+Lazy! sync" +qa
