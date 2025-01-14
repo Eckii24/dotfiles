@@ -10,7 +10,7 @@ if wezterm.target_triple:find("windows") ~= nil then
   config.prefer_egl = true
 end
 
-config.color_scheme = "tokyonight_moon"
+config.color_scheme = "catppuccin-macchiato"
 config.font = wezterm.font "Hack Nerd Font"
 
 config.hide_tab_bar_if_only_one_tab = true
