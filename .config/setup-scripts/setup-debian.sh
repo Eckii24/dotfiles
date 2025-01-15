@@ -23,9 +23,7 @@ sudo systemctl enable lightdm
 # Install Docker
 echo "Installing Docker..."
 sudo apt install -y docker.io
-sudo systemctl start docker
 sudo systemctl enable docker
-docker --version
 
 # Install dotfiles
 echo "Installing dotfiles..."
@@ -39,7 +37,7 @@ sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub
 
 # Install wezterm
 echo "Installing WezTerm..."
-sudo flatpak install -y flathub io.github.wez.wezterm
+sudo flatpak install -y flathub org.wezfurlong.wezterm
 
 # Install JetBrains Rider
 echo "Installing JetBrains Rider..."
@@ -49,15 +47,15 @@ sudo flatpak install -y flathub com.jetbrains.Rider
 echo "Installing Microsoft Edge..."
 sudo flatpak install -y flathub com.microsoft.Edge
 
+# Install Postman
+echo "Installing Postman..."
+sudo flatpak install -y flathub com.getpostman.Postman
+
 # Install Mockoon
 echo "Installing Mockoon..."
 curl -L https://github.com/mockoon/mockoon/releases/latest/download/mockoon-linux-x64.deb -o /tmp/mockoon.deb
 sudo apt install -y /tmp/mockoon.deb
 rm /tmp/mockoon.deb
-
-# Install Postman
-echo "Installing Postman..."
-sudo flatpak install -y flathub com.getpostman.Postman
 
 # Install Zeebe Modeler
 echo "Installing Zeebe Modeler..."
@@ -67,6 +65,4 @@ sudo tar -xzf /tmp/zeebe-modeler.tar.gz -C /opt/zeebe-modeler --strip-components
 sudo ln -sf /opt/zeebe-modeler/zeebe-modeler /usr/local/bin/zeebe-modeler
 rm /tmp/zeebe-modeler.tar.gz
 
-echo "Setup complete!"
-
-
+echo "Setup complete! Please restart the system."

@@ -14,3 +14,15 @@
 8. Scan additional media can be declined
 9. Package mirror: Use germany and deb.debian.org without proxy
 10. Choose software to install: Only standard system utilities
+
+## Setup system
+
+Make sure `curl` is available:
+```bash
+sudo apt install curl
+```
+
+After that the setup script can be run with the following command:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-debian.sh)"
+```
