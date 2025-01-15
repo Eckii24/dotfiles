@@ -27,6 +27,11 @@ sudo systemctl start docker
 sudo systemctl enable docker
 docker --version
 
+# Install dotfiles
+echo "Installing dotfiles..."
+sudo apt install -y curl git
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
+
 # Install flatpak
 echo "Installing Flatpak..."
 sudo apt install -y flatpak
