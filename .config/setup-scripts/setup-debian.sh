@@ -15,9 +15,9 @@ sudo update-grub
 echo "Updating system..."
 sudo apt update && sudo apt upgrade -y
 
-# Install Xorg, i3 and lightdm
-echo "Installing Xorg, i3, and lightdm..."
-sudo apt install -y  xorg i3 lightdm lightdm-gtk-greeter
+# Install everything for the window manager
+echo "Installing everything for the window manager..."
+sudo apt install -y  xorg i3 lightdm lightdm-gtk-greeter rofi feh
 sudo systemctl enable lightdm
 
 # Install Docker
