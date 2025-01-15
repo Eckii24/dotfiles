@@ -53,16 +53,25 @@ sudo flatpak install -y flathub com.getpostman.Postman
 
 # Install Mockoon
 echo "Installing Mockoon..."
-curl -L https://github.com/mockoon/mockoon/releases/latest/download/mockoon-linux-x64.deb -o /tmp/mockoon.deb
+curl -L https://github.com/mockoon/mockoon/releases/download/v9.1.0/mockoon-9.1.0.amd64.deb -o /tmp/mockoon.deb
 sudo apt install -y /tmp/mockoon.deb
 rm /tmp/mockoon.deb
 
 # Install Zeebe Modeler
 echo "Installing Zeebe Modeler..."
-curl -L https://github.com/camunda/zeebe-modeler/releases/latest/download/zeebe-modeler-linux-x64.tar.gz -o /tmp/zeebe-modeler.tar.gz
-sudo mkdir -p /opt/zeebe-modeler
-sudo tar -xzf /tmp/zeebe-modeler.tar.gz -C /opt/zeebe-modeler --strip-components=1
-sudo ln -sf /opt/zeebe-modeler/zeebe-modeler /usr/local/bin/zeebe-modeler
-rm /tmp/zeebe-modeler.tar.gz
+curl -L https://downloads.camunda.cloud/release/camunda-modeler/5.31.0/camunda-modeler-5.31.0-linux-x64.tar.gz -o /tmp/camunda-modeler.tar.gz
+sudo mkdir -p /opt/camunda-modeler
+sudo tar -xzf /tmp/camunda-modeler.tar.gz -C /opt/camunda-modeler --strip-components=1
+sudo ln -sf /opt/camunda-modeler/camunda-modeler /usr/local/bin/camunda-modeler
+rm /tmp/camunda-modeler.tar.gz
+
+# Install Hack Nerd Font
+echo "Installing Hack Nerd Font..."
+FONT_DIR="$HOME/.local/share/fonts"
+mkdir -p $FONT_DIR
+curl -L https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz -o "/tmp/Hack.tar.xz"
+tar -xJf "/tmp/Hack.tar.xz" -C $FONT_DIR
+fc-cache -fv
+rm "/tmp/Hack.tar.xz"
 
 echo "Setup complete! Please restart the system."
