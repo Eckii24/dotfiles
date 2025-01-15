@@ -38,18 +38,22 @@ sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub
 # Install wezterm
 echo "Installing WezTerm..."
 sudo flatpak install -y flathub org.wezfurlong.wezterm
+sudo ln -sf /var/lib/flatpak/exports/bin/org.wezfurlong.wezterm /usr/local/bin/wezterm
 
 # Install JetBrains Rider
 echo "Installing JetBrains Rider..."
 sudo flatpak install -y flathub com.jetbrains.Rider
+sudo ln -sf /var/lib/flatpak/exports/bin/com.jetbrains.Rider /usr/local/bin/rider
 
 # Install Microsoft Edge
 echo "Installing Microsoft Edge..."
 sudo flatpak install -y flathub com.microsoft.Edge
+sudo ln -sf /var/lib/flatpak/exports/bin/com.microsoft.Edge /usr/local/bin/edge
 
 # Install Postman
 echo "Installing Postman..."
 sudo flatpak install -y flathub com.getpostman.Postman
+sudo ln -sf /var/lib/flatpak/exports/bin/com.getpostman.Postman /usr/local/bin/postman
 
 # Install Mockoon
 echo "Installing Mockoon..."
