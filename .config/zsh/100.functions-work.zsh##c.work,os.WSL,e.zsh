@@ -14,4 +14,10 @@ fzf-repo() {
   fi
 }
 
+repo-clone(){
+  local repo_url="$1"
+  git clone $repo_url "/mnt/c/Users/vimateck/Development/Repos/"
+} 
+
 alias repo="fzf-repo"
+alias gcr="repo-clone"

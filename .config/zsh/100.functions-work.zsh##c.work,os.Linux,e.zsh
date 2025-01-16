@@ -14,4 +14,10 @@ fzf-repo() {
   fi
 }
 
+repo-clone(){
+  local repo_url="$1"
+  git clone $repo_url "~/Development/Repos/"
+} 
+
 alias repo="fzf-repo"
+alias gcr="repo-clone"
