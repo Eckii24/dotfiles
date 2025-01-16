@@ -55,6 +55,11 @@ echo "Installing Postman..."
 sudo flatpak install -y flathub com.getpostman.Postman
 sudo ln -sf /var/lib/flatpak/exports/bin/com.getpostman.Postman /usr/local/bin/postman
 
+# Install OpenLens
+echo "Installing OpenLens..."
+sudo flatpak install -y flathub dev.k8slens.OpenLens
+sudo ln -sf /var/lib/flatpak/exports/bin/dev.k8slens.OpenLens /usr/local/bin/openlens
+
 # Install Mockoon
 echo "Installing Mockoon..."
 curl -L https://github.com/mockoon/mockoon/releases/download/v9.1.0/mockoon-9.1.0.amd64.deb -o /tmp/mockoon.deb
