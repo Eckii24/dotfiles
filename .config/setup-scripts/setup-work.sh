@@ -25,5 +25,22 @@ fi
 echo "Set YADM class work"
 yadm config --add local.class work
 
+echo "Install azure-cli"
+brew install azure-cli
+
+echo "Installing dapr"
+if ! command -v dapr &>/dev/null; then
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/dapr/cli/master/install/install.sh)"
+
+  # Initialize dapr
+  if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+    sudo dapr init
+  else
+    dapr init
+  fi
+else
+  echo "dapr is already installed."
+fi
+
 echo "Calling setup dotnet..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"
