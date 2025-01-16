@@ -24,11 +24,13 @@ sudo systemctl enable lightdm
 echo "Installing Docker..."
 sudo apt install -y docker.io
 sudo systemctl enable docker
+sudo systemctl start docker # docker has to be started to be able to init dapr.
 
 # Install dotfiles
 echo "Installing dotfiles..."
 sudo apt install -y curl git
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-work.sh)"
 
 # Install flatpak
 echo "Installing Flatpak..."
