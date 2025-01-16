@@ -20,6 +20,13 @@ echo "Installing everything for the window manager..."
 sudo apt install -y  xorg i3 lightdm lightdm-gtk-greeter rofi feh
 sudo systemctl enable lightdm
 
+# Install xrdp
+echo "Installing xrdp..."
+sudo apt install -y xrdp
+sudo systemctl enable xrdp
+sudo adduser xrdp ssl-cert
+echo "i3" > ~/.xsessions
+
 # Install Docker
 echo "Installing Docker..."
 sudo apt install -y docker.io
