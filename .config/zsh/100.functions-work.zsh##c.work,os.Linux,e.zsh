@@ -14,10 +14,29 @@ fzf-repo() {
   fi
 }
 
-repo-clone(){
+clone-repo(){
   local repo_url="$1"
   git clone $repo_url "~/Development/Repos/"
 } 
 
+run-repo(){
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: $0 <command> [args...]"
+    exit 1
+  fi
+
+  COMMAND=("$@")
+
+  for sub_dir in "~/Development/Repos/*"; do
+    if [[ -d $sub_dir ]]; then
+      echo "Running '${COMMAND[@]}' in $sub_dir"
+      (cd "$sub_dir" && "${COMMAND[@]}")
+      if [[ $? -ne 0 ]]; then
+        echo "Command failed in $sub_dir"
+      fi
+    fi
+  done
+}
+
 alias repo="fzf-repo"
-alias gcr="repo-clone"
+alias gcr="clone-repo"
