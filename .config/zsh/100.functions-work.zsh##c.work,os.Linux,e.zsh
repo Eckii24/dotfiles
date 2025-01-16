@@ -3,7 +3,7 @@ fzf-repo() {
   local selected_dir
 
   # Run fd and fzf to select a directory
-  selected_dir=$(fd -t d -d 1 . "/mnt/c/Users/vimateck/Development/Repos" | fzf)
+  selected_dir=$(fd -t d -d 1 . "~/Development/Repos" | fzf)
 
   if [[ -n "$selected_dir" ]]; then
     # If a directory is selected, execute the command
@@ -13,3 +13,5 @@ fzf-repo() {
     $cmd .
   fi
 }
+
+alias repo="fzf-repo"
