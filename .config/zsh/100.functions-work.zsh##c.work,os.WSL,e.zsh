@@ -7,7 +7,8 @@ fzf-repo() {
 
   if [[ -n "$selected_dir" ]]; then
     # If a directory is selected, execute the command
-    $cmd "$selected_dir"
+    cd $selected_dir
+    $cmd $selected_dir
   else
     # Else execute the command in the current directory
     $cmd .
