@@ -40,5 +40,8 @@ else
   echo "dapr is already installed."
 fi
 
+echo "Init SQL server in docker"
+sudo docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=Test_1234' -p 1433:1433 --name mssql_server -d mcr.microsoft.com/mssql/server:2022-latest
+
 echo "Calling setup dotnet..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"
