@@ -28,16 +28,14 @@ yadm config --add local.class work
 echo "Install azure-cli"
 brew install azure-cli
 
+echo "Add user to docker group"
+sudo groupadd docker
+sudo usermod -aG docker $USER
+
 echo "Installing dapr"
 if ! command -v dapr &>/dev/null; then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/dapr/cli/master/install/install.sh)"
-
-  # Initialize dapr
-  if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
-    sudo dapr init
-  else
-    dapr init
-  fi
+  dapr init
 else
   echo "dapr is already installed."
 fi
