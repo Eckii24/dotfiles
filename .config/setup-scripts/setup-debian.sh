@@ -69,26 +69,38 @@ sudo flatpak install -y flathub dev.k8slens.OpenLens
 sudo ln -sf /var/lib/flatpak/exports/bin/dev.k8slens.OpenLens /usr/local/bin/openlens
 
 # Install Mockoon
-echo "Installing Mockoon..."
-curl -L https://github.com/mockoon/mockoon/releases/download/v9.1.0/mockoon-9.1.0.amd64.deb -o /tmp/mockoon.deb
-sudo apt install -y /tmp/mockoon.deb
-rm /tmp/mockoon.deb
+if ! command -v mockoon &> /dev/null; then
+    echo "Installing Mockoon..."
+    curl -L https://github.com/mockoon/mockoon/releases/download/v9.1.0/mockoon-9.1.0.amd64.deb -o /tmp/mockoon.deb
+    sudo apt install -y /tmp/mockoon.deb
+    rm /tmp/mockoon.deb
+else
+    echo "Mockoon is already installed."
+fi
 
 # Install Zeebe Modeler
-echo "Installing Zeebe Modeler..."
-curl -L https://downloads.camunda.cloud/release/camunda-modeler/5.31.0/camunda-modeler-5.31.0-linux-x64.tar.gz -o /tmp/camunda-modeler.tar.gz
-sudo mkdir -p /opt/camunda-modeler
-sudo tar -xzf /tmp/camunda-modeler.tar.gz -C /opt/camunda-modeler --strip-components=1
-sudo ln -sf /opt/camunda-modeler/camunda-modeler /usr/local/bin/camunda-modeler
-rm /tmp/camunda-modeler.tar.gz
+if ! command -v camunda-modeler &> /dev/null; then
+    echo "Installing Zeebe Modeler..."
+    curl -L https://downloads.camunda.cloud/release/camunda-modeler/5.31.0/camunda-modeler-5.31.0-linux-x64.tar.gz -o /tmp/camunda-modeler.tar.gz
+    sudo mkdir -p /opt/camunda-modeler
+    sudo tar -xzf /tmp/camunda-modeler.tar.gz -C /opt/camunda-modeler --strip-components=1
+    sudo ln -sf /opt/camunda-modeler/camunda-modeler /usr/local/bin/camunda-modeler
+    rm /tmp/camunda-modeler.tar.gz
+else
+    echo "Zeebe Modeler is already installed."
+fi
 
 # Install Hack Nerd Font
-echo "Installing Hack Nerd Font..."
-FONT_DIR="$HOME/.local/share/fonts"
-mkdir -p $FONT_DIR
-curl -L https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz -o "/tmp/Hack.tar.xz"
-tar -xJf "/tmp/Hack.tar.xz" -C $FONT_DIR
-fc-cache -fv
-rm "/tmp/Hack.tar.xz"
+if [ ! -f "$HOME/.local/share/fonts/HackNerdFont-Regular.ttf" ]; then
+    echo "Installing Hack Nerd Font..."
+    FONT_DIR="$HOME/.local/share/fonts"
+    mkdir -p $FONT_DIR
+    curl -L https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz -o "/tmp/Hack.tar.xz"
+    tar -xJf "/tmp/Hack.tar.xz" -C $FONT_DIR
+    fc-cache -fv
+    rm "/tmp/Hack.tar.xz"
+else
+    echo "Hack Nerd Font is already installed."
+fi
 
 echo "Setup complete! Please restart the system."
