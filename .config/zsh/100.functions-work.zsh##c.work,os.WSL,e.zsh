@@ -16,7 +16,7 @@ fzf-repo() {
 
 clone-repo(){
   local repo_url="$1"
-  git clone $repo_url "/mnt/c/Users/vimateck/Development/Repos/"
+  git clone $repo_url "/mnt/c/Users/vimateck/Development/Repos/$(basename $repo_url)"
 } 
 
 run-repo(){

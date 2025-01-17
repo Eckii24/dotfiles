@@ -3,7 +3,7 @@ fzf-repo() {
   local selected_dir
 
   # Run fd and fzf to select a directory
-  selected_dir=$(fd -t d -d 1 . "~/Development/Repos" | fzf)
+  selected_dir=$(fd -t d -d 1 . "$HOME/Development/Repos" | fzf)
 
   if [[ -n "$selected_dir" ]]; then
     # If a directory is selected, execute the command
@@ -16,7 +16,7 @@ fzf-repo() {
 
 clone-repo(){
   local repo_url="$1"
-  git clone $repo_url "~/Development/Repos/"
+  git clone $repo_url $HOME/Development/Repos/$(basename $repo_url)
 } 
 
 run-repo(){
@@ -27,7 +27,7 @@ run-repo(){
 
   COMMAND=("$@")
 
-  for sub_dir in "~/Development/Repos/*"; do
+  for sub_dir in "$HOME/Development/Repos/*"; do
     if [[ -d $sub_dir ]]; then
       echo "Running '${COMMAND[@]}' in $sub_dir"
       (cd "$sub_dir" && "${COMMAND[@]}")
