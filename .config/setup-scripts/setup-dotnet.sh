@@ -47,6 +47,7 @@ fi
 echo "Install dotnet tools..."
 dotnet tool install -g csharpier
 dotnet tool install -g dotnet-outdated-tool
+dotnet tool install -g dotnet-ef
 
 echo "Sync Neovim plugins..."
 nvim --headless "+Lazy! sync" +qa
