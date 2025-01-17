@@ -23,7 +23,6 @@ sudo apt install -y xorg xclip i3 rofi feh
 echo "Installing xrdp..."
 sudo apt install -y xrdp
 sudo systemctl enable xrdp
-sudo adduser xrdp ssl-cert
 echo "i3" > ~/.xsessions
 
 # Install Docker
