@@ -17,8 +17,7 @@ sudo apt update && sudo apt upgrade -y
 
 # Install everything for the window manager
 echo "Installing everything for the window manager..."
-sudo apt install -y  xorg i3 lightdm lightdm-gtk-greeter rofi feh
-sudo systemctl enable lightdm
+sudo apt install -y xorg xclip i3 rofi feh
 
 # Install xrdp
 echo "Installing xrdp..."
