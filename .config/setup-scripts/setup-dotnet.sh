@@ -28,12 +28,18 @@ yadm config --add local.class dotnet
 
 echo "Install dependencies for dotnet..."
 if [[ "$(uname)" == "Linux" ]]; then
+  # Add Microsoft package repository for .NET
+  curl -sSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
 
   if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+    sudo dpkg -i /tmp/packages-microsoft-prod.deb
     sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0
   else
+    dpkg -i /tmp/packages-microsoft-prod.deb
     apt-get update && apt-get install -y dotnet-sdk-8.0
   fi
+
+  rm /tmp/packages-microsoft-prod.deb
 else
   brew install --cask dotnet-sdk
 fi
