@@ -61,7 +61,7 @@ floating_modifier $mod
 tiling_drag modifier titlebar
 
 # start a terminal
-bindsym $mod+Return exec flatpak run org.wezfurlong.wezterm
+bindsym $mod+Return exec alacritty
 
 # browser
 bindsym $mod+Shift+Return exec flatpak run com.microsoft.edge
