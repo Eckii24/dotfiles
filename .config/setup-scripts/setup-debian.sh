@@ -75,14 +75,7 @@ sudo snap install snapd
 sudo snap install alacritty --classic
 
 # Install Mockoon
-if ! command -v mockoon &> /dev/null; then
-    echo "Installing Mockoon..."
-    curl -L https://github.com/mockoon/mockoon/releases/download/v9.1.0/mockoon-9.1.0.amd64.deb -o /tmp/mockoon.deb
-    sudo apt install -y /tmp/mockoon.deb
-    rm /tmp/mockoon.deb
-else
-    echo "Mockoon is already installed."
-fi
+sudo snap install mockoon
 
 # Install Zeebe Modeler
 if ! command -v camunda-modeler &> /dev/null; then
