@@ -67,6 +67,13 @@ echo "Installing OpenLens..."
 sudo flatpak install -y flathub dev.k8slens.OpenLens
 sudo ln -sf /var/lib/flatpak/exports/bin/dev.k8slens.OpenLens /usr/local/bin/openlens
 
+# Install snapd
+sudo apt install snapd
+sudo snap install snapd
+
+## Install alacritty
+sudo snap install alacritty --classic
+
 # Install Mockoon
 if ! command -v mockoon &> /dev/null; then
     echo "Installing Mockoon..."

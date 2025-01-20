@@ -21,10 +21,10 @@ brew "zsh-syntax-highlighting"
 brew "zsh-vi-mode"
 brew "zsh-you-should-use"
 brew "jandedobbeleer/oh-my-posh/oh-my-posh"
+cask "alacritty"
 cask "docker"
 cask "font-hack-nerd-font"
 cask "keymapp"
 cask "notion"
-cask "wezterm"
 mas "Notion Web Clipper", id: 1559269364
 mas "WireGuard", id: 1451685025
