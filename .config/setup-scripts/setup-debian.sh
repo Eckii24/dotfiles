@@ -25,6 +25,10 @@ sudo apt install -y xrdp
 sudo systemctl enable xrdp
 echo "i3" > ~/.xsessions
 
+# Set config to ensure xrdp is performant
+sudo sed -i '/^#tcp_send_buffer_bytes/s/^#//; s/tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini
+sudo echo "net.core.wmem_max = 8388608" > /etc/sysctl.d/xrdp.conf
+
 # Install Docker
 echo "Installing Docker..."
 sudo apt install -y docker.io
