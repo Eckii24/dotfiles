@@ -31,3 +31,8 @@
 [mergetool "vimdiff"]
   cmd = nvim -d $LOCAL $BASE $REMOTE $MERGED \
     -c '$wincmd w' -c 'wincmd J'
+
+[rerere]
+  ; This setting enables the automatic resolution of conflicts 
+  ; using the recorded resolution of the same conflict.
+  enabled = true
