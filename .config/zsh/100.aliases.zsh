@@ -1,5 +1,7 @@
 alias cat='bat'
 alias lg='lazygit'
+alias lzg='lazygit'
+alias lzd='lazydocker'
 alias ylg='yadm enter lazygit'
 alias ynvim='yadm enter nvim ~'
 alias diff='delta -n -s'
