@@ -3,6 +3,7 @@ import = [ "~/.config/alacritty/catppuccin-macchiato.toml" ]
 
 [window]
 decorations = "Buttonless"
+option_as_alt = "Both"
 
 [window.padding]
 x = 10
