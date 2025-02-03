@@ -50,30 +50,26 @@ echo "Installing Flatpak..."
 sudo apt install -y flatpak
 sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Install wezterm
-echo "Installing WezTerm..."
-sudo flatpak install -y flathub org.wezfurlong.wezterm
-sudo ln -sf /var/lib/flatpak/exports/bin/org.wezfurlong.wezterm /usr/local/bin/wezterm
-
 # Install JetBrains Rider
+# TODO: This may not work, because flatpak uses a sandbox environment
+# And Rider is then not able to find the required tools (like dotnet-t4).
 echo "Installing JetBrains Rider..."
 sudo flatpak install -y flathub com.jetbrains.Rider
-sudo ln -sf /var/lib/flatpak/exports/bin/com.jetbrains.Rider /usr/local/bin/rider
+sudo flatpak override com.jetbrains.Rider --share=network --env=PATH=$PATH --filesystem=host
 
 # Install Microsoft Edge
 echo "Installing Microsoft Edge..."
 sudo flatpak install -y flathub com.microsoft.Edge
-sudo ln -sf /var/lib/flatpak/exports/bin/com.microsoft.Edge /usr/local/bin/edge
+sudo flatpak override com.microsoft.Edge --share=network
 
 # Install Postman
 echo "Installing Postman..."
 sudo flatpak install -y flathub com.getpostman.Postman
-sudo ln -sf /var/lib/flatpak/exports/bin/com.getpostman.Postman /usr/local/bin/postman
+sudo flatpak override com.getpostman.Postman --share=network
 
 # Install OpenLens
 echo "Installing OpenLens..."
 sudo flatpak install -y flathub dev.k8slens.OpenLens
-sudo ln -sf /var/lib/flatpak/exports/bin/dev.k8slens.OpenLens /usr/local/bin/openlens
 
 # Install snapd
 sudo apt install snapd

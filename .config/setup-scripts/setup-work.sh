@@ -27,6 +27,7 @@ yadm config --add local.class work
 
 echo "Install azure-cli"
 brew install azure-cli
+az extension add --name azure-devops
 
 echo "Add user to docker group"
 sudo groupadd docker
