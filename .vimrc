@@ -1,69 +1,61 @@
-" VIMRC-Help
-" - Search for help:    		:h <command>
-" - Browse through commends:	:options (search with /)
-
-" GENERAL OPTIONS
 " ------------------------------------------------------
-set nocompatible "do not behave very Vi compatible 
-set noerrorbells "no ring the bell for error messages
-set visualbell "use a visual bell instead of beeping
-set wildmenu "command-line completion shows a list of matches
-set encoding=utf-8 "character encoding used in Vim
-set backspace=indent,eol,start "Allow backspacing over autoindent, line breaks and start of insert action
+" Neovim configs
+
 let mapleader = " "
-filetype indent plugin on
+let maplocalleader = "\\"
 
-" OPTION FOR THE UI
-" ------------------------------------------------------
-syntax on "name of syntax highlighting used
-colorscheme murphy
-set number "show the line number for each line
-set relativenumber "show the relative line number for each line
-set ruler "show cursor position below each window
-set nowrap "no long lines wrap
-set hidden "don't unload a buffer when no longer shown in a window
-set colorcolumn=80 "columns to highlight
-set showmatch "when inserting a bracket, briefly jump to its match
-set matchpairs+=<:> "list of pairs that match for the % command
-set cmdheight=2 "number of lines used for the command-line
-set laststatus=2 "0, 1 or 2; when to use a status line for the last window
-set showcmd "show (partial) command keys in the status line
-set scrolloff=5 "number of screen lines to show around the cursor
-
-" NETRW DIRECTORY MANAGER
-" ------------------------------------------------------
-let g:netrw_banner = 0 "hide banner
-let g:netrw_liststyle = 3 "view as tree
-let g:netrw_browse_split = 4 "open file in previous window
-let g:netrw_altv = 1
-let g:netrw_winsize = 25 "width of file browser
-
-" TABS AND INDENTATIONS
-" ------------------------------------------------------
-set tabstop=4 "number of spaces a <Tab> in the text stands for
-set softtabstop=4 "if non-zero, number of spaces to insert for a <Tab>
-set shiftwidth=4 "number of spaces used for each step of (auto)indent
-set expandtab "expand <Tab> to spaces in Insert mode
-set smartindent "do clever autoindenting
-
-" SEARCHING
-" ------------------------------------------------------
-set ignorecase "ignore case when using a search pattern
-"set smartcase "override 'ignorecase' when pattern has upper case characters
-set incsearch "show match for partly typed search command
-set hlsearch "highlight all matches for the last used search pattern
-
-" MAKROS
-" ------------------------------------------------------
+set clipboard = "unnamedplus"
+set completeopt=menu,menuone,noselect 
+set conceallevel=2 " Hide * markup for bold and italic, but not markers with substitutions 
+set confirm " Confirm to save changes before exiting modified buffer 
+set cursorline " Enable highlighting of the current line 
+set encoding=utf-8 "character encoding used in Vim
+set expandtab " Use spaces instead of tabs 
+set fillchars=foldopen:,foldclose:,fold: ,foldsep: ,diff:╱,eob:  
+set foldlevel=99 
+set formatexpr=v:lua.require'lazyvim.util'.format.formatexpr() 
+set formatoptions=jcroqlnt " tcqj 
+set grepformat=%f:%l:%c:%m 
+set grepprg=rg\ --vimgrep 
+set ignorecase " Ignore case 
+set inccommand=nosplit " preview incremental substitute 
+set jumpoptions=view 
+set laststatus=3 " global statusline 
 set lazyredraw "don't redraw while executing macros
-
-" HISTORY
-" ------------------------------------------------------
-set noswapfile
-set nobackup
-set undodir=~/.vim/undodir
-set undofile
-set undolevels=10000
+set linebreak " Wrap lines at convenient points 
+set list " Show some invisible characters (tabs... 
+set matchpairs+=<:> "list of pairs that match for the % command
+set mouse=a " Enable mouse mode 
+set number " Print line number 
+set pumblend=10 " Popup blend 
+set pumheight=10 " Maximum number of entries in a popup 
+set relativenumber " Relative line numbers 
+set ruler=0 " Disable the default ruler 
+set scrolloff=4 " Lines of context 
+set sessionoptions=buffers,curdir,tabpages,winsize,help,globals,skiprtp,folds 
+set shiftround " Round indent 
+set shiftwidth=2 " Size of an indent 
+set shortmess+=W,I,c,C 
+set showmode=0 " Don't show mode since we have a statusline 
+set sidescrolloff=8 " Columns of context 
+set signcolumn=yes " Always show the signcolumn, otherwise it would shift the text each time 
+set smartcase " Don't ignore case with capitals 
+set smartindent " Insert indents automatically 
+set spelllang=en 
+set splitbelow " Put new windows below current 
+set splitkeep=screen 
+set splitright " Put new windows right of current 
+set statuscolumn=%!v:lua.require'snacks.statuscolumn'.get() 
+set tabstop=2 " Number of spaces tabs count for 
+set termguicolors " True color support 
+set timeoutlen=300 " Lower than default (1000) to quickly trigger which-key 
+set undofile 
+set undolevels=10000 
+set updatetime=200 " Save swap file and trigger CursorHold 
+set virtualedit=block " Allow cursor to move where there is no text in visual block mode 
+set wildmode=longest:full,full " Command-line completion mode 
+set winminwidth=5 " Minimum window width 
+set wrap=0 " Disable line wrap
 
 " MAPPINGS
 " ------------------------------------------------------
@@ -76,54 +68,41 @@ nnoremap Q @@
 nnoremap <Leader>o o<Esc>0D
 nnoremap <Leader>O O<Esc>0D
 
-" copy from os clipboard
-nmap <leader>y "+y
-nmap <leader>yy "+yy
+" Window navigation
+let g:WhichKeyDesc_windows = "<leader>w Windows"
 
-" paste from OS clipboard
-nmap <leader>p "+p
-nmap <leader>P "+P
+let g:WhichKeyDesc_windows_go_left = "<C-h> Go to Left Window"
+nnoremap <C-h> <C-w>h
+let g:WhichKeyDesc_windows_go_lower = "<C-j> Go to Lower Window"
+nnoremap <C-j> <C-w>j
+let g:WhichKeyDesc_windows_go_upper = "<C-k> Go to Upper Window"
+nnoremap <C-k> <C-w>k
+let g:WhichKeyDesc_windows_go_right = "<C-l> Go to Right Window"
+nnoremap <C-l> <C-w>l " Go to Right Window
 
-" Commands for split view
-nnoremap <leader>s <C-w>s
-nnoremap <leader>v <C-w>v
-nnoremap <leader>c <C-w>c
-nnoremap <leader>h <C-w>h
-nnoremap <leader>j <C-w>j
-nnoremap <leader>k <C-w>k
-nnoremap <leader>l <C-w>l
+let g:WhichKeyDesc_windows_delete = "<leader>wd Deete Window"
+nnoremap <leader>wd <C-W>c
+let g:WhichKeyDesc_windows_go_left = "<leader>wh Go to Left Window"
+nnoremap <leader>wh <C-W>h
+let g:WhichKeyDesc_windows_go_lower = "<leader>wj Go to Lower Window"
+nnoremap <leader>wj <C-W>j
+let g:WhichKeyDesc_windows_go_upper = "<leader>wk Go to Upper Window"
+nnoremap <leader>wk <C-W>k
+let g:WhichKeyDesc_windows_go_right = "<leader>wd Go to Right Window"
+nnoremap <leader>wl <C-W>l
 
-nnoremap <leader>; A;<Esc>
-nnoremap <leader>, A,<Esc>
-
-"Map <C-L> (redraw screen) to also turn off search hightlighting until next search
-nnoremap <leader>/ :nohl<CR><C-L> 
-
-function! DoPrettyXML()
-  " save the filetype so we can restore it later
-  let l:origft = &ft
-  set ft=
-  " delete the xml header if it exists. This will
-  " permit us to surround the document with fake tags
-  " without creating invalid xml.
-  1s/<?xml .*?>//e
-  " insert fake tags around the entire document.
-  " This will permit us to pretty-format excerpts of
-  " XML that may contain multiple top-level elements.
-  0put ='<PrettyXML>'
-  $put ='</PrettyXML>'
-  silent %!xmllint --format -
-  " xmllint will insert an <?xml?> header. it's easy enough to delete
-  " if you don't want it.
-  " delete the fake tags
-  2d
-  $d
-  " restore the 'normal' indentation, which is one extra level
-  " too deep due to the extra tags we wrapped around the document.
-  silent %<
-  " back to home
-  1
-  " restore the filetype
-  exe "set ft=" . l:origft
-endfunction
-command! PrettyXML call DoPrettyXML()
+let g:WhichKeyDesc_windows_zoom = "<leader>wm Zoom Window"
+nnoremap <leader>wm <C-W>m " Enable Zoom mode ---------------
+let g:WhichKeyDesc_windows_close_all_others = "<leader>wo Close all other windows"
+nnoremap <leader>wo <C-W>o " Close all other windows
+let g:WhichKeyDesc_windows_quit = "<leader>wq Quit Window"
+nnoremap <leader>wq <C-W>q " Quit a window
+nnoremap <leader>ws <C-W>s " Slit window
+nnoremap <leader>wv <C-W>v " Slit window vertically
+nnoremap <leader>ww <C-W>w " Switch windows
+nnoremap <leader>wx <C-W>x " Swap current with next
+nnoremap <leader>w+ <C-W>+ " Increase height
+nnoremap <leader>w- <C-W>- " Decrease height
+nnoremap <leader>w< <C-W>< " Increase width
+nnoremap <leader>w= <C-W>= " Equally high and width
+nnoremap <leader>w> <C-W>> " Decrease width
