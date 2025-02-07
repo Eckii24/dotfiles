@@ -12,10 +12,13 @@
   pager = delta
 
 [interactive]
-  diffFilter = delta -n -s
+  diffFilter = delta -n -s --color-only
 
 [delta]
+  line-numbers = true
   side-by-side = true
+  navigate = true
+  dark = true
 
 [rebase]
   updateRefs = true
