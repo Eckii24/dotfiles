@@ -11,6 +11,10 @@ echo "Disabling GRUB timeout..."
 sudo sed -i 's/GRUB_TIMEOUT=[0-9]*/GRUB_TIMEOUT=0/' /etc/default/grub
 sudo update-grub
 
+# Set time tzone to Europe/Berlin
+echo "Setting timezone to Europe/Berlin..."
+sudo timedatectl set-timezone Europe/Berlin
+
 # Update system
 echo "Updating system..."
 sudo apt update && sudo apt upgrade -y
