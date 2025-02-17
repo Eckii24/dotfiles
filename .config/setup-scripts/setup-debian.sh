@@ -38,15 +38,11 @@ sudo echo "net.core.wmem_max = 8388608" > /etc/sysctl.d/xrdp.conf
 
 # Install Docker
 echo "Installing Docker..."
-
-# Add Docker's official GPG key:
 sudo apt-get update
 sudo apt-get install ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
 echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
@@ -85,6 +81,7 @@ sudo flatpak override com.getpostman.Postman --share=network
 # Install OpenLens
 echo "Installing OpenLens..."
 sudo flatpak install -y flathub dev.k8slens.OpenLens
+sudo flatpak override dev.k8slens.OpenLens --filesystem=host --share=network --env=PATH=$PATH
 
 # Install snapd
 sudo apt install snapd
