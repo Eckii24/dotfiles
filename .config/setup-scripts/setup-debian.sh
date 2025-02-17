@@ -61,12 +61,11 @@ echo "Installing Flatpak..."
 sudo apt install -y flatpak
 sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# Install JetBrains Rider
-# TODO: This may not work, because flatpak uses a sandbox environment
-# And Rider is then not able to find the required tools (like dotnet-t4).
-echo "Installing JetBrains Rider..."
-sudo flatpak install -y flathub com.jetbrains.Rider
-sudo flatpak override com.jetbrains.Rider --share=network --env=PATH=$PATH --filesystem=host
+# Install JetBrains Toolbox
+echo "Installing JetBrains Toolbox..."
+curl -L https://download.jetbrains.com/toolbox/jetbrains-toolbox-2.5.3.37797.tar.gz -o /opt
+sudo tar -xvzf /opt/jetbrains-toolbox-2.5.3.37797.tar.gz
+sudo mv jetbrains-toolbox-1.21.9712 jetbrains
 
 # Install Microsoft Edge
 echo "Installing Microsoft Edge..."
