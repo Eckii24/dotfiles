@@ -80,8 +80,9 @@ sudo flatpak override com.getpostman.Postman --share=network
 
 # Install OpenLens
 echo "Installing OpenLens..."
-sudo flatpak install -y flathub dev.k8slens.OpenLens
-sudo flatpak override dev.k8slens.OpenLens --filesystem=host --share=network --env=PATH=$PATH
+curl -L https://github.com/MuhammedKalkan/OpenLens/releases/download/v6.5.2-366/OpenLens-6.5.2-366.amd64.deb -o /tmp/OpenLens.deb
+sudo dpkg -i /tmp/OpenLens.deb
+rm /tmp/OpenLens.deb
 
 # Install snapd
 sudo apt install snapd
