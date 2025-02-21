@@ -114,6 +114,14 @@
       "newline": true,
       "segments": [
         {
+          "type": "python",
+          "style": "powerline",
+          "powerline_symbol": "",
+          "foreground": "#100e23",
+          "background": "#906cff",
+          "template": "  {{ .Venv }} "
+        },
+        {
           "foreground": "#d75f00",
           "style": "plain",
           "template": "\u2570\u2500 {{ if .Root }}#{{else}}${{end}}",
