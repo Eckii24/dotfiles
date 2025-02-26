@@ -27,7 +27,7 @@ sudo apt install -y xorg xclip i3 rofi feh
 echo "Installing xrdp..."
 sudo apt install -y xrdp
 sudo systemctl enable xrdp
-echo "i3" > ~/.xsessions
+echo -e "#!/bin/bash\nsource ~/.zshrc\ni3" > ~/.xsession
 
 # Set config to ensure xrdp is performant
 sudo sed -i '/^#tcp_send_buffer_bytes/s/^#//; s/tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini
