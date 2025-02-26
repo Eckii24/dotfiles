@@ -63,9 +63,6 @@ tiling_drag modifier titlebar
 # start a terminal
 bindsym $mod+Return exec alacritty
 
-# browser
-bindsym $mod+Shift+Return exec flatpak run com.microsoft.edge
-
 # kill focused window
 bindsym $mod+q kill
 
@@ -132,10 +129,10 @@ set $ws2 "2"
 set $ws3 "3"
 set $ws4 "4"
 set $ws5 "5"
-set $ws6 "6"
-set $ws7 "7"
-set $ws8 "8"
-set $ws9 "9"
+set $ws6 "6 Edge"
+set $ws7 "7 Mockoon"
+set $ws8 "8 Zeebe"
+set $ws9 "9 OpenLens"
 set $ws10 "10"
 
 # switch to workspace
@@ -169,6 +166,21 @@ bindsym $mod+Shift+r restart
 # exit i3 (logs you out of your X session)
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'You pressed the exit shortcut. Do you really want to exit i3? This will end your X session.' -B 'Yes, exit i3' 'i3-msg exit'"
 bindsym $mod+Shift+q exec "i3-nagbar -t warning -m 'You pressed the power off shortcut. Do you really want to power off?' -B 'Yes, POWER OFF' 'poweroff'"
+
+# Assign Worksapces:
+for_window [class="Rider|rider"] move to workspace $ws2
+for_window [class="Microsoft Edge|edge"] move to workspace $ws6
+for_window [class="Mockoon|mockoon"] move to workspace $ws7
+for_window [class="Camunda Modeler|camunda-modeler"] move to workspace $ws8
+for_window [class="OpenLens"] move to workspace $ws9
+
+# Auto start applications
+exec --no-startup-id alacritty
+exec --no-startup-id rider
+exec --no-startup-id edge
+exec --no-startup-id mockoon
+exec --no-startup-id camunda-modeler
+exec --no-startup-id open-lens
 
 # resize window (you can also use the mouse for that)
 mode "resize" {
