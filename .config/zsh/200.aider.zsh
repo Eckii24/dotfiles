@@ -1,6 +1,3 @@
-# General setup
-export PATH="$HOME/.local/share/../bin:$PATH"
-
 # Configuration of aider
 export AIDER_MODEL="azure/gpt"
 
