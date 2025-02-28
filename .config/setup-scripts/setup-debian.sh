@@ -56,11 +56,6 @@ sudo apt install -y curl git
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup.sh)"
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-work.sh)"
 
-# Install flatpak
-echo "Installing Flatpak..."
-sudo apt install -y flatpak
-sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
 # Install JetBrains Toolbox
 echo "Installing JetBrains Toolbox..."
 curl -L https://download.jetbrains.com/toolbox/jetbrains-toolbox-2.5.3.37797.tar.gz -o /opt
@@ -69,13 +64,9 @@ sudo mv jetbrains-toolbox-1.21.9712 jetbrains
 
 # Install Microsoft Edge
 echo "Installing Microsoft Edge..."
-sudo flatpak install -y flathub com.microsoft.Edge
-sudo flatpak override com.microsoft.Edge --share=network
-
-# Install Postman
-echo "Installing Postman..."
-sudo flatpak install -y flathub com.getpostman.Postman
-sudo flatpak override com.getpostman.Postman --share=network
+curl -L https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/b87c27d1-4fe3-4145-a804-24deda351ae4/MicrosoftEdgePolicyTemplates.cab -o /tmp/Edge.deb
+sudo dpkg -i /tmp/Edge.deb
+rm /tmp/Edge.deb
 
 # Install OpenLens
 echo "Installing OpenLens..."
@@ -84,13 +75,20 @@ sudo dpkg -i /tmp/OpenLens.deb
 rm /tmp/OpenLens.deb
 
 # Install snapd
+echo "Installing Snapd..."
 sudo apt install snapd
 sudo snap install snapd
 
 ## Install alacritty
+echo "Installing Alacritty..."
 sudo snap install alacritty --classic
 
+# Install Postman
+echo "Installing Postman..."
+sudo snap install postman
+
 # Install Mockoon
+echo "Installing Mockoon..."
 sudo snap install mockoon
 
 # Install Zeebe Modeler
@@ -109,9 +107,9 @@ fi
 if [ ! -f "$HOME/.local/share/fonts/HackNerdFont-Regular.ttf" ]; then
     echo "Installing Hack Nerd Font..."
     FONT_DIR="$HOME/.local/share/fonts"
-    mkdir -p $FONT_DIR
+    mkdir -p "$FONT_DIR"
     curl -L https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz -o "/tmp/Hack.tar.xz"
-    tar -xJf "/tmp/Hack.tar.xz" -C $FONT_DIR
+    tar -xJf "/tmp/Hack.tar.xz" -C "$FONT_DIR"
     fc-cache -fv
     rm "/tmp/Hack.tar.xz"
 else
