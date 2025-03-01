@@ -38,6 +38,14 @@ return {
     }
   },
   {
+    "folke/snacks.nvim",
+    keys = {
+      { "<leader>gB", function() Snacks.picker.git_branches() end, desc = "Git Branches" },
+      { "<leader>gL", function() Snacks.picker.git_log_line() end, desc = "Git Log Line" },
+      { "<leader>gf", function() Snacks.picker.git_log_file() end, desc = "Git Log File" },
+    }
+  },
+  {
     "folke/todo-comments.nvim",
     opts = {
       highlight = {
