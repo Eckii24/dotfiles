@@ -15,6 +15,12 @@ vim.keymap.set("i", ",,n", require("copilot.suggestion").prev, { desc = "Previou
 vim.keymap.set("n", "<leader>o", "o<Esc>0D", { desc = "which_key_ignore" })
 vim.keymap.set("n", "<leader>O", "O<Esc>0D", { desc = "which_key_ignore" })
 
+-- Copy / Paste
+vim.keymap.set("v", "p", '"_dP', { desc = "Paste without yanking" })
+
+-- LSP Restart
+vim.keymap.set("n", "<leader>cL", "<cmd>LspRestart<CR>", { desc = "Restart LSP" })
+
 -- Diffs
 vim.keymap.set("n", "<leader>fd", "", { desc = "+diff"})
 vim.keymap.set("n", "<leader>fda", "<cmd>windo diffthis<CR>", { desc = "Diff this all windows"})
