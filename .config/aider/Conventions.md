@@ -26,3 +26,5 @@
   - `FluentAssertions` for assertions
   - `AutoFixture` for creating test data
 - Use the `arrange/act/assert` pattern when writing tests
+- Use the following pattern for the method name: `<MethodName>Should<ExpectedResult>When<Condition>`
+- Do not use underscores in test method names
