@@ -1,0 +1,32 @@
+return {
+  {
+    "Willem-J-an/adopure.nvim",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "nvim-telescope/telescope.nvim",
+      "sindrets/diffview.nvim"
+    },
+    config = function()
+      vim.g.adopure = {
+        pat_token = os.getenv("AZURE_DEVOPS_PAT_TOKEN"),
+      }
+    end,
+    keys = {
+      {"<leader>ga", "", mode = { "n", "v"}, desc = "Adopure"},
+      {"<leader>gal", "", mode = { "n", "v"}, desc = "Adopure load"},
+      {"<leader>galc", "<cmd>AdoPure load context<cr>", mode = {"n","v"}, desc = "AdoPure load context"},
+      {"<leader>galt", "<cmd>AdoPure load threads<cr>", mode = {"n","v"}, desc = "AdoPure load threads"},
+      {"<leader>gao", "", mode = { "n", "v"}, desc = "Adopure open"},
+      {"<leader>gaoq", "<cmd>AdoPure open quickfix<cr>", mode = {"n","v"}, desc = "AdoPure open quickfix"},
+      {"<leader>gaot", "<cmd>AdoPure open thread_picker<cr>", mode = {"n","v"}, desc = "AdoPure open thread_picker"},
+      {"<leader>gaon", "<cmd>AdoPure open new_thread<cr>", mode = {"n","v"}, desc = "AdoPure open new_thread"},
+      {"<leader>gaoe", "<cmd>AdoPure open existing_thread<cr>", mode = {"n","v"}, desc = "AdoPure open existing_thread"},
+      {"<leader>gas", "", mode = { "n", "v"}, desc = "Adopure submit"},
+      {"<leader>gasc", "<cmd>AdoPure submit comment<cr>", mode = {"n","v"}, desc = "AdoPure submit comment"},
+      {"<leader>gasv", "<cmd>AdoPure submit vote<cr>", mode = {"n","v"}, desc = "AdoPure submit vote"},
+      {"<leader>gast", "<cmd>AdoPure submit thread_status<cr>", mode = {"n","v"}, desc = "AdoPure submit thread_status"},
+      {"<leader>gasd", "<cmd>AdoPure submit delete_comment<cr>", mode = {"n","v"}, desc = "AdoPure submit delete_comment"},
+      {"<leader>gase", "<cmd>AdoPure submit edit_comment<cr>", mode = {"n","v"}, desc = "AdoPure submit edit_comment"},
+    }
+  }
+}
