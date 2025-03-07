@@ -91,6 +91,10 @@ sudo snap install postman
 echo "Installing Mockoon..."
 sudo snap install mockoon
 
+# Install VSCode Insiders
+echo "Installing VSCode Insiders..."
+sudo snap install code-insiders --classic
+
 # Install Zeebe Modeler
 if ! command -v camunda-modeler &> /dev/null; then
     echo "Installing Zeebe Modeler..."
