@@ -33,5 +33,5 @@ curl -Lo phpactor.phar https://github.com/phpactor/phpactor/releases/latest/down
 chmod a+x phpactor.phar
 mv phpactor.phar $(brew --prefix)/bin/phpactor
 
-echo "Sync Neovim plugins"
-nvim --headless "+Lazy! sync" +qa
+echo "Sync Neovim plugins..."
+~/.local/share/bob/nvim-bin/nvim --headless "+Lazy! sync" +qa
