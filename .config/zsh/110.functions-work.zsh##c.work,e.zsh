@@ -57,3 +57,51 @@ run-repo(){
     fi
   done
 }
+
+
+assessment() {
+  local repo_url
+  local model="gpt-4o" # Default value
+  local output
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      --repo | -r)
+        repo_url="$2"
+        shift 2
+        ;;
+      --model | -m)
+        model="$2"
+        shift 2
+        ;;
+      --output | -o)
+        output="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown parameter: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$repo_url" ]]; then
+    echo "Error: --repo / -p parameter is required."
+    return 1
+  fi
+
+  # Replace "github" with "uithub"
+  local new_url="${repo_url/github/uithub}"
+
+  # Perform HTTP GET request with Accept: application/json
+  local response
+  response=$(curl -s -H "Accept: application/json" "$new_url?ext=cs,md,csproj,sln,json,http")
+
+  # Pass the output to fabric -p check-assessment
+  if [[ -n "$output" ]]; then
+    (export AZURE_DEPLOYMENTS="$model"; echo "$response" | fabric -p check_assessment -m "$model" -o "$output")
+  else
+    (export AZURE_DEPLOYMENTS="$model"; echo "$response" | fabric -p check_assessment -m "$model")
+  fi
+}
+      
