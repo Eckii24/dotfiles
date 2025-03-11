@@ -1,6 +1,46 @@
 return {
-  { import = "lazyvim.plugins.extras.test.core" },
-  { import = "lazyvim.plugins.extras.lang.omnisharp" },
-  { import = "lazyvim.plugins.extras.lang.sql"},
-  { import = "lazyvim.plugins.extras.util.rest"},
+  { import = "lazyvim.plugins.extras.lang.sql" },
+  { import = "lazyvim.plugins.extras.util.rest" },
+  {
+    "GustavEikaas/easy-dotnet.nvim",
+    dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
+    config = function()
+      require("easy-dotnet").setup()
+    end,
+  },
+  {
+    "williamboman/mason.nvim",
+    opts = {
+      registries = {
+        "github:mason-org/mason-registry",
+        "github:Crashdummyy/mason-registry",
+      },
+      ensure_installed = { "csharpier", "netcoredbg", "roslyn" },
+    },
+  },
+  {
+    "seblj/roslyn.nvim",
+    ft = "cs",
+    opts = {},
+    lazy = true,
+  },
+  {
+    "nvim-treesitter/nvim-treesitter",
+    opts = { ensure_installed = { "c_sharp" } },
+  },
+  {
+    "stevearc/conform.nvim",
+    optional = true,
+    opts = {
+      formatters_by_ft = {
+        cs = { "csharpier" },
+      },
+      formatters = {
+        csharpier = {
+          command = "dotnet-csharpier",
+          args = { "--write-stdout" },
+        },
+      },
+    },
+  },
 }
