@@ -4,9 +4,198 @@ return {
   {
     "GustavEikaas/easy-dotnet.nvim",
     dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
-    config = function()
-      require("easy-dotnet").setup()
-    end,
+    opts = {
+      test_runner = {
+        viewmode = "float",
+      },
+    },
+    keys = {
+      { "<leader>N", "", desc = "dotnet" },
+
+      { "<leader>Nt", "", desc = "Testing" },
+      {
+        "<leader>Ntt",
+        function()
+          require("easy-dotnet").test()
+        end,
+        desc = "Test Project",
+      },
+      {
+        "<leader>NtT",
+        function()
+          require("easy-dotnet").test_solution()
+        end,
+        desc = "Test Solution",
+      },
+      {
+        "<leader>Nto",
+        function()
+          require("easy-dotnet").testrunner()
+        end,
+        desc = "Testrunner Open",
+      },
+      {
+        "<leader>Ntr",
+        function()
+          require("easy-dotnet").testrunner_refresh()
+        end,
+        desc = "Testrunner Refresh",
+      },
+      {
+        "<leader>NtR",
+        function()
+          require("easy-dotnet").testrunner_refresh_build()
+        end,
+        desc = "Testrunner Build and Refresh",
+      },
+
+      { "<leader>Np", "", desc = "Packages" },
+      {
+        "<leader>Npa",
+        function()
+          require("easy-dotnet").add_package()
+        end,
+        desc = "Add Package",
+      },
+      {
+        "<leader>Npd",
+        function()
+          require("easy-dotnet").remove_package()
+        end,
+        desc = "Remove Package",
+      },
+      {
+        "<leader>Npo",
+        function()
+          require("easy-dotnet").outdated()
+        end,
+        desc = "Outdated",
+      },
+      {
+        "<leader>NpA",
+        function()
+          require("easy-dotnet").solution_add()
+        end,
+        desc = "Add to solution",
+      },
+      {
+        "<leader>NpR",
+        function()
+          require("easy-dotnet").solution_add()
+        end,
+        desc = "Remove from solution",
+      },
+
+      { "<leader>Ne", "", desc = "Entity Framework" },
+      {
+        "<leader>Ner",
+        function()
+          require("easy-dotnet").ef_migrations_remove()
+        end,
+        desc = "Migrations Remove",
+      },
+      {
+        "<leader>Nea",
+        function()
+          require("snacks").input("Enter migration name: ", function(input)
+            require("easy-dotnet").ef_migrations_add(input)
+          end)
+        end,
+        desc = "Migrations Add",
+      },
+      {
+        "<leader>Nel",
+        function()
+          require("easy-dotnet").ef_migrations_list()
+        end,
+        desc = "Migrations List",
+      },
+      {
+        "<leader>Ned",
+        function()
+          require("easy-dotnet").ef_database_drop()
+        end,
+        desc = "Database Drop",
+      },
+      {
+        "<leader>Neu",
+        function()
+          require("easy-dotnet").ef_database_update()
+        end,
+        desc = "Database Update",
+      },
+      {
+        "<leader>NeU",
+        function()
+          require("easy-dotnet").ef_database_update_pick()
+        end,
+        desc = "Database Update Pick",
+      },
+
+      {
+        "<leader>Nn",
+        function()
+          require("easy-dotnet").new()
+        end,
+        desc = "New",
+      },
+      {
+        "<leader>Nc",
+        function()
+          require("easy-dotnet").createfile(vim.fn.expand("%:p:h"))
+        end,
+        desc = "Create File",
+      },
+      {
+        "<leader>Nb",
+        function()
+          require("easy-dotnet").build_quickfix()
+        end,
+        desc = "Build Project",
+      },
+      {
+        "<leader>NB",
+        function()
+          require("easy-dotnet").build_solution()
+        end,
+        desc = "Build Solution",
+      },
+      {
+        "<leader>N<space>",
+        function()
+          require("easy-dotnet").project_view()
+        end,
+        desc = "Project View",
+      },
+      {
+        "<leader>Nr",
+        function()
+          require("easy-dotnet").run()
+        end,
+        desc = "Run",
+      },
+      {
+        "<leader>Ns",
+        function()
+          require("easy-dotnet").secrets()
+        end,
+        desc = "Secrets",
+      },
+      {
+        "<leader>Nx",
+        function()
+          require("easy-dotnet").clean()
+        end,
+        desc = "Clean",
+      },
+      {
+        "<leader>NX",
+        function()
+          require("easy-dotnet").restore()
+        end,
+        desc = "Restore",
+      },
+    },
   },
   {
     "williamboman/mason.nvim",
@@ -56,66 +245,26 @@ return {
           },
         },
       },
-      keys = {
-        { "<leader>N", "", desc = "dotnet" },
-
-        { "<leader>Nt", "", desc = "Testing" },
-        { "<leader>Ntt", function() require("easy-dotnet").test() end, desc = "Test Project", },
-        { "<leader>NtT", function() require("easy-dotnet").test_solution() end, desc = "Test Solution", },
-        { "<leader>Nto", function() require("easy-dotnet").testrunner() end, desc = "Testrunner Open", },
-        { "<leader>Ntr", function() require("easy-dotnet").testrunner_refresh() end, desc = "Testrunner Refresh", },
-        { "<leader>NtR", function() require("easy-dotnet").testrunner_refresh_build() end, desc = "Testrunner Build and Refresh", },
-
-        { "<leader>Np", "", desc = "Packages" },
-        { "<leader>Npa", function() require("easy-dotnet").add_package() end, desc = "Add Package", },
-        { "<leader>Npd", function() require("easy-dotnet").remove_package() end, desc = "Remove Package", },
-        { "<leader>Npo", function() require("easy-dotnet").outdated() end, desc = "Outdated", },
-        { "<leader>NpA", function() require("easy-dotnet").solution_add() end, desc = "Add to solution", },
-        { "<leader>NpR", function() require("easy-dotnet").solution_add() end, desc = "Remove from solution", },
-
-        { "<leader>Ne", "", desc = "Entity Framework" },
-        { "<leader>Ner", function() require("easy-dotnet").ef_migrations_remove() end, desc = "Migrations Remove", },
-        { "<leader>Nea", function() 
-          require("snacks").input("Enter migration name: ", function(input)
-            require("easy-dotnet").ef_migrations_add(input)
-          end)
-        end, desc = "Migrations Add", },
-        { "<leader>Nel", function() require("easy-dotnet").ef_migrations_list() end, desc = "Migrations List", },
-        { "<leader>Ned", function() require("easy-dotnet").ef_database_drop() end, desc = "Database Drop", },
-
-        { "<leader>Nc", function() require("easy-dotnet").createfile(vim.fn.expand('%:p:h')) end, desc = "Create File", },
-
-        { "<leader>NeU", function() require("easy-dotnet").ef_database_update_pick() end, desc = "Database Update Pick", },
-
-        { "<leader>Nn", function() require("easy-dotnet").new() end, desc = "New", },
-        { "<leader>Nc", function() require("easy-dotnet").createfile(vim.fn.expand('%:p:h')) end, desc = "Create File", },
-        { "<leader>Nb", function() require("easy-dotnet").build_quickfix() end, desc = "Build Project", },
-        { "<leader>NB", function() require("easy-dotnet").build_solution() end, desc = "Build Solution", },
-        { "<leader>N<space>", function() require("easy-dotnet").project_view() end, desc = "Project View", },
-        { "<leader>Nr", function() require("easy-dotnet").run() end, desc = "Run", },
-        { "<leader>Ns", function() require("easy-dotnet").secrets() end, desc = "Secrets", },
-        { "<leader>Nx", function() require("easy-dotnet").clean() end, desc = "Clean", },
-        { "<leader>NX", function() require("easy-dotnet").restore() end, desc = "Restore", },
+    },
+    lazy = true,
+  },
+  {
+    "nvim-treesitter/nvim-treesitter",
+    opts = { ensure_installed = { "c_sharp" } },
+  },
+  {
+    "stevearc/conform.nvim",
+    optional = true,
+    opts = {
+      formatters_by_ft = {
+        cs = { "csharpier" },
       },
-      lazy = true,
-    },
-    {
-      "nvim-treesitter/nvim-treesitter",
-      opts = { ensure_installed = { "c_sharp" } },
-    },
-    {
-      "stevearc/conform.nvim",
-      optional = true,
-      opts = {
-        formatters_by_ft = {
-          cs = { "csharpier" },
-        },
-        formatters = {
-          csharpier = {
-            command = "dotnet-csharpier",
-            args = { "--write-stdout" },
-          },
+      formatters = {
+        csharpier = {
+          command = "dotnet-csharpier",
+          args = { "--write-stdout" },
         },
       },
     },
-  }
+  },
+}
