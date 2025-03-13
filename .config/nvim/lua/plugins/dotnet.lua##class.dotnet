@@ -97,9 +97,8 @@ return {
       {
         "<leader>Nea",
         function()
-          require("snacks").input("Enter migration name: ", function(input)
-            require("easy-dotnet").ef_migrations_add(input)
-          end)
+          require("easy-dotnet").ef_migrations_add(
+            vim.fn.input("Enter name:"))
         end,
         desc = "Migrations Add",
       },
