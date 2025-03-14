@@ -58,7 +58,6 @@ run-repo(){
   done
 }
 
-
 assessment() {
   local repo_url
   local model="gpt-4o" # Default value
@@ -105,3 +104,34 @@ assessment() {
   fi
 }
       
+
+pr-text(){
+  local model="gpt-4o" # Default value
+  local output
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      --model | -m)
+        model="$2"
+        shift 2
+        ;;
+      --output | -o)
+        output="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown parameter: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  local diff_output
+  diff_output=$(git --no-pager diff $(git merge-base --fork-point master))
+
+  if [[ -n "$output" ]]; then
+    (export AZURE_DEPLOYMENTS="$model"; echo "$diff_output" | fabric -p write_pr -m "$model" -o "$output")
+  else
+    (export AZURE_DEPLOYMENTS="$model"; echo "$diff_output" | fabric -p write_pr -m "$model")
+  fi
+}
