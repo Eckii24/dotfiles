@@ -166,7 +166,7 @@ function start-dev() {
 
     # Add project directory mount if specified
     if [[ -n "$project_dir" ]]; then
-        docker_cmd+=" -v $project_dir:/root/"
+        docker_cmd+=" -v $project_dir:/root/project"
     fi
 
     # Add additional volume mounts
