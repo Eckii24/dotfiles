@@ -1,10 +1,34 @@
 return {
   {
+    "ravitemer/mcphub.nvim",
+    dependencies = {
+      "nvim-lua/plenary.nvim", -- Required for Job and HTTP requests
+    },
+    cmd = "MCPHub", -- lazily start the hub when `MCPHub` is called
+    build = "npm install -g mcp-hub@latest", -- Installs required mcp-hub npm module"ravitemer/mcphub.nvim",
+    keys = {
+      { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
+    },
+    opts = {
+      -- Required options
+      port = 3000, -- Port for MCP Hub server
+      config = vim.fn.expand("~/.config/nvim/mcpservers.json"), -- Absolute path to config file
+      shutdown_delay = 0, -- Wait 0ms before shutting down server after last client exits
+      log = {
+        level = vim.log.levels.WARN,
+        to_file = false,
+        file_path = nil,
+        prefix = "MCPHub",
+      },
+    },
+  },
+  {
     "olimorris/codecompanion.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
+      "ravitemer/mcphub.nvim",
     },
     opts = {
       adapters = {
@@ -49,6 +73,18 @@ return {
               index = 4,
               callback = "keymaps.stop",
               description = "Stop Request",
+            },
+          },
+          tools = {
+            ["mcp"] = {
+              -- calling it in a function would prevent mcphub from being loaded before it's needed
+              callback = function()
+                return require("mcphub.extensions.codecompanion")
+              end,
+              description = "Call tools and resources from the MCP Servers",
+              opts = {
+                requires_approval = true,
+              },
             },
           },
         },
