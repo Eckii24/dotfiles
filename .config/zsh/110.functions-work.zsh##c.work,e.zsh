@@ -89,18 +89,13 @@ assessment() {
     return 1
   fi
 
-  # Replace "github" with "uithub"
-  local new_url="${repo_url/github/uithub}"
-
-  # Perform HTTP GET request with Accept: application/json
-  local response
-  response=$(curl -s -H "Accept: application/json" "$new_url?ext=cs,md,csproj,sln,json,http")
+  repomix --remote $repo_url
 
   # Pass the output to fabric -p check-assessment
   if [[ -n "$output" ]]; then
-    (export AZURE_DEPLOYMENTS="$model"; echo "$response" | fabric -p check_assessment -m "$model" -o "$output")
+    (export AZURE_DEPLOYMENTS="$model"; cat repomix-output.md | fabric -p check_assessment -m "$model" -o "$output")
   else
-    (export AZURE_DEPLOYMENTS="$model"; echo "$response" | fabric -p check_assessment -m "$model")
+    (export AZURE_DEPLOYMENTS="$model"; cat repomix-output.md | fabric -p check_assessment -m "$model")
   fi
 }
       
