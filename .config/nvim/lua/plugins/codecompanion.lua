@@ -14,6 +14,13 @@ return {
       config = vim.fn.expand("~/.config/nvim/mcpservers.json"),
     },
   },
+  -- {
+  --   "Davidyz/VectorCode",
+  --   dependencies = { "nvim-lua/plenary.nvim" },
+  --   build = "uv tool install --force vectorcode",
+  --   cmd = "VectorCode",
+  --   opts = {},
+  -- },
   {
     "olimorris/codecompanion.nvim",
     dependencies = {
@@ -21,6 +28,7 @@ return {
       "nvim-treesitter/nvim-treesitter",
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
+      -- "Davidyz/VectorCode",
     },
     opts = {
       adapters = {
@@ -67,8 +75,11 @@ return {
               description = "Stop Request",
             },
           },
+          -- slash_commands = {
+          --   codebase = require("vectorcode.integrations").codecompanion.chat.make_slash_command(),
+          -- },
           tools = {
-            ["mcp"] = {
+            mcp = {
               -- calling it in a function would prevent mcphub from being loaded before it's needed
               callback = function()
                 return require("mcphub.extensions.codecompanion")
@@ -78,6 +89,10 @@ return {
                 requires_approval = true,
               },
             },
+            -- vectorcode = {
+            --   description = "Run VectorCode to retrieve the project context.",
+            --   callback = require("vectorcode.integrations").codecompanion.chat.make_tool(),
+            -- },
           },
         },
         inline = {
