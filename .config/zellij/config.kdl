@@ -400,3 +400,6 @@ on_force_close "quit"
 // Default: true (if the host terminal supports it)
 // 
 // support_kitty_keyboard_protocol false
+
+// Show usage tips on Zellij startup. These can also be browsed through the about plugin with Ctrl o + a and then ?.
+show_startup_tips false
