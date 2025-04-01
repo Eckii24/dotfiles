@@ -182,6 +182,12 @@ exec --no-startup-id mockoon
 exec --no-startup-id camunda-modeler
 exec --no-startup-id open-lens
 
+# Other settings
+focus_follows_mouse yes
+
+# Ensure popups are created in the current workspace
+for_window [class="Rider|rider"] focus
+
 # resize window (you can also use the mouse for that)
 mode "resize" {
         # These bindings trigger as soon as you enter the resize mode
