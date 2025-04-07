@@ -32,6 +32,14 @@ return {
     },
     opts = {
       adapters = {
+        open_router = function()
+          return require("codecompanion.adapters").extend("openai_compatible", {
+            env = {
+              api_key = "OPEN_ROUTER_API_KEY",
+              url = "OPEN_ROUTER_API_URL",
+            },
+          })
+        end,
         azure_openai = function()
           return require("codecompanion.adapters").extend("azure_openai", {
             env = {
