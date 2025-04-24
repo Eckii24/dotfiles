@@ -9,10 +9,7 @@ return {
     keys = {
       { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
     },
-    opts = {
-      port = 3000,
-      config = vim.fn.expand("~/.config/nvim/mcpservers.json"),
-    },
+    opts = {},
   },
   -- {
   --   "Davidyz/VectorCode",
