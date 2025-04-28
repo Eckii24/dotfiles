@@ -58,9 +58,34 @@ run-repo(){
   done
 }
 
+fab() {
+  local model="gpt-4o"
+  local params=()
+  while (( "$#" )); do
+    case "$1" in
+      -m|--model)
+        model="$2"
+        shift 2
+        ;;
+      *)
+        params+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  local extra_params=()
+  case "$model" in
+    o1|o1-mini|o3|o3-mini|o4-mini)
+      extra_params=(-t 1 -T 1)
+      ;;
+  esac
+  fabric -m "$model" "${extra_params[@]}" "${params[@]}"
+}
+
 assessment() {
   local repo_url
-  local model="gpt-4o" # Default value
+  local model=""
   local output
 
   while [[ "$#" -gt 0 ]]; do
@@ -93,12 +118,12 @@ assessment() {
 
   # Pass the output to fabric -p check-assessment
   if [[ -n "$output" ]]; then
-    (export AZURE_DEPLOYMENTS="$model"; cat repomix-output.md | fabric -p check_assessment -m "$model" -o "$output")
+    (cat repomix-output.md | fab -m "$model" -p check_assessment -o "$output")
   else
-    (export AZURE_DEPLOYMENTS="$model"; cat repomix-output.md | fabric -p check_assessment -m "$model")
+    (cat repomix-output.md | fab -m "$model" -p check_assessment)
   fi
 }
-      
+
 
 pr-text(){
   local model="gpt-4o" # Default value
@@ -125,8 +150,8 @@ pr-text(){
   diff_output=$(git --no-pager diff $(git merge-base --fork-point master))
 
   if [[ -n "$output" ]]; then
-    (export AZURE_DEPLOYMENTS="$model"; echo "$diff_output" | fabric -p write_pr -m "$model" -o "$output")
+    (echo "$diff_output" | fab -p write_pr -m "$model" -o "$output")
   else
-    (export AZURE_DEPLOYMENTS="$model"; echo "$diff_output" | fabric -p write_pr -m "$model")
+    (echo "$diff_output" | fab -p write_pr -m "$model")
   fi
 }
