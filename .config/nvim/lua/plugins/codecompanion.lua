@@ -48,11 +48,15 @@ return {
               model = {
                 default = "o3-mini",
                 choices = {
-                  ["o3-mini"] = { opts = { can_reason = true } },
-                  ["o1"] = { opts = { stream = false } },
-                  ["o1-mini"] = { opts = { stream = true } },
+                  "gpt-4.1",
+                  "gpt-4.1-mini",
                   "gpt-4o",
                   "gpt-4o-mini",
+                  ["o1"] = { opts = { can_reason = true } },
+                  ["o1-mini"] = { opts = { can_reason = true } },
+                  ["o3"] = { opts = { can_reason = true } },
+                  ["o3-mini"] = { opts = { can_reason = true } },
+                  ["o4-mini"] = { opts = { can_reason = true } },
                 },
               },
             },
