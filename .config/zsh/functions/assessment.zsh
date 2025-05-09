@@ -1,0 +1,50 @@
+function assessment() {
+  local repo_url
+  local model="o4-mini"
+  local output
+  local branch
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      --repo | -r)
+        repo_url="$2"
+        shift 2
+        ;;
+      --model | -m)
+        model="$2"
+        shift 2
+        ;;
+      --output | -o)
+        output="$2"
+        shift 2
+        ;;
+      --branch | -b)
+        branch="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown parameter: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$repo_url" ]]; then
+    echo "Error: --repo / -p parameter is required."
+    return 1
+  fi
+
+  # Generate default output if not provided
+  if [[ -z "$output" ]]; then
+    output=$(echo "$repo_url" | sed -E 's|https://github.com/||; s|/|-|g; s|$|.md|' | tr '[:upper:]' '[:lower:]')
+  fi
+
+  if [[ -n "$branch" ]]; then
+    repomix --remote "$repo_url" --remote-branch "$branch"
+  else
+    repomix --remote "$repo_url"
+  fi
+
+  # Pass the output to fabric -p check-assessment
+  (cat repomix-output.md | fab -m "$model" -p check_assessment -o "$output")
+}

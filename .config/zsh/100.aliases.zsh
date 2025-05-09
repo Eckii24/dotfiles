@@ -1,8 +1,0 @@
-alias cat='bat'
-alias lg='lazygit'
-alias lzg='lazygit'
-alias lzd='lazydocker'
-alias ylg='lazygit --git-dir ~/.local/share/yadm/repo.git/'
-alias ynvim='yadm enter nvim ~'
-alias diff='delta -n -s'
-alias rm='rm -i'
