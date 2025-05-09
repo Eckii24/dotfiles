@@ -84,28 +84,19 @@ return {
               description = "Stop Request",
             },
           },
-          -- slash_commands = {
-          --   codebase = require("vectorcode.integrations").codecompanion.chat.make_slash_command(),
-          -- },
-          tools = {
-            mcp = {
-              -- calling it in a function would prevent mcphub from being loaded before it's needed
-              callback = function()
-                return require("mcphub.extensions.codecompanion")
-              end,
-              description = "Call tools and resources from the MCP Servers",
-              opts = {
-                requires_approval = true,
-              },
-            },
-            -- vectorcode = {
-            --   description = "Run VectorCode to retrieve the project context.",
-            --   callback = require("vectorcode.integrations").codecompanion.chat.make_tool(),
-            -- },
-          },
         },
         inline = {
           adapter = "copilot",
+        },
+      },
+      extensions = {
+        mcphub = {
+          callback = "mcphub.extensions.codecompanion",
+          opts = {
+            make_vars = true,
+            make_slash_commands = true,
+            show_result_in_chat = true,
+          },
         },
       },
     },
