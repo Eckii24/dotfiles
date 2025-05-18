@@ -1,3 +1,31 @@
+local function is_codecompanion_chat_buffer(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+
+  -- Option 1: Check by filetype (REPLACE 'codecompanion_ft' with the actual filetype)
+  local ft = vim.api.nvim_get_option_value("filetype", { buf = bufnr })
+  if ft == "codecompanion" then
+    return true
+  end
+
+  return false
+end
+
+-- Custom Lualine component function
+local function codecompanion_modifiable_status()
+  local current_bufnr = vim.api.nvim_get_current_buf()
+  if is_codecompanion_chat_buffer(current_bufnr) then
+    if not vim.api.nvim_get_option_value("modifiable", { buf = current_bufnr }) then
+      return "✨ Working on an answer..."
+    else
+      return "📝 Ask me anything!" -- Or perhaps '✏️' to indicate editable
+    end
+  end
+  return ""
+end
+
 return {
   {
     "ravitemer/mcphub.nvim",
@@ -11,13 +39,13 @@ return {
     },
     opts = {},
   },
-  -- {
-  --   "Davidyz/VectorCode",
-  --   dependencies = { "nvim-lua/plenary.nvim" },
-  --   build = "uv tool install --force vectorcode",
-  --   cmd = "VectorCode",
-  --   opts = {},
-  -- },
+  {
+    "Davidyz/VectorCode",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    build = "uv tool install --force vectorcode",
+    cmd = "VectorCode",
+    opts = {},
+  },
   {
     "olimorris/codecompanion.nvim",
     dependencies = {
@@ -25,7 +53,7 @@ return {
       "nvim-treesitter/nvim-treesitter",
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
-      -- "Davidyz/VectorCode",
+      "Davidyz/VectorCode",
     },
     opts = {
       adapters = {
@@ -84,6 +112,12 @@ return {
               description = "Stop Request",
             },
           },
+          tools = {
+            opts = {
+              auto_submit_errors = true,
+              auto_submit_success = true,
+            },
+          },
         },
         inline = {
           adapter = "copilot",
@@ -98,6 +132,11 @@ return {
             show_result_in_chat = true,
           },
         },
+        vectorcode = {
+          opts = {
+            add_tool = true,
+          },
+        },
       },
     },
     keys = {
@@ -107,5 +146,11 @@ return {
       { "<leader>ay", "<cmd>CodeCompanionChat Add<cr>", mode = "v", desc = "CodeCompanion add to chat" },
       { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "CodeCompanion inline" },
     },
+  },
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      table.insert(opts.sections.lualine_c, codecompanion_modifiable_status)
+    end,
   },
 }
