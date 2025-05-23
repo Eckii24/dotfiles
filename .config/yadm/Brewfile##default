@@ -1,6 +1,7 @@
 tap "homebrew/bundle"
 tap "ringohub/redis-cli"
 brew "unzip"
+brew "zip"
 brew "azure-cli"
 brew "bat"
 brew "bob"
