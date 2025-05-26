@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "azureDevOps": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tiberriver256/mcp-server-azure-devops"
+      ],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "",
+        "AZURE_DEVOPS_AUTH_METHOD": "",
+        "AZURE_DEVOPS_PAT": "",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": ""
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    }
+  },
+  "nativeMCPServers": []
+}
