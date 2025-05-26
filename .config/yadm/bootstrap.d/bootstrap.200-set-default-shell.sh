@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Define the path to zsh
@@ -22,7 +21,7 @@ if ! grep -Fxq "$ZSH_PATH" /etc/shells; then
   echo "zsh is not listed in /etc/shells."
   if command -v sudo >/dev/null 2>&1; then
     echo "Adding zsh to /etc/shells with sudo..."
-    echo "$ZSH_PATH" | sudo tee -a /etc/shells > /dev/null
+    echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
   else
     echo "sudo is not available. Attempting to add zsh to /etc/shells directly..."
     echo "$ZSH_PATH" | tee -a /etc/shells >/dev/null
