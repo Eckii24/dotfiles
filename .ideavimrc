@@ -1,6 +1,152 @@
-source ~/.vimrc
+" ------------------------------------------------------
+" Neovim configs
 
-Plug 'justinmk/vim-sneak'
+let mapleader = " "
+let maplocalleader = "\\"
+
+set clipboard = "unnamedplus"
+set completeopt=menu,menuone,noselect 
+" Hide * markup for bold and italic, but not markers with substitutions
+set conceallevel=2
+
+" Confirm to save changes before exiting modified buffer
+set confirm
+
+" Enable highlighting of the current line
+set cursorline
+
+" Character encoding used in Vim
+set encoding=utf-8
+
+" Use spaces instead of tabs
+set expandtab
+
+" List of pairs that match for the % command
+set matchpairs+=<:>
+
+" Enable mouse mode
+set mouse=a
+
+" Print line number
+set number
+
+" Popup blend
+set pumblend=10
+
+" Maximum number of entries in a popup
+set pumheight=10
+
+" Relative line numbers
+set relativenumber
+
+" Disable the default ruler
+set ruler=0
+
+" Lines of context
+set scrolloff=4
+
+" Don't show mode since we have a statusline
+set showmode=0
+
+" Columns of context
+set sidescrolloff=8
+
+" Always show the signcolumn, otherwise it would shift the text each time
+set signcolumn=yes
+
+" Don't ignore case with capitals
+set smartcase
+
+" Insert indents automatically
+set smartindent
+
+" Put new windows below current
+set splitbelow
+
+" Put new windows right of current
+set splitright
+
+" Number of spaces tabs count for
+set tabstop=2
+
+" True color support
+set termguicolors
+
+" Lower than default (1000) to quickly trigger which-key
+set timeoutlen=300
+
+" Allow cursor to move where there is no text in visual block mode
+set virtualedit=block
+
+" Command-line completion mode
+set wildmode=longest:full,full
+
+" Minimum window width
+set winminwidth=5
+
+" Disable line wrap
+set wrap=0
+
+" MAPPINGS
+" ------------------------------------------------------
+"copy to end of line
+map Y y$ 
+"rerun last macro
+nnoremap Q @@ 
+
+" Quickly insert an empty new line without entering insert mode
+nnoremap <Leader>o o<Esc>0D
+nnoremap <Leader>O O<Esc>0D
+
+" Window navigation
+let g:WhichKeyDesc_windows = "<leader>w Windows"
+
+let g:WhichKeyDesc_windows_go_left = "<C-h> Go to Left Window"
+nnoremap <C-h> <C-w>h
+let g:WhichKeyDesc_windows_go_lower = "<C-j> Go to Lower Window"
+nnoremap <C-j> <C-w>j
+let g:WhichKeyDesc_windows_go_upper = "<C-k> Go to Upper Window"
+nnoremap <C-k> <C-w>k
+let g:WhichKeyDesc_windows_go_right = "<C-l> Go to Right Window"
+nnoremap <C-l> <C-w>l
+
+let g:WhichKeyDesc_windows_delete = "<leader>wd Delete Window"
+nnoremap <leader>wd <C-W>c
+let g:WhichKeyDesc_windows_go_left = "<leader>wh Go to Left Window"
+nnoremap <leader>wh <C-W>h
+let g:WhichKeyDesc_windows_go_lower = "<leader>wj Go to Lower Window"
+nnoremap <leader>wj <C-W>j
+let g:WhichKeyDesc_windows_go_upper = "<leader>wk Go to Upper Window"
+nnoremap <leader>wk <C-W>k
+let g:WhichKeyDesc_windows_go_right = "<leader>wd Go to Right Window"
+nnoremap <leader>wl <C-W>l
+
+let g:WhichKeyDesc_windows_zoom = "<leader>wm Zoom Window"
+nnoremap <leader>wm <C-W>m
+let g:WhichKeyDesc_windows_close_all_others = "<leader>wo Close all other windows"
+nnoremap <leader>wo <C-W>o
+let g:WhichKeyDesc_windows_quit = "<leader>wq Quit Window"
+nnoremap <leader>wq <C-W>q
+
+let g:WhichKeyDesc_windows_split = "<leader>ws Split Window"
+nnoremap <leader>ws <C-W>s
+let g:WhichKeyDesc_windows_split_vertically = "<leader>wv Split Window Vertically"
+nnoremap <leader>wv <C-W>v
+let g:WhichKeyDesc_windows_switch = "<leader>ww Switch Windows"
+nnoremap <leader>ww <C-W>w
+let g:WhichKeyDesc_windows_swap = "<leader>wx Swap Current with Next"
+nnoremap <leader>wx <C-W>x
+let g:WhichKeyDesc_windows_increase_height = "<leader>w+ Increase Height"
+nnoremap <leader>w+ <C-W>+
+let g:WhichKeyDesc_windows_decrease_height = "<leader>w- Decrease Height"
+nnoremap <leader>w- <C-W>-
+let g:WhichKeyDesc_windows_increase_width = "<leader>w< Increase Width"
+nnoremap <leader>w< <C-W><
+let g:WhichKeyDesc_windows_equal_dimensions = "<leader>w= Equally High and Width"
+nnoremap <leader>w= <C-W>=
+let g:WhichKeyDesc_windows_decrease_width = "<leader>w> Decrease Width"
+nnoremap <leader>w> <C-W>>Plug 'justinmk/vim-sneak'
+
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'vim-scripts/argtextobj.vim'
