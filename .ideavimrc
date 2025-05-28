@@ -72,9 +72,6 @@ set tabstop=2
 " True color support
 set termguicolors
 
-" Lower than default (1000) to quickly trigger which-key
-set timeoutlen=300
-
 " Allow cursor to move where there is no text in visual block mode
 set virtualedit=block
 
@@ -89,18 +86,28 @@ set wrap=0
 
 " MAPPINGS
 " ------------------------------------------------------
-"copy to end of line
+" copy to end of line
 map Y y$ 
-"rerun last macro
+
+" rerun last macro
 nnoremap Q @@ 
 
 " Quickly insert an empty new line without entering insert mode
-nnoremap <Leader>o o<Esc>0D
-nnoremap <Leader>O O<Esc>0D
+let g:WhichKeyDesc_new_line_below = "<leader>o New line below"
+nnoremap ]<space> o<Esc>0D
+let g:WhichKeyDesc_new_line_above = "<leader>O New line above"
+nnoremap [<space> O<Esc>0D
+
+" Remap textobj-entire binding to match LazyVim
+map dig die
+map dag dae
+map cig cie
+map cag cae
+map vig vie
+map vag vae
 
 " Window navigation
 let g:WhichKeyDesc_windows = "<leader>w Windows"
-
 let g:WhichKeyDesc_windows_go_left = "<C-h> Go to Left Window"
 nnoremap <C-h> <C-w>h
 let g:WhichKeyDesc_windows_go_lower = "<C-j> Go to Lower Window"
@@ -109,7 +116,6 @@ let g:WhichKeyDesc_windows_go_upper = "<C-k> Go to Upper Window"
 nnoremap <C-k> <C-w>k
 let g:WhichKeyDesc_windows_go_right = "<C-l> Go to Right Window"
 nnoremap <C-l> <C-w>l
-
 let g:WhichKeyDesc_windows_delete = "<leader>wd Delete Window"
 nnoremap <leader>wd <C-W>c
 let g:WhichKeyDesc_windows_go_left = "<leader>wh Go to Left Window"
@@ -120,14 +126,12 @@ let g:WhichKeyDesc_windows_go_upper = "<leader>wk Go to Upper Window"
 nnoremap <leader>wk <C-W>k
 let g:WhichKeyDesc_windows_go_right = "<leader>wd Go to Right Window"
 nnoremap <leader>wl <C-W>l
-
 let g:WhichKeyDesc_windows_zoom = "<leader>wm Zoom Window"
 nnoremap <leader>wm <C-W>m
 let g:WhichKeyDesc_windows_close_all_others = "<leader>wo Close all other windows"
 nnoremap <leader>wo <C-W>o
 let g:WhichKeyDesc_windows_quit = "<leader>wq Quit Window"
 nnoremap <leader>wq <C-W>q
-
 let g:WhichKeyDesc_windows_split = "<leader>ws Split Window"
 nnoremap <leader>ws <C-W>s
 let g:WhichKeyDesc_windows_split_vertically = "<leader>wv Split Window Vertically"
@@ -145,20 +149,99 @@ nnoremap <leader>w< <C-W><
 let g:WhichKeyDesc_windows_equal_dimensions = "<leader>w= Equally High and Width"
 nnoremap <leader>w= <C-W>=
 let g:WhichKeyDesc_windows_decrease_width = "<leader>w> Decrease Width"
-nnoremap <leader>w> <C-W>>Plug 'justinmk/vim-sneak'
+nnoremap <leader>w> <C-W>>
+map <leader>wO <action>(HideAllWindows)
 
-Plug 'tpope/vim-surround'
-Plug 'tpope/vim-commentary'
-Plug 'vim-scripts/argtextobj.vim'
-Plug 'kana/vim-textobj-entire'
-Plug 'machakann/vim-highlightedyank'
+nmap s <Action>(flash.search)
+xmap s <Action>(flash.search)
 
+map <leader>e <action>(ToggleProjectToolWindow)
+map <leader>D <action>(ActivateDatabaseToolWindow)
+map <leader>v <action>(IdeaVim.ReloadVimRc.reload)
+map <leader>V <action>(VimPluginToggle)
+map <leader>o <action>(RunAnything)
+
+map <leader>fe <action>(ActivateProjectToolWindow)
+map <leader>ft <action>(ActivateTerminalToolWindow)
+map <leader>fr <action>(RecentFiles)
+map <leader>ff <action>(GotoFile)
+map <leader><space> <action>(GotoFile)
+
+map <leader>ac <action>(ActivateGitHubCopilotChatToolWindow)
+
+map <leader>/ <action>(FindInPath)
+map <leader>sg <action>(FindInPath)
+map <leader>sr <action>(ReplaceInPath)
+map <leader>ss <action>(FileStructurePopup)
+map <leader>sS <action>(GotoSymbol)
+map <leader>st <action>(ActivateTODOToolWindow)
+map <leader>sd <action>(ActivateProblemsViewToolWindow)
+map <leader>sa <action>(GotoAction)
+
+map gd <action>(GotoDeclaration)
+map gI <action>(GotoImplementation)
+map gr <action>(GotoDeclaration)
+map K <action>(QuickJavaDoc)
+map gj <action>(SelectNextOccurrence)
+
+map <leader>ca <action>(showintentionactions)
+map <leader>cA <action>(Generate)
+map <leader>cr <action>(RenameElement)
+map <leader>cs <action>(GotoSymbol)
+map <leader>cS <action>(SurroundWith)
+map <leader>cf <action>(ReformatCode)
+
+map <leader>rr <action>(Refactorings.QuickListPopupAction)
+map <leader>ri <action>(Inline)
+map <leader>rb <action>(ExtractMethod)
+
+map <leader>xq <action>(ActivateFindToolWindow)
+map <leader>xt <action>(ActivateTODOToolWindow)
+map <leader>xx <action>(ActivateProblemsViewToolWindow)
+
+map <leader>gp <action>(Vcs.Push)
+map <leader>gg <action>(ActivateCommitToolWindow)
+map <leader>gG <action>(ActivateVersionControlToolWindow)
+map <leader>ghD <action>(Annotate)
+map <leader>ghr <action>(Vcs.RollbackChangedLines)
+map <leader>ghR <action>(ChangesView.Revert)
+
+map <leader>db <action>(ToggleLineBreakpoint)
+map <leader>dB <action>(AddConditionalBreakpoint)
+map <leader>di <action>(StepInto)
+map <leader>do <action>(StepOver)
+map <leader>dc <action>(Resume)
+map <leader>du <action>(ActivateDebugToolWindow)
+map <leader>dC <action>(RunToCursor)
+map <leader>dP <action>(Pause)
+map <leader>dt <action>(Stop) 
+
+map <leader>to <action>(ActivateUnitTestsToolWindow)
+map <leader>tr <action>(RiderUnitTestRunContextAction)
+map <leader>td <action>(RiderUnitTestDebugContextAction)
+map <leader>tl <action>(RiderUnitTestRepeatPreviousRunAction)
+map <leader>tt <action>(RiderUnitTestRunContextSplitAction)
+map <leader>tT <action>(RiderUnitTestRunSolutionAction)
+map <leader>tS <action>(RiderUnitTestSessionAbortAction)
+
+map [e <action>(ReSharperGotoPrevErrorInSolution)
+map ]e <action>(ReSharperGotoNextErrorInSolution)
+map [h <action>(VcsShowPrevChangeMarker)
+map ]h <action>(VcsShowNextChangeMarker)
+
+set commentary
+set surround
+set highlightedyank
 set which-key
 set peekaboo
+set argtextobj
+set textobj-entire
 set functiontextobj
+set mini-ai
 
 set ideaput
 set ideamarks
+set ideajoin
 
 " disable the timeout option
 set notimeout
