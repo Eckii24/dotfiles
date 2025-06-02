@@ -99,12 +99,8 @@ let g:WhichKeyDesc_new_line_above = "<leader>O New line above"
 nnoremap [<space> O<Esc>0D
 
 " Remap textobj-entire binding to match LazyVim
-map dig die
-map dag dae
-map cig cie
-map cag cae
-map vig vie
-map vag vae
+omap ig ie
+omap ag ae
 
 " Window navigation
 let g:WhichKeyDesc_windows = "<leader>w Windows"
