@@ -34,6 +34,7 @@ sudo sed -i '/^#tcp_send_buffer_bytes/s/^#//; s/tcp_send_buffer_bytes=.*/tcp_sen
 sudo sed -i 's/crypt_level=high/crypt_level=none/g' /etc/xrdp/xrdp.ini 
 sudo sed -i 's/max_bpp=32/max_bpp=16/g' /etc/xrdp/xrdp.ini 
 sudo echo "use_compression = yes" >> /etc/xrdp/xrdp.ini
+sudo echo "XRDP_XORG_TOUCHPAD_SCROLL_HACK=yes" >> /etc/xrdp/sesman.ini
 sudo echo "net.core.wmem_max = 8388608" > /etc/sysctl.d/xrdp.conf
 
 # Install Docker
