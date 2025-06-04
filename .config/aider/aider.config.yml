@@ -1,8 +1,5 @@
 # Model settings
-model: azure/o3-mini
-
-model-settings-file: ~/.config/aider/aider.model.settings.yml
-model-metadata-file: ~/.config/aider/aider.model.metadata.json
+model: azure/o4-mini
 
 # Cache settings
 cache-prompts: true

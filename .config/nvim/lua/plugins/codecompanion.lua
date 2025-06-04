@@ -74,7 +74,7 @@ return {
             },
             schema = {
               model = {
-                default = "o3-mini",
+                default = "o4-mini",
                 choices = {
                   "gpt-4.1",
                   "gpt-4.1-mini",

@@ -1,4 +1,0 @@
-- name: azure/gpt
-  weak_model_name: azure/gpt
-  lazy: true
-  reminder: sys
