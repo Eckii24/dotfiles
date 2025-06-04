@@ -1,11 +1,12 @@
 return {
   {
     "GustavEikaas/easy-dotnet.nvim",
-    dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
+    dependencies = { "nvim-lua/plenary.nvim" },
     opts = {
       test_runner = {
         viewmode = "float",
       },
+      picker = "snacks",
     },
     keys = {
       { "<leader>N", "", desc = "dotnet" },
