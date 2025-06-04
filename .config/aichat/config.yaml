@@ -1,0 +1,16 @@
+# see https://github.com/sigoden/aichat/blob/main/config.example.yaml
+
+model: azure:o4-mini
+clients:
+- type: azure-openai
+  name: azure
+  models:
+  - name: gpt-4.1
+  - name: gpt-4.1-mini
+  - name: gpt-4o
+  - name: gpt-4o-mini
+  - name: o1
+  - name: o1-mini
+  - name: o3
+  - name: o3-mini
+  - name: o4-mini

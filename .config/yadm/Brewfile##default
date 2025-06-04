@@ -1,5 +1,6 @@
 tap "homebrew/bundle"
 tap "ringohub/redis-cli"
+brew "aichat"
 brew "azure-cli"
 brew "bat"
 brew "bob"
