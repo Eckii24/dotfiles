@@ -5,6 +5,9 @@ return {
     opts = {
       test_runner = {
         viewmode = "float",
+        mappings = {
+          run_test_from_buffer = { lhs = "<leader>tr", desc = "Run Test from Buffer" },
+        },
       },
       picker = "snacks",
     },
@@ -96,8 +99,7 @@ return {
       {
         "<leader>Nea",
         function()
-          require("easy-dotnet").ef_migrations_add(
-            vim.fn.input("Enter name:"))
+          require("easy-dotnet").ef_migrations_add(vim.fn.input("Enter name:"))
         end,
         desc = "Migrations Add",
       },
