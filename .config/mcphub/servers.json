@@ -1,26 +1,12 @@
 {
+  "nativeMCPServers": [
+    
+  ],
   "mcpServers": {
-    "azureDevOps": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@tiberriver256/mcp-server-azure-devops"
-      ],
-      "env": {
-        "AZURE_DEVOPS_ORG_URL": "",
-        "AZURE_DEVOPS_AUTH_METHOD": "",
-        "AZURE_DEVOPS_PAT": "",
-        "AZURE_DEVOPS_DEFAULT_PROJECT": ""
-      }
-    },
-    "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ]
-    },
     "sequential-thinking": {
+      "autoApprove": [
+        "sequentialthinking"
+      ],
       "command": "npx",
       "args": [
         "-y",
@@ -28,11 +14,45 @@
       ]
     },
     "repomix": {
+      "autoApprove": [
+        "pack_codebase",
+        "pack_remote_repository",
+        "read_repomix_output",
+        "grep_repomix_output",
+        "file_system_read_file",
+        "file_system_read_directory"
+      ],
       "command": "repomix",
       "args": [
         "--mcp"
       ]
+    },
+    "context7": {
+      "autoApprove": [
+        "resolve-library-id",
+        "get-library-docs"
+      ],
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "azureDevOps": {
+      "autoApprove": [
+        
+      ],
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tiberriver256/mcp-server-azure-devops"
+      ],
+      "env": {
+        "AZURE_DEVOPS_AUTH_METHOD": "",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": "",
+        "AZURE_DEVOPS_PAT": "",
+        "AZURE_DEVOPS_ORG_URL": ""
+      }
     }
-  },
-  "nativeMCPServers": []
+  }
 }
