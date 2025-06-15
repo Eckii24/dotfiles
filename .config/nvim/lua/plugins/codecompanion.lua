@@ -40,20 +40,12 @@ return {
     opts = {},
   },
   {
-    "Davidyz/VectorCode",
-    dependencies = { "nvim-lua/plenary.nvim" },
-    build = "uv tool install --force vectorcode",
-    cmd = "VectorCode",
-    opts = {},
-  },
-  {
     "olimorris/codecompanion.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
-      "Davidyz/VectorCode",
     },
     opts = {
       adapters = {
