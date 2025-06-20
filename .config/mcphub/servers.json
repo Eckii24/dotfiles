@@ -1,22 +1,13 @@
 {
-  "nativeMCPServers": [
-    
-  ],
+  "nativeMCPServers": [],
   "mcpServers": {
-    "azureDevOps": {
+    "ado": {
       "args": [
         "-y",
-        "@tiberriver256/mcp-server-azure-devops"
+        "@azure-devops/mcp",
+        "${AZURE_DEVOPS_ORG}"
       ],
-      "autoApprove": [
-        
-      ],
-      "env": {
-        "AZURE_DEVOPS_ORG_URL": "",
-        "AZURE_DEVOPS_DEFAULT_PROJECT": "",
-        "AZURE_DEVOPS_PAT": "",
-        "AZURE_DEVOPS_AUTH_METHOD": ""
-      },
+      "autoApprove": [],
       "command": "npx"
     },
     "sequential-thinking": {
