@@ -1,25 +1,8 @@
 {
-  "nativeMCPServers": [],
+  "nativeMCPServers": [
+    
+  ],
   "mcpServers": {
-    "ado": {
-      "args": [
-        "-y",
-        "@azure-devops/mcp",
-        "${AZURE_DEVOPS_ORG}"
-      ],
-      "autoApprove": [],
-      "command": "npx"
-    },
-    "sequential-thinking": {
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "autoApprove": [
-        "sequentialthinking"
-      ],
-      "command": "npx"
-    },
     "vectorcode": {
       "command": "vectorcode-mcp-server",
       "autoApprove": [
@@ -28,9 +11,6 @@
       ]
     },
     "repomix": {
-      "args": [
-        "--mcp"
-      ],
       "autoApprove": [
         "pack_codebase",
         "pack_remote_repository",
@@ -39,18 +19,48 @@
         "file_system_read_file",
         "file_system_read_directory"
       ],
+      "args": [
+        "--mcp"
+      ],
       "command": "repomix"
     },
-    "context7": {
+    "ado": {
+      "autoApprove": [
+        
+      ],
       "args": [
         "-y",
-        "@upstash/context7-mcp@latest"
+        "@azure-devops/mcp",
+        "${AZURE_DEVOPS_ORG}"
       ],
+      "command": "npx"
+    },
+    "context7": {
       "autoApprove": [
         "resolve-library-id",
         "get-library-docs"
       ],
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
       "command": "npx"
+    },
+    "sequential-thinking": {
+      "autoApprove": [
+        "sequentialthinking"
+      ],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "command": "npx"
+    },
+    "git": {
+      "args": [
+        "mcp-server-git"
+      ],
+      "command": "uvx"
     }
   }
 }
