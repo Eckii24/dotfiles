@@ -121,7 +121,7 @@ return {
           opts = {
             make_vars = true,
             make_slash_commands = true,
-            show_result_in_chat = true,
+            -- show_result_in_chat = true,
           },
         },
       },
