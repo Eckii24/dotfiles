@@ -3,14 +3,62 @@
     
   ],
   "mcpServers": {
+    "ado": {
+      "command": "npx",
+      "disabled": false,
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "${AZURE_DEVOPS_ORG}"
+      ],
+      "autoApprove": [
+        
+      ]
+    },
     "vectorcode": {
       "command": "vectorcode-mcp-server",
+      "disabled": false,
       "autoApprove": [
         "ls",
         "query"
       ]
     },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git"
+      ],
+      "disabled": false
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "disabled": false,
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "autoApprove": [
+        "sequentialthinking"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "disabled": false,
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "autoApprove": [
+        "resolve-library-id",
+        "get-library-docs"
+      ]
+    },
     "repomix": {
+      "command": "repomix",
+      "disabled": false,
+      "args": [
+        "--mcp"
+      ],
       "autoApprove": [
         "pack_codebase",
         "pack_remote_repository",
@@ -18,49 +66,7 @@
         "grep_repomix_output",
         "file_system_read_file",
         "file_system_read_directory"
-      ],
-      "args": [
-        "--mcp"
-      ],
-      "command": "repomix"
-    },
-    "ado": {
-      "autoApprove": [
-        
-      ],
-      "args": [
-        "-y",
-        "@azure-devops/mcp",
-        "${AZURE_DEVOPS_ORG}"
-      ],
-      "command": "npx"
-    },
-    "context7": {
-      "autoApprove": [
-        "resolve-library-id",
-        "get-library-docs"
-      ],
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ],
-      "command": "npx"
-    },
-    "sequential-thinking": {
-      "autoApprove": [
-        "sequentialthinking"
-      ],
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "command": "npx"
-    },
-    "git": {
-      "args": [
-        "mcp-server-git"
-      ],
-      "command": "uvx"
+      ]
     }
   }
 }

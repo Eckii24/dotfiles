@@ -37,7 +37,9 @@ return {
     keys = {
       { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
     },
-    opts = {},
+    opts = {
+      shutdown_delay = 24 * 60 * 60 * 1000, -- 24 hours in milliseconds
+    },
   },
   {
     "olimorris/codecompanion.nvim",
@@ -113,6 +115,83 @@ return {
         },
         inline = {
           adapter = "copilot",
+        },
+      },
+      prompt_library = {
+        ["Create Pull Request"] = {
+          strategy = "workflow",
+          description = "Guided workflow to create a PR using MCP and LLM-generated description.",
+          opts = {
+            short_name = "pr",
+            auto_submit = true,
+          },
+          prompts = {
+            -- 1. Get git diff
+            {
+              {
+                name = "Get Git Diff",
+                role = "user",
+                content = "Run @cmd_runner: git diff origin/main...HEAD --name-status",
+                opts = { auto_submit = true },
+              },
+            },
+            -- 2. Ask for work item ID
+            {
+              {
+                name = "Get DevOps Project",
+                role = "system",
+                content = function(ctx)
+                  return "Use <value-from-env-AZURE_DEVOPS_PROJECT> as devops project"
+                end,
+              },
+              {
+                name = "Work Item ID",
+                role = "user",
+                content = "Please enter the work item ID for this implementation.",
+                opts = { auto_submit = false },
+              },
+            },
+            -- 4. Get repository info
+            {
+              {
+                name = "Get Repo Info",
+                role = "user",
+                content = "Run @mcp:repo_get_repo_by_name_or_id with the given project and repository name.",
+                opts = {
+                  auto_submit = true,
+                },
+              },
+            },
+            -- 5. Get work item details
+            {
+              {
+                name = "Get Work Item",
+                role = "user",
+                content = "Run @mcp:wit_get_work_item with the given id and project",
+                opts = {
+                  auto_submit = true,
+                },
+              },
+            },
+            -- 6. Generate PR description with LLM
+            {
+              {
+                name = "Generate PR Description",
+                role = "user",
+                content = "Using the given context about the git diff and the work item.\n\nPlease generate a pull request title and a description using this structure:\n\n**Describe the changes you made**\n\n**Describe the design choices you made**\n\n# Review Information\nPlace any specific information for the PR reviewer to help improving the code quality.\n\n## Type of change",
+                opts = { auto_submit = true },
+              },
+            },
+            -- 7. Show PR draft and ask for confirmation
+            {
+              {
+                name = "Confirm PR",
+                role = "user",
+                content = "Please create the pull request using @mcp:repo_create_pull_request with the given information.",
+                opts = { auto_submit = false },
+              },
+            },
+          },
         },
       },
       extensions = {
