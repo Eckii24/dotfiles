@@ -48,6 +48,7 @@ return {
       "nvim-treesitter/nvim-treesitter",
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
+      "ravitemer/codecompanion-history.nvim",
     },
     opts = {
       adapters = {
@@ -210,6 +211,12 @@ return {
             make_vars = true,
             make_slash_commands = true,
             -- show_result_in_chat = true,
+          },
+        },
+        history = {
+          enabled = true,
+          opts = {
+            picker = "snacks",
           },
         },
       },
