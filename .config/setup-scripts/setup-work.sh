@@ -34,12 +34,7 @@ sudo groupadd docker
 sudo usermod -aG docker "$USER"
 
 echo "Installing dapr"
-if ! command -v dapr &>/dev/null; then
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/dapr/cli/master/install/install.sh)"
-  dapr init
-else
-  echo "dapr is already installed."
-fi
+brew install dapr/tap/dapr-cli
 
 echo "Init SQL server in docker and sqlcmd"
 sudo docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=Test_1234' -p 1433:1433 --name mssql_server -d mcr.microsoft.com/mssql/server:2022-latest
