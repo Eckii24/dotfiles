@@ -7,6 +7,9 @@ alias ynvim='yadm enter nvim ~'
 alias diff='delta -n -s'
 alias rm='trash-put'
 
+# AI Neovim with CodeCompanion chat in buffer layout
+alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
+
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
 
