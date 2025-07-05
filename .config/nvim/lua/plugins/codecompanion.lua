@@ -118,10 +118,11 @@ return {
               return string.format(
                 "  %s%s",
                 adapter.formatted_name,
-                adapter.parameters.model and " (" .. adapter.parameters.model .. ")" or ""
+                adapter.schema.model.default and " (" .. adapter.schema.model.default .. ")" or ""
               )
             end,
           },
+          variables = {
         },
         inline = {
           adapter = "copilot",
