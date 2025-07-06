@@ -1,64 +1,16 @@
 {
-  "nativeMCPServers": [
-    
-  ],
+  "nativeMCPServers": {
+    "mcphub": {
+      "disabled": true
+    },
+    "neovim": {
+      "disabled": true
+    }
+  },
   "mcpServers": {
-    "ado": {
-      "command": "npx",
-      "disabled": false,
-      "args": [
-        "-y",
-        "@azure-devops/mcp",
-        "${AZURE_DEVOPS_ORG}"
-      ],
-      "autoApprove": [
-        
-      ]
-    },
-    "vectorcode": {
-      "command": "vectorcode-mcp-server",
-      "disabled": false,
-      "autoApprove": [
-        "ls",
-        "query"
-      ]
-    },
-    "git": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-git"
-      ],
-      "disabled": false
-    },
-    "sequential-thinking": {
-      "command": "npx",
-      "disabled": false,
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "autoApprove": [
-        "sequentialthinking"
-      ]
-    },
-    "context7": {
-      "command": "npx",
-      "disabled": false,
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ],
-      "autoApprove": [
-        "resolve-library-id",
-        "get-library-docs"
-      ]
-    },
     "repomix": {
-      "command": "repomix",
       "disabled": false,
-      "args": [
-        "--mcp"
-      ],
+      "command": "repomix",
       "autoApprove": [
         "pack_codebase",
         "pack_remote_repository",
@@ -66,6 +18,69 @@
         "grep_repomix_output",
         "file_system_read_file",
         "file_system_read_directory"
+      ],
+      "args": [
+        "--mcp"
+      ]
+    },
+    "ado": {
+      "disabled": false,
+      "command": "npx",
+      "autoApprove": [
+        
+      ],
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "${AZURE_DEVOPS_ORG}"
+      ]
+    },
+    "vectorcode": {
+      "command": "vectorcode-mcp-server",
+      "autoApprove": [
+        "ls",
+        "query"
+      ],
+      "disabled": false
+    },
+    "sequential-thinking": {
+      "disabled": false,
+      "command": "npx",
+      "autoApprove": [
+        "sequentialthinking"
+      ],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "mcp-promptregistry": {
+      "env": {
+        "PROMPT_REGISTRY_PROJECT_DIR": ""
+      },
+      "command": "npx",
+      "disabled": false,
+      "args": [
+        "mcp-promptregistry"
+      ]
+    },
+    "context7": {
+      "disabled": false,
+      "command": "npx",
+      "autoApprove": [
+        "resolve-library-id",
+        "get-library-docs"
+      ],
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "git": {
+      "command": "uvx",
+      "disabled": false,
+      "args": [
+        "mcp-server-git"
       ]
     }
   }
