@@ -238,6 +238,10 @@ return {
             enabled = true,
             opts = {
               picker = "snacks",
+              title_generation_opts = {
+                adapter = "copilot",
+                model = "gpt-4.1",
+              },
             },
           },
         },
@@ -248,18 +252,8 @@ return {
             },
           },
         },
-        history = {
-          enabled = true,
-          opts = {
-            picker = "snacks",
-            title_generation_opts = {
-              adapter = "copilot",
-              model = "gpt-4.1",
-            },
-          },
-        },
-      },
-    },
+      }
+    end,
     keys = {
       { "<leader>a", "", desc = "ai" },
       { "<leader>aa", "<cmd>CodeCompanionActions<cr>", mode = { "n", "v" }, desc = "CodeCompanion actions" },
