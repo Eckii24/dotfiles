@@ -42,6 +42,7 @@ jobs:
         docker build -t eckii24/dev-base:${{ env.TAG }} -t eckii24/dev-base:latest -f ./.config/setup-scripts/base.Dockerfile .
         docker build -t eckii24/dev-dotnet:${{ env.TAG }} -t eckii24/dev-dotnet:latest -f ./.config/setup-scripts/dotnet.Dockerfile .
         docker build -t eckii24/dev-php:${{ env.TAG }} -t eckii24/dev-php:latest -f ./.config/setup-scripts/php.Dockerfile .
+        docker build -t eckii24/dev-work:${{ env.TAG }} -t eckii24/dev-work:latest -f ./.config/setup-scripts/work.Dockerfile .
 
     # Push the Docker image to Docker Hub
     - name: Push Base Docker image
@@ -52,4 +53,6 @@ jobs:
         docker push eckii24/dev-dotnet:latest
         docker push eckii24/dev-php:${{ env.TAG }}
         docker push eckii24/dev-php:latest
+        docker push eckii24/dev-work:${{ env.TAG }}
+        docker push eckii24/dev-work:latest
 
