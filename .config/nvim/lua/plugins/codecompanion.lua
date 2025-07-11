@@ -21,6 +21,7 @@ return {
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
       "ravitemer/codecompanion-history.nvim",
+      "franco-ruggeri/codecompanion-spinner.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -163,6 +164,7 @@ WorkItemID: ]],
               },
             },
           },
+          spinner = {},
         },
         display = {
           chat = {
@@ -180,13 +182,5 @@ WorkItemID: ]],
       { "<leader>ay", "<cmd>CodeCompanionChat Add<cr>", mode = "v", desc = "CodeCompanion add to chat" },
       { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "CodeCompanion inline" },
     },
-  },
-  {
-    "franco-ruggeri/codecompanion-spinner.nvim",
-    dependencies = {
-      "olimorris/codecompanion.nvim",
-      "nvim-lua/plenary.nvim",
-    },
-    opts = {},
   },
 }
