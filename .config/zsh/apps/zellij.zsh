@@ -1,5 +1,6 @@
-# Only start zellij if we are in an SSH session
-if [[ -n "$SSH_CONNECTION" ]]; then
+
+# Start zellij if in an SSH session or running inside WSL
+if [[ -n "$SSH_CONNECTION" || -n "$WSL_DISTRO_NAME" ]]; then
   eval "$(zellij setup --generate-auto-start zsh)"
 fi
 
