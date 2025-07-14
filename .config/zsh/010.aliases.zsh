@@ -9,6 +9,7 @@ alias rm='trash-put'
 
 # AI Neovim with CodeCompanion chat in buffer layout
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
+alias mcp='nvim +"MCPHub"'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
