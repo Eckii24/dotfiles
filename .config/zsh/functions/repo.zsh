@@ -51,7 +51,7 @@ function repo() {
     
     # Run az repos list command and save to cache
     echo "Fetching repository list..."
-    az repos list --output tsv --query '[].{Name:name,SSHUrl:sshUrl}' > "$cache_file"
+    az repos list --organization $AZURE_DEVOPS_ORG_URL --project $AZURE_DEVOPS_DEFAULT_PROJECT --output tsv --query '[].{Name:name,SSHUrl:sshUrl}' > "$cache_file"
     
     if [[ $? -ne 0 ]]; then
       echo "Error: Failed to fetch repository list."
