@@ -84,12 +84,14 @@ function repo() {
     fi
   fi
   
-  # Change into the folder
-  cd "$repo_folder" || return 1
-  
   # Execute command if not "cd"
-  if [[ "$cmd" != "cd" ]]; then
-    # Execute the command with remaining arguments
-    "${args[@]:2}"
+  if [[ "$cmd" == "cd" ]]; then
+    cd "$repo_folder" || return 1
+  else
+    # Execute the command with remaining arguments in a subshell
+    (
+      cd "$repo_folder" || exit 1
+      "$cmd" "${args[@]:2}"
+    )
   fi
 }
