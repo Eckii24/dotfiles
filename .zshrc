@@ -29,7 +29,7 @@ function source-folder() {
 
   # Source all .zsh files in the folder
   for file in "$folder"/*.zsh; do
-    if [[ "$config_file" == *"##"* || "$config_file" == *"$"* ]]; then
+    if [[ "$file" == *"##"* || "$file" == *"$"* ]]; then
       continue
     fi
 
