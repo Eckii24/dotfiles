@@ -1,6 +1,6 @@
 function assessment() {
   local repo_url
-  local model="o4-mini"
+  local model="azure:o4-mini"
   local output
   local branch
   local ignore
@@ -53,5 +53,5 @@ function assessment() {
   eval "$repomix_cmd"
 
   # Pass the output to fabric -p check-assessment
-  (cat repomix-output.md | fab -m "$model" -p check_assessment -o "$output")
+  (cat repomix-output.md | aichat -m "$model" -r assessment -S > $output)
 }
