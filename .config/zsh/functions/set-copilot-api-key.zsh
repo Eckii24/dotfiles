@@ -176,7 +176,6 @@ EOF
         
         export COPILOT_API_KEY="$api_key"
         _log "COPILOT_API_KEY successfully refreshed"
-        echo "GitHub Copilot API key has been refreshed"
         
         return 0
     }
@@ -203,7 +202,6 @@ EOF
         fi
     else
         _log "Current token is still valid, no refresh needed"
-        echo "GitHub Copilot API key is already valid"
     fi
     
     _log "$FUNCTION_NAME completed successfully"
