@@ -1,6 +1,6 @@
 # see https://github.com/sigoden/aichat/blob/main/config.example.yaml
 
-model: azure:o4-mini
+model: copilot:gpt-4.1
 clients:
 - type: azure-openai
   name: azure
@@ -14,3 +14,23 @@ clients:
   - name: o3
   - name: o3-mini
   - name: o4-mini
+- type: openai-compatible
+  name: copilot
+  api_base: https://api.githubcopilot.com
+  models:
+  - name: gpt-4o
+  - name: gpt-4.1
+  - name: o3-mini
+  - name: o4-mini
+  - name: gemini-2.0-flash-001
+  - name: gemini-2.5-pro
+  - name: claude-3.5-sonnet
+  - name: claude-3.7-sonnet
+  - name: claude-3.7-sonnet-thought
+  - name: claude-sonnet-4
+  patch:
+    chat_completions:
+      '.*':
+        headers:
+          Copilot-Integration-Id: vscode-chat
+          Editor-Version: aichat/0.1.0
