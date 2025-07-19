@@ -25,9 +25,6 @@ Write-Warning "6. Copy secret files from 1Password into WSL: 200.secrets.zsh, se
 # Install and configure terminals
 Write-Host "Setup terminals"
 winget install -e --id Microsoft.WindowsTerminal
-winget install -e --id=wez.wezterm
-
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/wezterm/wezterm.lua" -OutFile "$HOME/.wezterm.lua"
 
 Invoke-WebRequest -Uri "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Hack.zip" -OutFile "$HOME/Downloads/Hack.zip"
 Expand-Archive -Path "$HOME/Downloads/Hack.zip" -DestinationPath "$HOME/Downloads/Hack"
