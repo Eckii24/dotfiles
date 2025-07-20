@@ -144,6 +144,36 @@ WorkItemID: ]],
               },
             },
           },
+          ["Diff code review"] = {
+            strategy = "chat",
+            description = "Perform a code review",
+            opts = {
+              auto_submit = true,
+              user_prompt = false,
+            },
+            prompts = {
+              {
+                role = "user",
+                content = function()
+                  local target_branch = vim.fn.input("Target branch for merge base diff (default: master): ", "master")
+
+                  return string.format(
+                    [[
+                    You are a senior software engineer performing a code review. Analyze the following code changes.
+                     Identify any potential bugs, performance issues, security vulnerabilities, or areas that could be refactored for better readability or maintainability.
+                     Explain your reasoning clearly and provide specific suggestions for improvement.
+                     Consider edge cases, error handling, and adherence to best practices and coding standards.
+                     Here are the code changes:
+                     ```
+                     %s
+                     ```
+                     ]],
+                    vim.fn.system("git diff --merge-base " .. target_branch)
+                  )
+                end,
+              },
+            },
+          },
         },
         extensions = {
           mcphub = {
