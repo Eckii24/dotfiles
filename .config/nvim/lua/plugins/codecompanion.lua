@@ -160,14 +160,14 @@ WorkItemID: ]],
                   return string.format(
                     [[
                     You are a senior software engineer performing a code review. Analyze the following code changes.
-                     Identify any potential bugs, performance issues, security vulnerabilities, or areas that could be refactored for better readability or maintainability.
-                     Explain your reasoning clearly and provide specific suggestions for improvement.
-                     Consider edge cases, error handling, and adherence to best practices and coding standards.
-                     Here are the code changes:
-                     ```
-                     %s
-                     ```
-                     ]],
+                    Identify any potential bugs, performance issues, security vulnerabilities, or areas that could be refactored for better readability or maintainability.
+                    Explain your reasoning clearly and provide specific suggestions for improvement.
+                    Consider edge cases, error handling, and adherence to best practices and coding standards.
+                    Here are the code changes:
+                    ```
+                    %s
+                    ```
+                    ]],
                     vim.fn.system("git diff --merge-base " .. target_branch)
                   )
                 end,
@@ -195,6 +195,14 @@ WorkItemID: ]],
             },
           },
           spinner = {},
+          rules = {
+            opts = {
+              rules_filenames = {
+                ".github/copilot-instructions.md",
+              },
+              enabled = true,
+            },
+          },
         },
         display = {
           chat = {
