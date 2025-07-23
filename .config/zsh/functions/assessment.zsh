@@ -1,6 +1,6 @@
 function assessment() {
   local repo_url
-  local model="azure:o4-mini"
+  local model="copilot:claude-sonnet-4"
   local output
   local branch
   local ignore
