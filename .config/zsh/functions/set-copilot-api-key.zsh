@@ -122,14 +122,11 @@ EOF
             _error "Please ensure GitHub Copilot is properly configured"
             return 1
         fi
-        
+
         local oauth_token
-        if command -v bat >/dev/null 2>&1; then
-            oauth_token=$(bat "$APPS_JSON_PATH" 2>/dev/null | jq -r 'to_entries | .[] | select(.key | startswith("github.com:")) | .value.oauth_token' 2>/dev/null)
-        else
-            oauth_token=$(cat "$APPS_JSON_PATH" | jq -r 'to_entries | .[] | select(.key | startswith("github.com:")) | .value.oauth_token' 2>/dev/null)
-        fi
-        
+        # Always use cat, and only take the first oauth_token found
+        oauth_token=$(cat "$APPS_JSON_PATH" | jq -r 'to_entries | .[] | select(.key | startswith("github.com:")) | .value.oauth_token' 2>/dev/null | head -n 1)
+
         if [[ -z "$oauth_token" || "$oauth_token" == "null" ]]; then
             _error "Failed to extract OAuth token from $APPS_JSON_PATH"
             _error "Please check your GitHub Copilot configuration"
@@ -150,7 +147,7 @@ EOF
             return 1
         fi
         
-        _log "OAuth token obtained, requesting new API key"
+        _log "OAuth token obtained ($oauth_token), requesting new API key"
         
         curl_response=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer $oauth_token" \
