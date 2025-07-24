@@ -65,6 +65,19 @@ return {
           style = "float",
         },
       },
+      picker = {
+        sources = {
+          explorer = {
+            win = {
+              list = {
+                keys = {
+                  ["O"] = { { "pick_win", "jump" }, mode = { "n", "i" } },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
   {
