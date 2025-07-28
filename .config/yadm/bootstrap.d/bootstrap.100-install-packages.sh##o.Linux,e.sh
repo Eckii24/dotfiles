@@ -102,6 +102,23 @@ install_github_packages() {
         curl -LsSf https://astral.sh/uv/install.sh | sh
     fi
     
+    # Install Bob (Neovim version manager)
+    if ! command -v bob &>/dev/null; then
+        echo "Installing Bob (Neovim version manager)..."
+        curl -sSf https://raw.githubusercontent.com/MordechaiHadad/bob/master/install | bash -s -- --to "$bin_dir"
+    fi
+    
+    # Install aichat
+    if ! command -v aichat &>/dev/null; then
+        echo "Installing aichat..."
+        local aichat_version=$(curl -s https://api.github.com/repos/sigoden/aichat/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        curl -L "https://github.com/sigoden/aichat/releases/download/${aichat_version}/aichat-${aichat_version}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/aichat.tar.gz
+        tar -xzf /tmp/aichat.tar.gz -C /tmp/
+        mv "/tmp/aichat-${aichat_version}-x86_64-unknown-linux-musl/aichat" "$bin_dir/"
+        chmod +x "$bin_dir/aichat"
+        rm -rf /tmp/aichat.tar.gz "/tmp/aichat-${aichat_version}-x86_64-unknown-linux-musl"
+    fi
+    
     # Install yadm
     if ! command -v yadm &>/dev/null; then
         echo "Installing yadm..."
