@@ -130,7 +130,7 @@ install_github_packages() {
 # Function to install Python packages
 install_python_packages() {
     echo "Installing Python packages..."
-    pip3 install --user pre-commit
+    uv tool install pre-commit
 }
 
 # Function to install Node packages
