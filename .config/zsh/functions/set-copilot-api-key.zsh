@@ -67,7 +67,11 @@ EOF
         
         if [[ ${#missing_deps[@]} -gt 0 ]]; then
             _error "Missing required dependencies: ${missing_deps[*]}"
-            _error "Please install: brew install ${missing_deps[*]}"
+            if [[ "$(uname)" == "Darwin" ]]; then
+                _error "Please install: brew install ${missing_deps[*]}"
+            else
+                _error "Please install: sudo apt-get install ${missing_deps[*]}"
+            fi
             return 1
         fi
         

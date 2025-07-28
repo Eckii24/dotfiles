@@ -1,0 +1,17 @@
+# Base packages available via apt
+bat
+fd-find
+fzf
+git
+jq
+nodejs
+npm
+python3-pip
+ripgrep
+tldr
+trash-cli
+unzip
+zip
+curl
+wget
+build-essential

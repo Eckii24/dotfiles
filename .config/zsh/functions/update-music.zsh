@@ -84,6 +84,7 @@ function update-music() {
         echo "You can typically install it using your system's package manager:" >&2
         echo "  e.g., 'sudo apt install eyed3' (for Debian/Ubuntu based systems)" >&2
         echo "  e.g., 'brew install eyed3' (for macOS with Homebrew)" >&2
+        echo "  e.g., 'pip install eyed3' (for Linux)" >&2
         return 1
     fi
 
