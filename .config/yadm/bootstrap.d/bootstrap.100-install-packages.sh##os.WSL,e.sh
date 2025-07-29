@@ -109,7 +109,7 @@ install_github_packages() {
     unzip /tmp/bob.zip -d /tmp
     mv /tmp/bob-linux-x86_64/bob "$bin_dir/"
     chmod +x "$bin_dir/bob"
-    rm /tmp/bob.zip
+    rm -rf /tmp/bob.zip /tmp/bob-linux-x86_64/
   fi
 
   # Install aichat
