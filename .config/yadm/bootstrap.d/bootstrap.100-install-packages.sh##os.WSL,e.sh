@@ -106,7 +106,7 @@ install_github_packages() {
     echo "Installing Bob (Neovim version manager)..."
     local bob_version=$(curl -s https://api.github.com/repos/MordechaiHadad/bob/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
     curl -L "https://github.com/MordechaiHadad/bob/releases/download/${bob_version}/bob-linux-x86_64.zip" -o /tmp/bob.zip
-    unzip /tmp/bob.zip
+    unzip /tmp/bob.zip -d /tmp
     mv /tmp/bob-linux-x86_64/bob "$bin_dir/"
     chmod +x "$bin_dir/bob"
     rm /tmp/bob.zip
