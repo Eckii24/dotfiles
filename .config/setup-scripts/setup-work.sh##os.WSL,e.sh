@@ -31,4 +31,4 @@ echo "Install redis-cli"
 sudo apt-get install -y redis-tools
 
 echo "Calling setup dotnet..."
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh##o.Linux,e.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"
