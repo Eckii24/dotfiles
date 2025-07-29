@@ -6,27 +6,23 @@ echo "Installing packages for Linux using apt..."
 
 # Update package lists
 echo "Updating package lists..."
-if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
-    sudo apt-get update
-else
-    apt-get update
-fi
+sudo apt-get update
 
-export PATH="$PATH:$HOME/.local/bin"
+bin_dir="$HOME/.local/bin"
+mkdir -p "$bin_dir"
 
 # Function to install apt packages
 install_apt_packages() {
     local packages_file="../packages-linux.txt"
     if [[ -f "$packages_file" ]]; then
         echo "Installing packages from $packages_file..."
+
         # Read packages from file, filter out comments and empty lines
         local packages=$(grep -v '^#' "$packages_file" | grep -v '^$' | tr '\n' ' ')
+        sudo apt-get install -y $packages
 
-        if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
-            sudo apt-get install -y $packages
-        else
-            apt-get install -y $packages
-        fi
+	echo "Create symlink for bat"
+	ln -sf /usr/bin/batcat $bin_dir/bat
     else
         echo "No packages file found at $packages_file. Skipping apt package installation."
     fi
@@ -34,9 +30,6 @@ install_apt_packages() {
 
 # Function to install packages from GitHub releases
 install_github_packages() {
-    local bin_dir="$HOME/.local/bin"
-    mkdir -p "$bin_dir"
-    
     # Install eza
     if ! command -v eza &>/dev/null; then
         echo "Installing eza..."
@@ -107,7 +100,12 @@ install_github_packages() {
     # Install Bob (Neovim version manager)
     if ! command -v bob &>/dev/null; then
         echo "Installing Bob (Neovim version manager)..."
-        curl -sSf https://raw.githubusercontent.com/MordechaiHadad/bob/master/install | bash -s -- --to "$bin_dir"
+        local bob_version=$(curl -s https://api.github.com/repos/MordechaiHadad/bob/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        curl -L "https://github.com/MordechaiHadad/bob/releases/download/${bob_version}/bob-linux-x86_64.zip" -o /tmp/bob.zip
+        unzip /tmp/bob.zip
+	mv /tmp/bob-linux-x86_64/bob "$bin_dir/"
+	chmod +x "$bin_dir/bob"
+	rm /tmp/bob.zip
     fi
     
     # Install aichat
@@ -116,17 +114,9 @@ install_github_packages() {
         local aichat_version=$(curl -s https://api.github.com/repos/sigoden/aichat/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
         curl -L "https://github.com/sigoden/aichat/releases/download/${aichat_version}/aichat-${aichat_version}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/aichat.tar.gz
         tar -xzf /tmp/aichat.tar.gz -C /tmp/
-        
-        # Find the extracted directory and aichat binary
-        local aichat_dir=$(find /tmp -name "aichat-*" -type d | head -1)
-        if [[ -n "$aichat_dir" && -f "$aichat_dir/aichat" ]]; then
-            mv "$aichat_dir/aichat" "$bin_dir/"
-            chmod +x "$bin_dir/aichat"
-            rm -rf /tmp/aichat.tar.gz "$aichat_dir"
-        else
-            echo "Error: Could not find aichat binary in extracted archive"
-            rm -rf /tmp/aichat.tar.gz /tmp/aichat-*
-        fi
+	mv /tmp/aichat "$bin_dir/"
+	chmod +x "$bin_dir/aichat"
+	rm /tmp/aichat.tar.gz
     fi
     
     # Install yadm
