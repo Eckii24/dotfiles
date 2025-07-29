@@ -140,7 +140,7 @@ install_python_packages() {
 # Function to install Node packages
 install_node_packages() {
   echo "Installing Node packages..."
-  sudo npm install -g repomix
+  sudo -E npm install -g repomix
 }
 
 # Function to install ZSH plugins
