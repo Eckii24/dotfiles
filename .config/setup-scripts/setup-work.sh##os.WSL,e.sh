@@ -30,5 +30,8 @@ sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
 echo "Install redis-cli"
 sudo apt-get install -y redis-tools
 
+echo "Install mockoon-cli"
+sudo -E npm install -g @mockoon-cli
+
 echo "Calling setup dotnet..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"
