@@ -12,14 +12,16 @@ else
     apt-get update
 fi
 
+export PATH="$PATH:$HOME/.local/bin"
+
 # Function to install apt packages
 install_apt_packages() {
-    local packages_file="$HOME/.config/yadm/packages-linux.txt"
+    local packages_file="../packages-linux.txt"
     if [[ -f "$packages_file" ]]; then
         echo "Installing packages from $packages_file..."
         # Read packages from file, filter out comments and empty lines
         local packages=$(grep -v '^#' "$packages_file" | grep -v '^$' | tr '\n' ' ')
-        
+
         if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
             sudo apt-get install -y $packages
         else
