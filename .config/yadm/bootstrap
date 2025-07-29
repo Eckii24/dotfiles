@@ -20,6 +20,8 @@ add_brew_to_path() {
   fi
 }
 
+export PATH="$PATH:$HOME/.local/bin"
+
 # ---- This part is mainly copied from the YADM docs
 
 # Directory to look for bootstrap executables in

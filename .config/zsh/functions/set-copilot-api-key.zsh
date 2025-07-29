@@ -67,7 +67,6 @@ EOF
         
         if [[ ${#missing_deps[@]} -gt 0 ]]; then
             _error "Missing required dependencies: ${missing_deps[*]}"
-            _error "Please install: brew install ${missing_deps[*]}"
             return 1
         fi
         

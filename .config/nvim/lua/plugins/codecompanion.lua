@@ -195,14 +195,6 @@ WorkItemID: ]],
             },
           },
           spinner = {},
-          rules = {
-            opts = {
-              rules_filenames = {
-                ".github/copilot-instructions.md",
-              },
-              enabled = true,
-            },
-          },
         },
         display = {
           chat = {

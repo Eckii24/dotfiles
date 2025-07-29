@@ -5,13 +5,13 @@ echo "Starting setup for work environment..."
 # Function to add Homebrew to PATH
 if ! command -v brew &>/dev/null; then
   echo "Homebrew not found. Adding to PATH..."
-  if [[  -x "/opt/homebrew/bin/brew"  ]]; then
+  if [[ -x "/opt/homebrew/bin/brew" ]]; then
     # Apple Silicon (ARM)
     eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [[  -x "/usr/local/bin/brew"  ]]; then
+  elif [[ -x "/usr/local/bin/brew" ]]; then
     # Intel Mac
     eval "$(/usr/local/bin/brew shellenv)"
-  elif [[  -x "/home/linuxbrew/.linuxbrew/bin/brew"  ]]; then
+  elif [[ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]]; then
     # Linux
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
   else
@@ -43,6 +43,9 @@ brew install sqlcmd
 echo "Install redis-cli"
 brew tap ringohub/redis-cli
 brew install redis-cli
+
+echo "Install mockoon-cli"
+sudo npm install -g @mockoon-cli
 
 echo "Calling setup dotnet..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"
