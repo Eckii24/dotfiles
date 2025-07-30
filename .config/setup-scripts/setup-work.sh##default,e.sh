@@ -45,7 +45,7 @@ brew tap ringohub/redis-cli
 brew install redis-cli
 
 echo "Install mockoon-cli"
-sudo npm install -g @mockoon-cli
+sudo npm install -g @mockoon/cli
 
 echo "Calling setup dotnet..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-dotnet.sh)"

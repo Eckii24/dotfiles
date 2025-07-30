@@ -5,7 +5,7 @@ set -eu
 echo "Installing packages for Linux using apt..."
 
 echo "Adding further sources for apt"
-curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -sL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 
 # Update package lists
 echo "Updating package lists..."
@@ -16,7 +16,7 @@ mkdir -p "$bin_dir"
 
 # Function to install apt packages
 install_apt_packages() {
-  local packages_file="../packages-linux.txt"
+  local packages_file="$HOME/.config/yadm/packages-linux.txt"
   if [[ -f "$packages_file" ]]; then
     echo "Installing packages from $packages_file..."
 
@@ -133,14 +133,18 @@ install_github_packages() {
 
 # Function to install Python packages
 install_python_packages() {
-  echo "Installing Python packages..."
-  uv tool install pre-commit
+  if ! command -v pre-commit &>/dev/null; then
+    echo "Installing Python packages..."
+    uv tool install pre-commit
+  fi
 }
 
 # Function to install Node packages
 install_node_packages() {
-  echo "Installing Node packages..."
-  sudo -E npm install -g repomix
+  if ! command -v repomix &>/dev/null; then
+    echo "Installing Node packages..."
+    sudo -E npm install -g repomix
+  fi
 }
 
 # Function to install ZSH plugins
