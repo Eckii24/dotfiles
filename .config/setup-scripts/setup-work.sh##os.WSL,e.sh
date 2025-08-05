@@ -22,10 +22,15 @@ echo "Init SQL server in docker and install sqlcmd"
 sudo docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=Test_1234' -p 1433:1433 --name mssql_server -d mcr.microsoft.com/mssql/server:2022-latest
 
 # Install sqlcmd for Linux
-curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-curl -fsSL https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
-sudo apt-get update
-sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+if ! command -v sqlcmd &>/dev/null; then
+  echo "Installing sqlcmd..."
+  sqlcmd_version=$(curl -s https://github.com/microsoft/go-sqlcmd/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+  curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${sqlcmd_version}/sqlcmd-linux-amd64.tar.bz2" -o /tmp/sqlcmd.tar.bz2
+  tar -xjf /tmp/sqlcmd.tar.gz -C /tmp/
+  mv /tmp/sqlcmd "$HOME/.local/bin/"
+  chmod +x "$HOME/.local/bin/sqlcmd"
+  rm /tmp/sqlcmd.tar.bz2
+fi
 
 echo "Install redis-cli"
 sudo apt-get install -y redis-tools
