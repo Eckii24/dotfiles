@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": true,
+  "theme": "catppuccin",
+  "permission": {
+    "bash": "ask"
+  },
+  "formatter": {
+    "csharpier": {
+      "command": [
+        "csharpier"
+      ],
+      "extensions": [
+        ".cs",
+        ".csproj"
+      ]
+    }
+  },
+  "mcp": {
+    "mcphub": {
+      "type": "remote",
+      "url": "http://localhost:37373/mcp"
+    }
+  }
+}
