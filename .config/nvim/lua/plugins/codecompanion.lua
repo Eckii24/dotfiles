@@ -214,6 +214,9 @@ WorkItemID: ]],
           spinner = {},
         },
         display = {
+          diff = {
+            enabled = false, -- disable diff approvals.
+          },
           chat = {
             window = {
               layout = layout,
