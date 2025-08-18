@@ -122,6 +122,23 @@ return {
           },
         },
         prompt_library = {
+          ["Agent-Mode Current Buffer"] = {
+            strategy = "chat",
+            description = "Already give the current buffer and the agent tools to the chat window",
+            opts = {
+              is_slash_cmd = true,
+              auto_submit = false,
+              short_name = "agent_mode_current_buffer",
+            },
+            prompts = {
+              {
+                role = "user",
+                content = [[You are a @{full_stack_dev} with access to #{buffer}.
+
+]],
+              },
+            },
+          },
           ["Load Work Item"] = {
             strategy = "chat",
             description = "Load work item details using MCP",
@@ -209,6 +226,12 @@ WorkItemID: ]],
       { "<leader>a", "", desc = "ai" },
       { "<leader>aa", "<cmd>CodeCompanionActions<cr>", mode = { "n", "v" }, desc = "CodeCompanion actions" },
       { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", mode = { "n", "v" }, desc = "CodeCompanion chat" },
+      {
+        "<leader>aC",
+        "<cmd>CodeCompanion /agent_mode_current_buffer<cr>",
+        mode = { "n" },
+        desc = "CodeCompanion chat in agent mode for current buffer",
+      },
       { "<leader>ay", "<cmd>CodeCompanionChat Add<cr>", mode = "v", desc = "CodeCompanion add to chat" },
       { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "CodeCompanion inline" },
     },
