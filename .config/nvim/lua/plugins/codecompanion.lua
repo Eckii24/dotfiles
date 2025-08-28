@@ -22,6 +22,7 @@ return {
       "ravitemer/mcphub.nvim",
       "ravitemer/codecompanion-history.nvim",
       "franco-ruggeri/codecompanion-spinner.nvim",
+      "lazymaniac/codecompanion-reasoning.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -212,6 +213,7 @@ WorkItemID: ]],
             },
           },
           spinner = {},
+          reasoning = { callback = "codecompanion._extensions.reasoning", opts = { enabled = true } },
         },
         display = {
           diff = {
