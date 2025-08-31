@@ -181,8 +181,8 @@ EOF
     # Build Notion filter payload with multiple criteria
     _build_query_body() {
         # Filter by all required criteria:
-        # Typ select equals "Video"
-        # Plattform select equals "Youtube"  
+        # Typ multi_select contains "Video"
+        # Plattform multi_select contains "Youtube"  
         # Status select equals "Next"
         # Downloaded checkbox equals false
         jq -n '{
@@ -198,7 +198,7 @@ EOF
                     {
                         "property": "Plattform",
                         "multi_select": {
-                            "equals": "Youtube"
+                            "contains": "Youtube"
                         }
                     },
                     {
