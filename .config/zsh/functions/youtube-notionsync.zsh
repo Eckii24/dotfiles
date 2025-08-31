@@ -197,7 +197,7 @@ EOF
                     },
                     {
                         "property": "Plattform",
-                        "select": {
+                        "multi_select": {
                             "equals": "Youtube"
                         }
                     },
