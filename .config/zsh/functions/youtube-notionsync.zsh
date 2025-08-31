@@ -82,7 +82,7 @@ Options:
 
 Behavior:
   - Queries Notion DB for items where:
-      Type == "Video", Platform == "Youtube", Status == "Next", Downloaded == false
+      Typ == "Video", Plattform == "Youtube", Status == "Next", Downloaded == false
   - Downloads each Url via yt-dlp sequentially
   - On success, sets Downloaded=true for that Notion page
 
