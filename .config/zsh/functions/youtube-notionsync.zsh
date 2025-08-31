@@ -178,17 +178,42 @@ EOF
         return 0
     }
 
-    # Build Notion filter payload - simplified approach
+    # Build Notion filter payload with multiple criteria
     _build_query_body() {
-        # Start with a minimal filter to test basic connectivity
-        # Only filter by Downloaded=false initially
+        # Filter by all required criteria:
+        # Typ select equals "Video"
+        # Plattform select equals "Youtube"  
+        # Status select equals "Next"
+        # Downloaded checkbox equals false
         jq -n '{
             "page_size": 100,
             "filter": {
-                "property": "Downloaded",
-                "checkbox": {
-                    "equals": false
-                }
+                "and": [
+                    {
+                        "property": "Typ",
+                        "multi_select": {
+                            "contains": "Video"
+                        }
+                    },
+                    {
+                        "property": "Plattform",
+                        "select": {
+                            "equals": "Youtube"
+                        }
+                    },
+                    {
+                        "property": "Status",
+                        "select": {
+                            "equals": "Next"
+                        }
+                    },
+                    {
+                        "property": "Downloaded",
+                        "checkbox": {
+                            "equals": false
+                        }
+                    }
+                ]
             }
         }'
     }
@@ -199,7 +224,7 @@ EOF
         local body next_cursor has_more
         body="$(_build_query_body)"
         
-        _log "Querying database with filter: Downloaded=false"
+        _log "Querying database with filter: Typ=Video AND Plattform=Youtube AND Status=Next AND Downloaded=false"
         
         local H_AUTH=(
             -H "Authorization: Bearer ${NOTION_TOKEN_VAL}"
