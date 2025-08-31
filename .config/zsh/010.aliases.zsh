@@ -11,6 +11,9 @@ alias rm='trash-put'
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
 alias mcp='nvim +"MCPHub"'
 
+# Function aliases
+alias youtube-notionsync='download-notion-videos'
+
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
 

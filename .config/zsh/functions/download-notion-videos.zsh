@@ -157,7 +157,7 @@ EOF
     # Inspect database schema for debugging
     _inspect_schema() {
         local db_id="$1"
-        _info "Inspecting database schema..."
+        _log "Inspecting database schema..."
         
         local resp clean_resp
         resp="$(curl -sS \
@@ -172,8 +172,10 @@ EOF
             return 1
         fi
         
-        _info "Database properties:"
-        echo "$clean_resp" | jq -r '.properties | to_entries[] | "\(.key): \(.value.type)"'
+        _log "Database properties:"
+        if [[ "$verbose" == true ]]; then
+            echo "$clean_resp" | jq -r '.properties | to_entries[] | "\(.key): \(.value.type)"'
+        fi
         
         return 0
     }
@@ -218,7 +220,7 @@ EOF
         }'
     }
     
-    # Query Notion with pagination; output tab-separated: page_id<TAB>url
+    # Query Notion with pagination; output tab-separated: page_id<TAB>url<TAB>title
     _fetch_items() {
         local db_id="$1"
         local body next_cursor has_more
@@ -257,7 +259,7 @@ EOF
                 return 1
             fi
             
-            # Emit lines - use clean response and show meaningful info
+            # Emit lines - use clean response and include title information
             local titles_found
             titles_found="$(echo "$clean_resp" | jq -r '
                 .results[]
@@ -276,8 +278,9 @@ EOF
                 .results[]
                 | .id as $id
                 | .properties.Url.url as $url
+                | .properties.Name.title[0].plain_text // "Untitled" as $title
                 | select($url != null and $url != "")
-                | ($id + "\t" + $url)
+                | ($id + "\t" + $url + "\t" + $title)
             '
             
             has_more="$(echo "$clean_resp" | jq -r '.has_more // false')"
@@ -309,13 +312,15 @@ EOF
         return 0
     }
     
-    # Process one record "page_id<TAB>url"
+    # Process one record "page_id<TAB>url<TAB>title"
     _process_record() {
         local rec="$1"
-        local page_id url
-        IFS=$'\t' read -r page_id url <<< "$rec"
+        local index="$2"
+        local total="$3"
+        local page_id url title
+        IFS=$'\t' read -r page_id url title <<< "$rec"
         
-        echo "[START] $page_id <- $url"
+        _info "Processing video $index of $total: $title"
         # Download with yt-dlp
         yt-dlp \
             -o "%(title)s-%(id)s.%(ext)s" \
@@ -324,14 +329,14 @@ EOF
         local rc=$?
         
         if [[ $rc -eq 0 ]]; then
-            echo "[OK] Downloaded $url -> marking downloaded"
+            _log "Downloaded $url -> marking downloaded"
             if _mark_downloaded "$page_id"; then
-                echo "[OK] Updated Notion page $page_id"
+                _log "Updated Notion page $page_id"
             else
-                echo "[WARN] Downloaded, but failed to update Notion for $page_id" >&2
+                _error "Downloaded, but failed to update Notion for $page_id"
             fi
         else
-            echo "[FAIL] yt-dlp exit $rc for $url" >&2
+            _error "yt-dlp exit $rc for $url"
         fi
     }
     
@@ -341,7 +346,7 @@ EOF
             _inspect_schema "$RES_DB_ID" || return 1
         fi
         
-        _info "Querying Notion database: $RES_DB_ID"
+        _log "Querying Notion database: $RES_DB_ID"
         local items=()
         while IFS= read -r line; do
             items+=("$line")
@@ -352,11 +357,25 @@ EOF
             return 0
         fi
         
-        _info "Found ${#items[@]} items. Starting sequential downloads. Target: $TARGET_DIR"
+        # Show found videos in non-verbose mode
+        if [[ "$verbose" != true ]]; then
+            _info "Found videos:"
+            local count=1
+            for item in "${items[@]}"; do
+                local page_id url title
+                IFS=$'\t' read -r page_id url title <<< "$item"
+                _info "  $count. $title"
+                ((count++))
+            done
+        fi
+        
+        _log "Found ${#items[@]} items. Starting sequential downloads. Target: $TARGET_DIR"
         
         # Process each item sequentially
+        local index=1
         for item in "${items[@]}"; do
-            _process_record "$item"
+            _process_record "$item" "$index" "${#items[@]}"
+            ((index++))
         done
         
         _info "Downloads completed."
