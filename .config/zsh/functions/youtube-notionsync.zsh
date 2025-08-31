@@ -12,6 +12,7 @@ youtube-notionsync() {
     local RES_DB_ID="${NOTION_RESOURCES_DB:-}"
     local NOTION_TOKEN_VAL="${NOTION_TOKEN:-}"
     local verbose=false
+    local verbose_level=0
     
     # Parse command line arguments
     _parse_arguments() {
@@ -32,11 +33,18 @@ youtube-notionsync() {
                     ;;
                 --debug)
                     verbose=true
+                    verbose_level=1
                     export DEBUG_MODE=true
                     shift
                     ;;
                 -v|--verbose)
                     verbose=true
+                    verbose_level=1
+                    shift
+                    ;;
+                -vv|--very-verbose)
+                    verbose=true
+                    verbose_level=2
                     shift
                     ;;
                 -h|--help)
@@ -69,6 +77,7 @@ Options:
       --token TOKEN        Notion integration token (default: $NOTION_TOKEN)
       --debug              Enable debug mode with schema inspection
   -v, --verbose            Enable verbose output
+  -vv, --very-verbose      Enable very verbose output (includes raw API responses)
   -h, --help               Show this help
 
 Behavior:
@@ -84,6 +93,13 @@ EOF
     # Logging function
     _log() {
         if [[ "$verbose" == true ]]; then
+            echo "[$FUNCTION_NAME] $1" >&2
+        fi
+    }
+    
+    # Very verbose logging function (level 2)
+    _log_vv() {
+        if [[ "$verbose_level" -ge 2 ]]; then
             echo "[$FUNCTION_NAME] $1" >&2
         fi
     }
@@ -184,7 +200,7 @@ EOF
         local body next_cursor has_more
         body="$(_build_query_body)"
         
-        _log "Query body: $body"
+        _log "Querying database with filter: Downloaded=false"
         
         local H_AUTH=(
             -H "Authorization: Bearer ${NOTION_TOKEN_VAL}"
@@ -209,7 +225,7 @@ EOF
             local clean_resp
             clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
             
-            _log "Raw response: $clean_resp"
+            _log_vv "Raw API response: $clean_resp"
             
             if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
                 _error "Notion API error: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)"
@@ -217,7 +233,21 @@ EOF
                 return 1
             fi
             
-            # Emit lines - use clean response
+            # Emit lines - use clean response and show meaningful info
+            local titles_found
+            titles_found="$(echo "$clean_resp" | jq -r '
+                .results[]
+                | select(.properties.Url.url != null and .properties.Url.url != "")
+                | .properties.Name.title[0].plain_text // "Untitled"
+            ')"
+            
+            if [[ -n "$titles_found" ]]; then
+                _log "Found videos:"
+                while IFS= read -r title; do
+                    _log "  - $title"
+                done <<< "$titles_found"
+            fi
+            
             echo "$clean_resp" | jq -r '
                 .results[]
                 | .id as $id
@@ -258,6 +288,7 @@ EOF
     # Process one record "page_id<TAB>url"
     _process_record() {
         local rec="$1"
+        local page_id url
         IFS=$'\t' read -r page_id url <<< "$rec"
         
         echo "[START] $page_id <- $url"
@@ -299,13 +330,75 @@ EOF
         
         _info "Found ${#items[@]} items. Starting downloads in parallel (3). Target: $TARGET_DIR"
         
-        # Export functions and variables for subshells invoked by xargs
-        export -f _process_record _mark_downloaded
-        export TARGET_DIR NOTION_API NOTION_VERSION NOTION_TOKEN_VAL
+        # Create a temporary script for parallel processing
+        local temp_script="/tmp/youtube-notionsync-$$.sh"
+        cat > "$temp_script" << 'SCRIPT_EOF'
+#!/bin/bash
+# Temporary script for processing YouTube downloads
+
+NOTION_API="https://api.notion.com/v1"
+NOTION_VERSION="2022-06-28"
+
+# Mark page as downloaded
+mark_downloaded() {
+    local page_id="$1"
+    local payload='{"properties":{"Downloaded":{"checkbox":true}}}'
+    local resp clean_resp
+    resp="$(curl -sS \
+            -H "Authorization: Bearer ${NOTION_TOKEN_VAL}" \
+            -H "Notion-Version: ${NOTION_VERSION}" \
+            -H "Content-Type: application/json" \
+            -X PATCH "$NOTION_API/pages/$page_id" --data "$payload")"
+    
+    # Sanitize control characters
+    clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
+    
+    if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
+        echo "[ERROR] Update failed for $page_id: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Process one record
+process_record() {
+    local rec="$1"
+    local page_id url
+    IFS=$'\t' read -r page_id url <<< "$rec"
+    
+    echo "[START] $page_id <- $url"
+    # Download with yt-dlp
+    yt-dlp \
+        -o "%(title)s-%(id)s.%(ext)s" \
+        -P "$TARGET_DIR" \
+        "$url"
+    local rc=$?
+    
+    if [[ $rc -eq 0 ]]; then
+        echo "[OK] Downloaded $url -> marking downloaded"
+        if mark_downloaded "$page_id"; then
+            echo "[OK] Updated Notion page $page_id"
+        else
+            echo "[WARN] Downloaded, but failed to update Notion for $page_id" >&2
+        fi
+    else
+        echo "[FAIL] yt-dlp exit $rc for $url" >&2
+    fi
+}
+
+# Main entry point
+process_record "$1"
+SCRIPT_EOF
+        
+        chmod +x "$temp_script"
         
         # Feed each line as one argument to xargs; run 3 in parallel
         printf '%s\0' "${items[@]}" \
-            | xargs -0 -n1 -P 3 bash -c '_process_record "$0"'
+            | NOTION_TOKEN_VAL="$NOTION_TOKEN_VAL" TARGET_DIR="$TARGET_DIR" \
+              xargs -0 -n1 -P 3 "$temp_script"
+        
+        # Clean up temporary script
+        rm -f "$temp_script"
         
         _info "Downloads completed."
     }
