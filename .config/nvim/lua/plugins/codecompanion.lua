@@ -88,6 +88,7 @@ return {
               opts = {
                 auto_submit_errors = true,
                 auto_submit_success = true,
+                wait_timeout = 3600000, -- 1 hour
               },
             },
             roles = {
