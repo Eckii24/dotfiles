@@ -203,7 +203,7 @@ EOF
                     },
                     {
                         "property": "Status",
-                        "select": {
+                        "status": {
                             "equals": "Next"
                         }
                     },
