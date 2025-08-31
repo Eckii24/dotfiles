@@ -30,6 +30,11 @@ youtube-notionsync() {
                     NOTION_TOKEN_VAL="$2"
                     shift 2
                     ;;
+                --debug)
+                    verbose=true
+                    export DEBUG_MODE=true
+                    shift
+                    ;;
                 -v|--verbose)
                     verbose=true
                     shift
@@ -62,6 +67,7 @@ Options:
   -t, --target DIR         Target directory for downloads (default: $VIDEO_FOLDER)
   -r, --resources ID       Notion database ID (default: $NOTION_RESOURCES_DB)
       --token TOKEN        Notion integration token (default: $NOTION_TOKEN)
+      --debug              Enable debug mode with schema inspection
   -v, --verbose            Enable verbose output
   -h, --help               Show this help
 
@@ -133,17 +139,41 @@ EOF
         return 0
     }
     
-    # Build Notion filter payload
+    # Inspect database schema for debugging
+    _inspect_schema() {
+        local db_id="$1"
+        _info "Inspecting database schema..."
+        
+        local resp clean_resp
+        resp="$(curl -sS \
+            -H "Authorization: Bearer ${NOTION_TOKEN_VAL}" \
+            -H "Notion-Version: ${NOTION_VERSION}" \
+            "$NOTION_API/databases/$db_id")"
+        
+        clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
+        
+        if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
+            _error "Failed to get database schema: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)"
+            return 1
+        fi
+        
+        _info "Database properties:"
+        echo "$clean_resp" | jq -r '.properties | to_entries[] | "\(.key): \(.value.type)"'
+        
+        return 0
+    }
+
+    # Build Notion filter payload - simplified approach
     _build_query_body() {
+        # Start with a minimal filter to test basic connectivity
+        # Only filter by Downloaded=false initially
         jq -n '{
             "page_size": 100,
             "filter": {
-                "and": [
-                    {"property":"Type","select":{"equals":"Video"}},
-                    {"property":"Platform","select":{"equals":"Youtube"}},
-                    {"property":"Status","select":{"equals":"Next"}},
-                    {"property":"Downloaded","checkbox":{"equals":false}}
-                ]
+                "property": "Downloaded",
+                "checkbox": {
+                    "equals": false
+                }
             }
         }'
     }
@@ -153,6 +183,8 @@ EOF
         local db_id="$1"
         local body next_cursor has_more
         body="$(_build_query_body)"
+        
+        _log "Query body: $body"
         
         local H_AUTH=(
             -H "Authorization: Bearer ${NOTION_TOKEN_VAL}"
@@ -177,8 +209,11 @@ EOF
             local clean_resp
             clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
             
+            _log "Raw response: $clean_resp"
+            
             if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
                 _error "Notion API error: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)"
+                _error "Request body was: $body"
                 return 1
             fi
             
@@ -247,6 +282,10 @@ EOF
     
     # Main execution logic
     _main() {
+        if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+            _inspect_schema "$RES_DB_ID" || return 1
+        fi
+        
         _info "Querying Notion database: $RES_DB_ID"
         local items=()
         while IFS= read -r line; do
