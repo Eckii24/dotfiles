@@ -83,10 +83,10 @@ Options:
 Behavior:
   - Queries Notion DB for items where:
       Type == "Video", Platform == "Youtube", Status == "Next", Downloaded == false
-  - Downloads each Url via yt-dlp (3 parallel jobs)
+  - Downloads each Url via yt-dlp sequentially
   - On success, sets Downloaded=true for that Notion page
 
-Dependencies: curl, jq, yt-dlp, xargs
+Dependencies: curl, jq, yt-dlp
 EOF
     }
     
@@ -121,7 +121,6 @@ EOF
         command -v curl >/dev/null 2>&1 || missing_deps+=("curl")
         command -v jq >/dev/null 2>&1 || missing_deps+=("jq")
         command -v yt-dlp >/dev/null 2>&1 || missing_deps+=("yt-dlp")
-        command -v xargs >/dev/null 2>&1 || missing_deps+=("xargs")
         
         if [[ ${#missing_deps[@]} -gt 0 ]]; then
             _error "Missing required dependencies: ${missing_deps[*]}"
@@ -328,77 +327,12 @@ EOF
             return 0
         fi
         
-        _info "Found ${#items[@]} items. Starting downloads in parallel (3). Target: $TARGET_DIR"
+        _info "Found ${#items[@]} items. Starting sequential downloads. Target: $TARGET_DIR"
         
-        # Create a temporary script for parallel processing
-        local temp_script="/tmp/youtube-notionsync-$$.sh"
-        cat > "$temp_script" << 'SCRIPT_EOF'
-#!/bin/bash
-# Temporary script for processing YouTube downloads
-
-NOTION_API="https://api.notion.com/v1"
-NOTION_VERSION="2022-06-28"
-
-# Mark page as downloaded
-mark_downloaded() {
-    local page_id="$1"
-    local payload='{"properties":{"Downloaded":{"checkbox":true}}}'
-    local resp clean_resp
-    resp="$(curl -sS \
-            -H "Authorization: Bearer ${NOTION_TOKEN_VAL}" \
-            -H "Notion-Version: ${NOTION_VERSION}" \
-            -H "Content-Type: application/json" \
-            -X PATCH "$NOTION_API/pages/$page_id" --data "$payload")"
-    
-    # Sanitize control characters
-    clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
-    
-    if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
-        echo "[ERROR] Update failed for $page_id: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)" >&2
-        return 1
-    fi
-    return 0
-}
-
-# Process one record
-process_record() {
-    local rec="$1"
-    local page_id url
-    IFS=$'\t' read -r page_id url <<< "$rec"
-    
-    echo "[START] $page_id <- $url"
-    # Download with yt-dlp
-    yt-dlp \
-        -o "%(title)s-%(id)s.%(ext)s" \
-        -P "$TARGET_DIR" \
-        "$url"
-    local rc=$?
-    
-    if [[ $rc -eq 0 ]]; then
-        echo "[OK] Downloaded $url -> marking downloaded"
-        if mark_downloaded "$page_id"; then
-            echo "[OK] Updated Notion page $page_id"
-        else
-            echo "[WARN] Downloaded, but failed to update Notion for $page_id" >&2
-        fi
-    else
-        echo "[FAIL] yt-dlp exit $rc for $url" >&2
-    fi
-}
-
-# Main entry point
-process_record "$1"
-SCRIPT_EOF
-        
-        chmod +x "$temp_script"
-        
-        # Feed each line as one argument to xargs; run 3 in parallel
-        printf '%s\0' "${items[@]}" \
-            | NOTION_TOKEN_VAL="$NOTION_TOKEN_VAL" TARGET_DIR="$TARGET_DIR" \
-              xargs -0 -n1 -P 3 "$temp_script"
-        
-        # Clean up temporary script
-        rm -f "$temp_script"
+        # Process each item sequentially
+        for item in "${items[@]}"; do
+            _process_record "$item"
+        done
         
         _info "Downloads completed."
     }
