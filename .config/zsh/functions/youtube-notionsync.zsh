@@ -173,14 +173,17 @@ EOF
                       --data @-)"
             fi
             
-            # Check for API error
-            if [[ "$(echo "$resp" | jq -r '.object')" == "error" ]]; then
-                _error "Notion API error: $(echo "$resp" | jq -r '.code,.message' | paste -sd' - ' -)"
+            # Check for API error - first sanitize control characters
+            local clean_resp
+            clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
+            
+            if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
+                _error "Notion API error: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)"
                 return 1
             fi
             
-            # Emit lines
-            echo "$resp" | jq -r '
+            # Emit lines - use clean response
+            echo "$clean_resp" | jq -r '
                 .results[]
                 | .id as $id
                 | .properties.Url.url as $url
@@ -188,11 +191,11 @@ EOF
                 | ($id + "\t" + $url)
             '
             
-            has_more="$(echo "$resp" | jq -r '.has_more')"
+            has_more="$(echo "$clean_resp" | jq -r '.has_more // false')"
             if [[ "$has_more" != "true" ]]; then
                 break
             fi
-            next_cursor="$(echo "$resp" | jq -r '.next_cursor')"
+            next_cursor="$(echo "$clean_resp" | jq -r '.next_cursor // empty')"
         done
     }
     
@@ -200,15 +203,18 @@ EOF
     _mark_downloaded() {
         local page_id="$1"
         local payload='{"properties":{"Downloaded":{"checkbox":true}}}'
-        local resp
+        local resp clean_resp
         resp="$(curl -sS \
                 -H "Authorization: Bearer ${NOTION_TOKEN_VAL}" \
                 -H "Notion-Version: ${NOTION_VERSION}" \
                 -H "Content-Type: application/json" \
                 -X PATCH "$NOTION_API/pages/$page_id" --data "$payload")"
         
-        if [[ "$(echo "$resp" | jq -r '.object')" == "error" ]]; then
-            _error "Update failed for $page_id: $(echo "$resp" | jq -r '.code,.message' | paste -sd' - ' -)"
+        # Sanitize control characters
+        clean_resp="$(echo "$resp" | tr -d '\000-\037\177')"
+        
+        if [[ "$(echo "$clean_resp" | jq -r '.object // empty')" == "error" ]]; then
+            _error "Update failed for $page_id: $(echo "$clean_resp" | jq -r '.code,.message // "Unknown error"' | paste -sd' - ' -)"
             return 1
         fi
         return 0
@@ -242,8 +248,10 @@ EOF
     # Main execution logic
     _main() {
         _info "Querying Notion database: $RES_DB_ID"
-        local items
-        mapfile -t items < <(_fetch_items "$RES_DB_ID") || return 1
+        local items=()
+        while IFS= read -r line; do
+            items+=("$line")
+        done < <(_fetch_items "$RES_DB_ID") || return 1
         
         if [[ ${#items[@]} -eq 0 ]]; then
             _info "No matching items."
