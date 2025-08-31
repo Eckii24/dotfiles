@@ -2,10 +2,10 @@
 # YouTube Notion Sync
 # Download YouTube videos from a Notion DB and mark them as Downloaded.
 
-youtube-notionsync() {
+download-notion-videos() {
     local -r NOTION_API="https://api.notion.com/v1"
     local -r NOTION_VERSION="${NOTION_VERSION:-2022-06-28}"
-    local -r FUNCTION_NAME="youtube-notionsync"
+    local -r FUNCTION_NAME="download-notion-videos"
     
     # Defaults from env
     local TARGET_DIR="${VIDEO_FOLDER:-}"
@@ -67,7 +67,7 @@ youtube-notionsync() {
     # Display help information
     _show_help() {
         cat << 'EOF'
-Usage: youtube-notionsync [options]
+Usage: download-notion-videos [options]
 
 Download YouTube videos from a Notion database and mark them as Downloaded.
 
