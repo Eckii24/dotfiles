@@ -1,0 +1,19 @@
+# CodeCompanion Rules
+
+## General Guidelines
+- Always provide clear, concise responses
+- Focus on practical solutions over theoretical explanations
+- Include relevant code examples when helpful
+- Consider edge cases and error handling
+
+## Code Style
+- Follow consistent formatting and naming conventions
+- Write self-documenting code with meaningful variable names
+- Keep functions small and focused on single responsibilities
+- Add comments for complex logic or business rules
+
+## Best Practices
+- Prioritize code readability and maintainability
+- Use appropriate design patterns when beneficial
+- Consider performance implications of solutions
+- Validate inputs and handle errors gracefully

@@ -363,6 +363,19 @@ The current projects structure looks like #{ls} and the open file is #{buffer}.
           },
           spinner = {},
           reasoning = { callback = "codecompanion._extensions.reasoning", opts = { enabled = true } },
+          rules_loader = {
+            enabled = true,
+            opts = {
+              -- any order; absolute or relative to project root
+              paths = {
+                ".rules",                         -- project rules file
+                ".codecompanion/rules",           -- folder, recursive
+                "docs/ai-rules.md",               -- documentation rules
+                "~/.config/codecompanion/global-rules.md", -- global user rules
+              },
+            },
+            callback = "codecompanion._extensions.rules_loader", -- this module
+          },
         },
         display = {
           diff = {
