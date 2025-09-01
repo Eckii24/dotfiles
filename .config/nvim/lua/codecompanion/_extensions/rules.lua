@@ -118,12 +118,22 @@ local function find_first_file(dir, names)
         if not name then break end
         
         if type == "file" then
-          local path = dir .. "/" .. name
-          local ext = vim.fn.fnamemodify(name, ":e")
-          if ext ~= "" then
-            local full_ext = "." .. ext
-            if vim.tbl_contains(M.config.rules_extensions, full_ext) then
-              return path
+          -- Skip files that were already checked by exact filename match
+          local skip = false
+          for _, exact_name in ipairs(names) do
+            if name == exact_name then
+              skip = true
+              break
+            end
+          end
+          
+          if not skip then
+            local ext = vim.fn.fnamemodify(name, ":e")
+            if ext ~= "" then
+              local full_ext = "." .. ext
+              if vim.tbl_contains(M.config.rules_extensions, full_ext) then
+                return dir .. "/" .. name
+              end
             end
           end
         end
