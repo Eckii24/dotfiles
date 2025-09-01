@@ -12,6 +12,7 @@
 
 ---@class CodeCompanionRulesConfig
 ---@field rules_filenames string[]
+---@field rules_extensions string[]
 ---@field debug boolean
 ---@field enabled boolean
 ---@field extract_file_paths_from_chat_message? fun(message:CodeCompanionChatMessage):string[]|nil
@@ -34,6 +35,16 @@ M.config = {
     "AGENTS.md",
     "CLAUDE.md",
     ".codecompanionrules",
+  },
+  rules_extensions = {
+    ".rules",
+    ".goosehints", 
+    ".cursorrules",
+    ".windsurfrules",
+    ".clinerules",
+    ".codecompanionrules",
+    ".ai-rules",
+    ".companion-rules",
   },
   debug = false,
   enabled = true,
@@ -87,14 +98,40 @@ end
 
 ------------------------------------------------------------------------
 -- Find the *first* existing file from a list of names in a directory
+-- Also searches for files with supported extensions
 ------------------------------------------------------------------------
 local function find_first_file(dir, names)
+  -- First check exact filename matches (existing behavior)
   for _, name in ipairs(names) do
     local path = dir .. "/" .. name
     if vim.fn.filereadable(path) == 1 then
       return path
     end
   end
+  
+  -- Then check for files with supported extensions (new feature)
+  if M.config.rules_extensions then
+    local handle = vim.loop.fs_scandir(dir)
+    if handle then
+      while true do
+        local name, type = vim.loop.fs_scandir_next(handle)
+        if not name then break end
+        
+        if type == "file" then
+          local path = dir .. "/" .. name
+          local ext = vim.fn.fnamemodify(name, ":e")
+          if ext ~= "" then
+            local full_ext = "." .. ext
+            if vim.tbl_contains(M.config.rules_extensions, full_ext) then
+              return path
+            end
+          end
+        end
+      end
+    end
+  end
+  
+  return nil
 end
 
 --──────────────────────────────────────────────────────────────────────────────
@@ -114,7 +151,22 @@ local function collect_paths(bufnr)
 
   local function is_rule_file(p)
     local name = vim.fn.fnamemodify(p, ":t")
-    return vim.tbl_contains(M.config.rules_filenames, name)
+    
+    -- Check exact filename match (existing behavior)
+    if vim.tbl_contains(M.config.rules_filenames, name) then
+      return true
+    end
+    
+    -- Check extension match (new feature)
+    local ext = vim.fn.fnamemodify(p, ":e")
+    if ext ~= "" then
+      local full_ext = "." .. ext
+      if vim.tbl_contains(M.config.rules_extensions, full_ext) then
+        return true
+      end
+    end
+    
+    return false
   end
 
   local function add(p)
