@@ -135,7 +135,7 @@ return {
             prompts = {
               {
                 role = "user",
-                content = [[You are a @{full_stack_dev} with access to #{buffer}.
+                content = [[You are a @{full_stack_dev} with access to #{buffer}. The current project structure is #{ls} and you can reference project rules via #{rules}.
 
 ]],
               },
@@ -336,7 +336,7 @@ You are NEVER allowed to stage and commit files automatically.
 
 ### Tools and Context
 You are should act as @{full_stack_dev}.
-The current projects structure looks like #{ls} and the open file is #{buffer}.
+The current projects structure looks like #{ls}, the open file is #{buffer}, and you have access to project rules via #{rules}.
                 ]],
               },
             },

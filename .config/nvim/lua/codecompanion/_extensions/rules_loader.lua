@@ -67,10 +67,7 @@ end
 
 local function fence_lang(path)
   local ext = (path:match("^.+(%.[^/\\%.]+)$") or ""):sub(2)
-  if ext == "" then return "" end
-  -- map a few common ones; fallback empty
-  local map = { lua = "lua", ts = "typescript", js = "javascript", json = "json", yml = "yaml", yaml = "yaml", md = "markdown", toml = "toml", rs = "rust", py = "python", go = "go", sh = "sh", bash = "bash", zsh = "bash", conf = "" }
-  return map[ext] or ""
+  return ext
 end
 
 ---@param opts table { paths = string[] }
