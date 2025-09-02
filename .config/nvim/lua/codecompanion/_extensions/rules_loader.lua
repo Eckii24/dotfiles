@@ -50,15 +50,6 @@ local function list_files(path)
   return {}
 end
 
-local function rel_to_root(root, p)
-  local rp = vim.fn.fnamemodify(p, ":p")
-  if rp:sub(1, #root) == root then
-    local rel = rp:sub(#root + 2)
-    if rel ~= "" then return rel end
-  end
-  return rp
-end
-
 local function read_file(p)
   local ok, lines = pcall(vim.fn.readfile, p)
   if not ok or not lines then return "" end
@@ -74,11 +65,10 @@ local function make_rules_callback(opts)
     for _, p in ipairs(cfg_paths) do
       local abs = normalize(p, root)
       for _, f in ipairs(list_files(abs)) do
-        local rel = rel_to_root(root, f)
         local filename = vim.fn.fnamemodify(f, ":t")
         local body = read_file(f)
         if body ~= "" then
-          table.insert(acc, ("### %s\n```%s\n%s\n```"):format(rel, filename, body))
+          table.insert(acc, ("### %s\n```\n%s\n```"):format(filename, body))
         end
       end
     end
