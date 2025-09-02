@@ -9,6 +9,8 @@ clients:
   - name: gpt-4.1-mini
   - name: gpt-4o
   - name: gpt-4o-mini
+  - name: gpt-5
+  - name: gpt-5-mini
   - name: o1
   - name: o1-mini
   - name: o3
@@ -20,6 +22,8 @@ clients:
   models:
   - name: gpt-4o
   - name: gpt-4.1
+  - name: gpt-5
+  - name: gpt-5-mini
   - name: o3-mini
   - name: o4-mini
   - name: gemini-2.0-flash-001
