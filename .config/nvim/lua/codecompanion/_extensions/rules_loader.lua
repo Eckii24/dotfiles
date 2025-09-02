@@ -65,11 +65,6 @@ local function read_file(p)
   return table.concat(lines, "\n")
 end
 
-local function fence_lang(path)
-  local ext = (path:match("^.+(%.[^/\\%.]+)$") or ""):sub(2)
-  return ext
-end
-
 ---@param opts table { paths = string[] }
 local function make_rules_callback(opts)
   local cfg_paths = opts.paths or {}
@@ -80,10 +75,10 @@ local function make_rules_callback(opts)
       local abs = normalize(p, root)
       for _, f in ipairs(list_files(abs)) do
         local rel = rel_to_root(root, f)
-        local lang = fence_lang(f)
+        local filename = vim.fn.fnamemodify(f, ":t")
         local body = read_file(f)
         if body ~= "" then
-          table.insert(acc, ("### %s\n```%s\n%s\n```"):format(rel, lang, body))
+          table.insert(acc, ("### %s\n```%s\n%s\n```"):format(rel, filename, body))
         end
       end
     end
