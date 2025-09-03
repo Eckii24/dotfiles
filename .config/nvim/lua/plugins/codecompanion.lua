@@ -369,6 +369,7 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
               paths = {
                 "AGENTS.md",
                 ".github/copilot-instructions.md",
+                 ".github/instructions/",
                 ".kilocode/rules/",
                 ".~/kilocode/rules/",
               },
