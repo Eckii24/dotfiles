@@ -1,4 +1,4 @@
--- lua/codecompanion/_extensions/rules_loader/init.lua
+-- lua/codecompanion/_extensions/rules_loader.lua
 ---@class CodeCompanion.Extension
 local M = {}
 
@@ -81,7 +81,7 @@ local function make_rules_callback(opts)
 end
 
 --- Setup is called once during CodeCompanion setup
----@param opts table  Example: { paths = { ".codecompanion/rules", "/etc/cc/rules/global.md" } }
+---@param opts table  Example: { paths = { ".codecompanion/rules/", "docs/ai-rules.md", "~/.config/codecompanion/global-rules.md" } }
 function M.setup(opts)
   local cfg = require("codecompanion.config")
   cfg.strategies = cfg.strategies or {}
@@ -89,12 +89,10 @@ function M.setup(opts)
   cfg.strategies.chat.variables = cfg.strategies.chat.variables or {}
 
   cfg.strategies.chat.variables["rules"] = {
-    -- You can also point this to a Lua file path, but we keep it inline for simplicity
     callback = make_rules_callback(opts or {}),
     description = "Insert configured rule files and folders (recursive) into the chat",
     opts = {
       contains_code = true, -- improves rendering
-      -- has_params = false, default
     },
   }
 end
