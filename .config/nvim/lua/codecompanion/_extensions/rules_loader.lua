@@ -5,7 +5,7 @@ local M = {}
 local function is_abs(path)
   -- Unix absolut
   if path:sub(1, 1) == "/" then return true end
-  -- Home-Verweis
+  -- Home reference
   if path:sub(1, 1) == "~" then return true end
   -- Windows Drive Letter
   return path:match("^%a:[/\\]") ~= nil
