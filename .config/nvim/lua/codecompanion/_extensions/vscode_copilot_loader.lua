@@ -120,28 +120,38 @@ local function parse_prompt_content(content, filepath)
   local ext = vim.fn.fnamemodify(filepath, ":e"):lower()
   
   if ext == "md" then
-    return content
+    return content, nil
   elseif ext == "json" then
     -- Try to parse JSON and extract relevant prompt content
     local ok, parsed = pcall(vim.fn.json_decode, content)
     if ok and parsed then
       -- Handle different JSON structures for chat modes
       if parsed.prompt then
-        return parsed.prompt
+        return parsed.prompt, parsed
       elseif parsed.description then
-        return parsed.description
+        return parsed.description, parsed
       elseif parsed.instructions then
-        return parsed.instructions
+        return parsed.instructions, parsed
       end
     end
     -- If JSON parsing fails, return content as-is
-    return content
+    return content, nil
   else
-    return content
+    return content, nil
   end
 end
 
-local function generate_short_name(filepath)
+local function generate_short_name(filepath, parsed_json)
+  -- For JSON files, prefer the "name" field if available
+  if parsed_json and parsed_json.name then
+    local name = parsed_json.name:lower()
+    name = name:gsub("%-", "_")  -- replace dashes with underscores
+    name = name:gsub("%s+", "_")  -- replace spaces with underscores  
+    name = name:gsub("[^%w_]", "")  -- remove non-alphanumeric except underscores
+    return name
+  end
+  
+  -- Fall back to filename
   local basename = vim.fn.fnamemodify(filepath, ":t:r")  -- filename without extension
   -- Convert to snake_case and sanitize
   local short_name = basename:lower()
@@ -151,7 +161,13 @@ local function generate_short_name(filepath)
   return short_name
 end
 
-local function generate_display_name(filepath)
+local function generate_display_name(filepath, parsed_json)
+  -- For JSON files, prefer the "name" field if available
+  if parsed_json and parsed_json.name then
+    return parsed_json.name
+  end
+  
+  -- Fall back to filename
   local basename = vim.fn.fnamemodify(filepath, ":t:r")  -- filename without extension
   -- Convert to Title Case
   local display_name = basename:gsub("%-", " "):gsub("_", " ")
@@ -198,9 +214,9 @@ local function get_copilot_prompts(opts)
     for _, f in ipairs(list_files(abs)) do
       local body = read_file(f)
       if body ~= "" then
-        local content = parse_prompt_content(body, f)
-        local short_name = generate_short_name(f)
-        local display_name = generate_display_name(f)
+        local content, parsed_json = parse_prompt_content(body, f)
+        local short_name = generate_short_name(f, parsed_json)
+        local display_name = generate_display_name(f, parsed_json)
         
         prompts[display_name] = {
           strategy = "chat",
