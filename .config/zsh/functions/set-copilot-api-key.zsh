@@ -6,14 +6,23 @@ set-copilot-api-key() {
     local -r FUNCTION_NAME="set-copilot-api-key"
     
     local verbose=false
+    local very_verbose=false
+    local force_refresh=false
     local need_refresh=false
     
     # Parse command line arguments
     _parse_arguments() {
         for arg in "$@"; do
             case "$arg" in
+                -vv|--very-verbose)
+                    very_verbose=true
+                    verbose=true
+                    ;;
                 -v|--verbose)
                     verbose=true
+                    ;;
+                -f|--force)
+                    force_refresh=true
                     ;;
                 -h|--help)
                     _show_help
@@ -36,13 +45,16 @@ Usage: $FUNCTION_NAME [OPTIONS]
 Sets or refreshes the COPILOT_API_KEY environment variable using GitHub OAuth token.
 
 OPTIONS:
-    -v, --verbose    Enable verbose output
-    -h, --help       Show this help message
+    -v, --verbose        Enable verbose output
+    -vv, --very-verbose  Enable very verbose output (includes raw API response)
+    -f, --force          Force refresh even if token is valid
+    -h, --help           Show this help message
 
 DESCRIPTION:
-    This function checks if COPILOT_API_KEY exists and is valid. If not, it retrieves
+    This function checks if COPILOT_API_KEY exists and is valid. If not, or if --force is used, it retrieves
     a new token from GitHub's API using the OAuth token stored in GitHub Copilot's
     configuration file.
+    The raw API response is only logged if --very-verbose is set.
 EOF
     }
     
@@ -139,40 +151,44 @@ EOF
     # Refresh COPILOT_API_KEY from GitHub API
     _refresh_api_key() {
         local oauth_token curl_response api_key
-        
+
         _log "Refreshing COPILOT_API_KEY"
-        
+
         if ! oauth_token=$(_get_oauth_token); then
             return 1
         fi
-        
+
         _log "OAuth token obtained ($oauth_token), requesting new API key"
-        
+
         curl_response=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer $oauth_token" \
             -H "Accept: application/vnd.github+json" \
             "$GITHUB_API_URL" 2>/dev/null)
-        
+
         local http_code="${curl_response##*$'\n'}"
         local response_body="${curl_response%$'\n'*}"
-        
+
+        if [[ "$very_verbose" == true ]]; then
+            _log "Raw API response: $response_body"
+        fi
+
         if [[ "$http_code" != "200" ]]; then
             _error "GitHub API request failed with status $http_code"
             _error "Response: $response_body"
             return 1
         fi
-        
+
         api_key=$(echo "$response_body" | jq -r '.token // empty' 2>/dev/null)
-        
+
         if [[ -z "$api_key" || "$api_key" == "null" ]]; then
             _error "Failed to extract API key from response"
             _error "Response: $response_body"
             return 1
         fi
-        
+
         export COPILOT_API_KEY="$api_key"
         _log "COPILOT_API_KEY successfully refreshed"
-        
+
         return 0
     }
     
@@ -187,10 +203,12 @@ EOF
         return 1
     fi
     
-    if ! _is_token_valid; then
+    if [[ "$force_refresh" == true ]]; then
+        need_refresh=true
+    elif ! _is_token_valid; then
         need_refresh=true
     fi
-    
+
     if [[ "$need_refresh" == true ]]; then
         if ! _refresh_api_key; then
             _error "Failed to refresh API key"
