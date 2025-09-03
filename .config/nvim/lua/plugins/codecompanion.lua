@@ -371,7 +371,7 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
                 ".github/copilot-instructions.md",
                  ".github/instructions/",
                 ".kilocode/rules/",
-                ".~/kilocode/rules/",
+                "~/.kilocode/rules/",
               },
             },
             callback = "codecompanion._extensions.rules_loader",
