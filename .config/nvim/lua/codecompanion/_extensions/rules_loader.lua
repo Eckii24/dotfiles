@@ -65,10 +65,9 @@ local function make_rules_callback(opts)
     for _, p in ipairs(cfg_paths) do
       local abs = normalize(p, root)
       for _, f in ipairs(list_files(abs)) do
-        local filename = vim.fn.fnamemodify(f, ":t")
         local body = read_file(f)
         if body ~= "" then
-          table.insert(acc, ("### %s\n```\n%s\n```"):format(filename, body))
+          table.insert(acc, ("### %s\n```\n%s\n```"):format(f, body))
         end
       end
     end
