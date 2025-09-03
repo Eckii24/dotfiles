@@ -411,6 +411,7 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
               include_chat_modes = false, -- Don't include chat modes by default
               custom_prefix = "",        -- No custom prefix by default
               custom_paths = {},         -- No additional custom paths by default
+              debug = false,             -- Disable debug logging by default
             },
             callback = "codecompanion._extensions.vscode_copilot_loader",
           },

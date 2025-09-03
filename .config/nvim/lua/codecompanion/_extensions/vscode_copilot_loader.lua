@@ -105,7 +105,10 @@ end
 
 local function read_file(p)
   local ok, lines = pcall(vim.fn.readfile, p)
-  if not ok or not lines then return "" end
+  if not ok or not lines then 
+    -- Silently skip unreadable files
+    return "" 
+  end
   return table.concat(lines, "\n")
 end
 
@@ -133,6 +136,7 @@ local function parse_prompt_content(content, filepath, opts)
         return prefix .. parsed.instructions
       end
     end
+    -- If JSON parsing fails, return content as-is with prefix
     return prefix .. content
   else
     return prefix .. content
@@ -159,11 +163,13 @@ local function make_copilot_callback(opts)
   local project_enabled = opts.project_level ~= false  -- default true
   local user_enabled = opts.user_level ~= false        -- default true
   local custom_paths = opts.custom_paths or {}
+  local debug = opts.debug or false
   
   return function()
     local root = project_root()
     local acc = {}
     local all_paths = {}
+    local file_count = 0
     
     -- Add custom paths first
     for _, p in ipairs(custom_paths) do
@@ -193,9 +199,18 @@ local function make_copilot_callback(opts)
             local processed_content = parse_prompt_content(body, f, opts)
             local display_name = vim.fn.fnamemodify(f, ":t:r")  -- filename without extension
             table.insert(acc, ("### VSCode Copilot: %s\n```\n%s\n```"):format(display_name, processed_content))
+            file_count = file_count + 1
+            
+            if debug then
+              print(string.format("[VSCode Copilot] Loaded: %s (%d chars)", f, #processed_content))
+            end
           end
         end
       end
+    end
+    
+    if debug then
+      print(string.format("[VSCode Copilot] Loaded %d files from %d paths", file_count, #all_paths))
     end
     
     -- Returning a single string is enough; CodeCompanion will add it as a Context block
@@ -210,6 +225,7 @@ end
 ---   - include_chat_modes: boolean (default false) - Include chat mode files as prompts
 ---   - custom_prefix: string (default "") - Prefix to add to all prompts
 ---   - custom_paths: string[] (default {}) - Additional custom paths to scan
+---   - debug: boolean (default false) - Enable debug logging
 function M.setup(opts)
   opts = opts or {}
   
