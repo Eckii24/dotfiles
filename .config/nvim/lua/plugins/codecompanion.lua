@@ -143,6 +143,31 @@ return {
               },
             },
           },
+          ["VSCode Copilot Enhanced"] = {
+            strategy = "chat",
+            description = "Use VSCode Copilot prompts and modes with full context",
+            opts = {
+              is_slash_cmd = true,
+              auto_submit = false,
+              short_name = "vscode_copilot_enhanced",
+            },
+            prompts = {
+              {
+                role = "user",
+                content = [[You are a coding assistant with enhanced context. 
+
+#{vscode_copilot}
+
+Current buffer: #{buffer}
+Project structure: #{ls}
+Additional rules: #{rules}
+
+Please assist with the current task using the VSCode Copilot context above.
+
+]],
+              },
+            },
+          },
           ["Load Work Item"] = {
             strategy = "chat",
             description = "Load work item details using MCP",
@@ -377,6 +402,17 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
               },
             },
             callback = "codecompanion._extensions.rules_loader",
+          },
+          vscode_copilot_loader = {
+            enabled = true,
+            opts = {
+              project_level = true,      -- Enable scanning project-level files
+              user_level = true,         -- Enable scanning user-level files
+              include_chat_modes = false, -- Don't include chat modes by default
+              custom_prefix = "",        -- No custom prefix by default
+              custom_paths = {},         -- No additional custom paths by default
+            },
+            callback = "codecompanion._extensions.vscode_copilot_loader",
           },
         },
         display = {
