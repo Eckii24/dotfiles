@@ -3,7 +3,7 @@
 local M = {}
 
 local function is_abs(path)
-  -- Unix absolut
+  -- Unix absolute
   if path:sub(1, 1) == "/" then return true end
   -- Home reference
   if path:sub(1, 1) == "~" then return true end
