@@ -27,6 +27,18 @@ return {
     cmd = "CodeCompanionChat",
     opts = function()
       local layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical"
+      
+      -- Load VSCode Copilot prompts first (they need to be loaded before the main config)
+      local vscode_copilot_loader = require("codecompanion._extensions.vscode_copilot_loader")
+      vscode_copilot_loader.setup({
+        project_level = true,          -- Enable scanning project-level files
+        user_level = true,             -- Enable scanning user-level files
+        create_slash_commands = true,  -- Create slash commands for each prompt
+        custom_paths = {},             -- No additional custom paths by default
+        debug = false,                 -- Disable debug logging by default
+      })
+      local vscode_copilot_prompts = vscode_copilot_loader.get_prompts()
+      
       return {
         adapters = {
           open_router = function()
@@ -125,7 +137,7 @@ return {
             adapter = "copilot",
           },
         },
-        prompt_library = {
+        prompt_library = vim.tbl_deep_extend("force", {
           ["Agent-Mode Current Buffer"] = {
             strategy = "chat",
             description = "Already give the current buffer and the agent tools to the chat window",
@@ -138,31 +150,6 @@ return {
               {
                 role = "user",
                 content = [[You are a @{full_stack_dev} with access to #{buffer}. The current project structure is #{ls} and you can reference project rules via #{rules}.
-
-]],
-              },
-            },
-          },
-          ["VSCode Copilot Enhanced"] = {
-            strategy = "chat",
-            description = "Use VSCode Copilot prompts and modes with full context",
-            opts = {
-              is_slash_cmd = true,
-              auto_submit = false,
-              short_name = "vscode_copilot_enhanced",
-            },
-            prompts = {
-              {
-                role = "user",
-                content = [[You are a coding assistant with enhanced context. 
-
-#{vscode_copilot}
-
-Current buffer: #{buffer}
-Project structure: #{ls}
-Additional rules: #{rules}
-
-Please assist with the current task using the VSCode Copilot context above.
 
 ]],
               },
@@ -368,7 +355,7 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
               },
             },
           },
-        },
+        }, vscode_copilot_prompts),
         extensions = {
           mcphub = {
             callback = "mcphub.extensions.codecompanion",
@@ -402,18 +389,6 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
               },
             },
             callback = "codecompanion._extensions.rules_loader",
-          },
-          vscode_copilot_loader = {
-            enabled = true,
-            opts = {
-              project_level = true,      -- Enable scanning project-level files
-              user_level = true,         -- Enable scanning user-level files
-              include_chat_modes = false, -- Don't include chat modes by default
-              custom_prefix = "",        -- No custom prefix by default
-              custom_paths = {},         -- No additional custom paths by default
-              debug = false,             -- Disable debug logging by default
-            },
-            callback = "codecompanion._extensions.vscode_copilot_loader",
           },
         },
         display = {

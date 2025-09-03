@@ -66,13 +66,11 @@ local function get_user_copilot_paths()
 end
 
 local function get_project_copilot_paths()
+  -- Exclude GitHub Copilot instructions as they're handled by rules_loader
   return {
-    ".github/copilot-instructions.md",
-    ".github/copilot/",
     ".vscode/copilot-chat/",
     ".vscode/copilot/", 
     ".copilot/",
-    "copilot-instructions.md"
   }
 end
 
@@ -84,10 +82,14 @@ local function list_files(path)
     local files = {}
     for _, p in ipairs(all) do
       if vim.fn.isdirectory(p) == 0 then 
-        -- Filter for relevant file types (markdown, json)
+        -- Filter for relevant file types (markdown, json, txt)
         local ext = vim.fn.fnamemodify(p, ":e"):lower()
         if ext == "md" or ext == "json" or ext == "txt" then
-          table.insert(files, p) 
+          -- Skip GitHub Copilot instructions as they're handled by rules_loader
+          local basename = vim.fn.fnamemodify(p, ":t"):lower()
+          if not (basename:match("copilot%-instruction") or basename:match("instruction")) then
+            table.insert(files, p) 
+          end
         end
       end
     end
@@ -95,7 +97,9 @@ local function list_files(path)
   else
     if vim.fn.filereadable(path) == 1 then 
       local ext = vim.fn.fnamemodify(path, ":e"):lower()
-      if ext == "md" or ext == "json" or ext == "txt" then
+      local basename = vim.fn.fnamemodify(path, ":t"):lower()
+      if (ext == "md" or ext == "json" or ext == "txt") and 
+         not (basename:match("copilot%-instruction") or basename:match("instruction")) then
         return { path } 
       end
     end
@@ -112,138 +116,152 @@ local function read_file(p)
   return table.concat(lines, "\n")
 end
 
-local function parse_prompt_content(content, filepath, opts)
-  -- Apply custom prefix if configured
-  local prefix = opts.custom_prefix or ""
-  if prefix ~= "" and not prefix:match("%s$") then
-    prefix = prefix .. " "
-  end
-  
-  -- For markdown files, try to extract structured prompts
+local function parse_prompt_content(content, filepath)
   local ext = vim.fn.fnamemodify(filepath, ":e"):lower()
+  
   if ext == "md" then
-    return prefix .. content
+    return content
   elseif ext == "json" then
     -- Try to parse JSON and extract relevant prompt content
     local ok, parsed = pcall(vim.fn.json_decode, content)
     if ok and parsed then
       -- Handle different JSON structures for chat modes
       if parsed.prompt then
-        return prefix .. parsed.prompt
+        return parsed.prompt
       elseif parsed.description then
-        return prefix .. parsed.description
+        return parsed.description
       elseif parsed.instructions then
-        return prefix .. parsed.instructions
+        return parsed.instructions
       end
     end
-    -- If JSON parsing fails, return content as-is with prefix
-    return prefix .. content
+    -- If JSON parsing fails, return content as-is
+    return content
   else
-    return prefix .. content
+    return content
   end
 end
 
-local function should_include_file(filepath, opts)
-  local basename = vim.fn.fnamemodify(filepath, ":t"):lower()
-  local ext = vim.fn.fnamemodify(filepath, ":e"):lower()
-  
-  -- Check if we should include chat modes
-  if not opts.include_chat_modes then
-    -- Skip files that look like chat mode definitions
-    if basename:match("mode") or basename:match("chat") then
-      return false
-    end
-  end
-  
-  return ext == "md" or ext == "json" or ext == "txt"
+local function generate_short_name(filepath)
+  local basename = vim.fn.fnamemodify(filepath, ":t:r")  -- filename without extension
+  -- Convert to snake_case and sanitize
+  local short_name = basename:lower()
+  short_name = short_name:gsub("%-", "_")  -- replace dashes with underscores
+  short_name = short_name:gsub("%s+", "_")  -- replace spaces with underscores  
+  short_name = short_name:gsub("[^%w_]", "")  -- remove non-alphanumeric except underscores
+  return short_name
 end
 
+local function generate_display_name(filepath)
+  local basename = vim.fn.fnamemodify(filepath, ":t:r")  -- filename without extension
+  -- Convert to Title Case
+  local display_name = basename:gsub("%-", " "):gsub("_", " ")
+  display_name = display_name:gsub("(%w)([%w]*)", function(first, rest) 
+    return first:upper() .. rest:lower() 
+  end)
+  return display_name
+end
+
+--- Discover and return prompt definitions for VSCode Copilot files
 ---@param opts table Configuration options
-local function make_copilot_callback(opts)
+local function get_copilot_prompts(opts)
   local project_enabled = opts.project_level ~= false  -- default true
   local user_enabled = opts.user_level ~= false        -- default true
   local custom_paths = opts.custom_paths or {}
   local debug = opts.debug or false
   
-  return function()
-    local root = project_root()
-    local acc = {}
-    local all_paths = {}
-    local file_count = 0
-    
-    -- Add custom paths first
-    for _, p in ipairs(custom_paths) do
+  local root = project_root()
+  local prompts = {}
+  local all_paths = {}
+  local file_count = 0
+  
+  -- Add custom paths first
+  for _, p in ipairs(custom_paths) do
+    table.insert(all_paths, p)
+  end
+  
+  -- Add project-level paths if enabled
+  if project_enabled then
+    for _, p in ipairs(get_project_copilot_paths()) do
       table.insert(all_paths, p)
     end
-    
-    -- Add project-level paths if enabled
-    if project_enabled then
-      for _, p in ipairs(get_project_copilot_paths()) do
-        table.insert(all_paths, p)
-      end
+  end
+  
+  -- Add user-level paths if enabled  
+  if user_enabled then
+    for _, p in ipairs(get_user_copilot_paths()) do
+      table.insert(all_paths, p)
     end
-    
-    -- Add user-level paths if enabled  
-    if user_enabled then
-      for _, p in ipairs(get_user_copilot_paths()) do
-        table.insert(all_paths, p)
-      end
-    end
-    
-    for _, p in ipairs(all_paths) do
-      local abs = normalize(p, root)
-      for _, f in ipairs(list_files(abs)) do
-        if should_include_file(f, opts) then
-          local body = read_file(f)
-          if body ~= "" then
-            local processed_content = parse_prompt_content(body, f, opts)
-            local display_name = vim.fn.fnamemodify(f, ":t:r")  -- filename without extension
-            table.insert(acc, ("### VSCode Copilot: %s\n```\n%s\n```"):format(display_name, processed_content))
-            file_count = file_count + 1
-            
-            if debug then
-              print(string.format("[VSCode Copilot] Loaded: %s (%d chars)", f, #processed_content))
-            end
-          end
+  end
+  
+  for _, p in ipairs(all_paths) do
+    local abs = normalize(p, root)
+    for _, f in ipairs(list_files(abs)) do
+      local body = read_file(f)
+      if body ~= "" then
+        local content = parse_prompt_content(body, f)
+        local short_name = generate_short_name(f)
+        local display_name = generate_display_name(f)
+        
+        prompts[display_name] = {
+          strategy = "chat",
+          description = "VSCode Copilot: " .. display_name,
+          opts = {
+            is_slash_cmd = true,
+            auto_submit = false,
+            short_name = short_name,
+          },
+          prompts = {
+            {
+              role = "user",
+              content = content,
+            },
+          },
+        }
+        
+        file_count = file_count + 1
+        
+        if debug then
+          print(string.format("[VSCode Copilot] Created prompt /%s for: %s (%d chars)", 
+            short_name, f, #content))
         end
       end
     end
-    
-    if debug then
-      print(string.format("[VSCode Copilot] Loaded %d files from %d paths", file_count, #all_paths))
-    end
-    
-    -- Returning a single string is enough; CodeCompanion will add it as a Context block
-    return table.concat(acc, "\n\n")
   end
+  
+  if debug then
+    print(string.format("[VSCode Copilot] Created %d prompts from %d paths", file_count, #all_paths))
+  end
+  
+  return prompts
 end
 
 --- Setup is called once during CodeCompanion setup
 ---@param opts table Configuration options:
 ---   - project_level: boolean (default true) - Enable scanning project-level files
 ---   - user_level: boolean (default true) - Enable scanning user-level files  
----   - include_chat_modes: boolean (default false) - Include chat mode files as prompts
----   - custom_prefix: string (default "") - Prefix to add to all prompts
+---   - create_slash_commands: boolean (default true) - Create slash commands for each prompt
 ---   - custom_paths: string[] (default {}) - Additional custom paths to scan
 ---   - debug: boolean (default false) - Enable debug logging
 function M.setup(opts)
   opts = opts or {}
   
-  local cfg = require("codecompanion.config")
-  cfg.strategies = cfg.strategies or {}
-  cfg.strategies.chat = cfg.strategies.chat or {}
-  cfg.strategies.chat.variables = cfg.strategies.chat.variables or {}
-
-  cfg.strategies.chat.variables["vscode_copilot"] = {
-    callback = make_copilot_callback(opts),
-    description = "Insert VSCode GitHub Copilot prompts and chat modes into the chat",
-    opts = {
-      contains_code = true, -- improves rendering
-    },
-  }
+  -- Check if slash commands should be created
+  local create_slash_commands = opts.create_slash_commands ~= false  -- default true
   
-  -- Also create a shorter alias
-  cfg.strategies.chat.variables["copilot"] = cfg.strategies.chat.variables["vscode_copilot"]
+  if not create_slash_commands then
+    return  -- Exit early if slash commands are disabled
+  end
+  
+  -- Get the prompts from VSCode Copilot files
+  local copilot_prompts = get_copilot_prompts(opts)
+  
+  -- Store the prompts for later use by the main config
+  M.prompts = copilot_prompts
+end
+
+--- Get the discovered prompts (called by main config)
+function M.get_prompts()
+  return M.prompts or {}
 end
 
 M.exports = {}
