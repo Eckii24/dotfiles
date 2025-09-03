@@ -25,20 +25,24 @@ local function project_root()
 end
 
 local function normalize(path, root)
-  -- immer expandieren, damit ~ aufgelöst wird
+  -- always expand to resolve ~ paths
   path = vim.fn.expand(path)
 
   if is_abs(path) then
     return vim.fn.fnamemodify(path, ":p")
   end
 
-  return vim.fn.fnamemodify(root .. "/" .. path, ":p")
+  -- ensure proper path concatenation without double slashes
+  local clean_root = root:gsub("/$", "")
+  local clean_path = path:gsub("^/", "")
+  return vim.fn.fnamemodify(clean_root .. "/" .. clean_path, ":p")
 end
 
 local function list_files(path)
-  if vim.fn.isdirectory(path) == 1 then
+  -- only treat as directory if path explicitly ends with "/"
+  if path:sub(-1) == "/" and vim.fn.isdirectory(path) == 1 then
     -- recursive glob; returns list of paths; filter to files only
-    local all = vim.fn.glob(path .. "/**/*", true, true)
+    local all = vim.fn.glob(path .. "**/*", true, true)
     local files = {}
     for _, p in ipairs(all) do
       if vim.fn.isdirectory(p) == 0 then table.insert(files, p) end
