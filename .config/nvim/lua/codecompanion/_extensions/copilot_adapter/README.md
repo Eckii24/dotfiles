@@ -7,6 +7,7 @@ This extension imports GitHub Copilot prompt files and VS Code custom chat modes
 - **Auto-discovery**: Finds `.prompt.md` and `.chatmode.md` files in workspace and global locations
 - **YAML frontmatter parsing**: Supports standard Copilot metadata (`mode`, `description`, `model`, `tools`)
 - **Content prefix injection**: Adds configurable prefixes to prompts at runtime
+- **Header adjustment**: Automatically adjusts markdown headers to avoid conflicts with chat buffer
 - **Slash commands**: Registers prompts as `/command_name` slash commands
 - **Multi-platform support**: Handles Windows, macOS, and Linux global paths
 - **VS Code custom chat modes**: Supports `.chatmode.md` files for custom chat modes
@@ -23,6 +24,9 @@ extensions = {
       enable_prompts = true,        -- Import .prompt.md files
       enable_chatmodes = true,      -- Import .chatmode.md files
       content_prefix = "#buffer #rules", -- Text prepended to all prompts
+      content_adjustments = {
+        adjust_headers = true,      -- Adjust markdown headers to avoid chat conflicts
+      },
       paths = {
         workspace = true,           -- Include ./.github/prompts/
         global = true,             -- Include platform-specific global paths
@@ -89,6 +93,16 @@ The content prefix is injected into every prompt to provide context:
 
 - **String**: Static text prepended to prompts
 - **Per-file override**: Use `cc_prefix` in YAML frontmatter to override per file
+
+## Header Adjustment
+
+CodeCompanion uses markdown H2 headers (`##`) to separate user, system, and LLM messages in the chat buffer. To prevent prompt headers from breaking the chat display, the extension automatically adjusts all markdown headers in prompts by making them two levels deeper:
+
+- `# Header 1` becomes `### Header 1` (H1 → H3)
+- `## Header 2` becomes `#### Header 2` (H2 → H4)
+- `### Header 3` becomes `##### Header 3` (H3 → H5)
+
+This can be disabled by setting `content_adjustments.adjust_headers = false` in the configuration.
 
 ## Usage
 

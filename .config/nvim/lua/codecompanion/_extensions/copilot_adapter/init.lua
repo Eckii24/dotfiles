@@ -75,6 +75,62 @@ local function apply_content_prefix(content, prefix, ctx)
   return prefix_text .. "\n\n" .. content
 end
 
+---Adjust markdown headers to avoid conflicts with CodeCompanion's chat buffer format
+---CodeCompanion uses ## (H2) to separate user/system/LLM messages, so we need to
+---make all headers in prompts deeper to avoid breaking the chat display
+---@param content string
+---@return string
+local function adjust_markdown_headers(content)
+  if not content or content == "" then
+    return content
+  end
+  
+  -- Split content into lines for processing
+  local lines = vim.split(content, "\n", { plain = true })
+  local adjusted_lines = {}
+  
+  for _, line in ipairs(lines) do
+    -- Match markdown headers (# at start of line, followed by space)
+    local header_hashes, header_text = line:match("^(#+)%s+(.*)$")
+    if header_hashes and header_text then
+      -- Add two more # symbols to make headers deeper
+      -- H1 (#) -> H3 (###), H2 (##) -> H4 (####), etc.
+      local adjusted_line = "##" .. header_hashes .. " " .. header_text
+      table.insert(adjusted_lines, adjusted_line)
+    else
+      table.insert(adjusted_lines, line)
+    end
+  end
+  
+  return table.concat(adjusted_lines, "\n")
+end
+
+---Apply various content adjustments to prompt content
+---This function provides a centralized place for content transformations
+---that may be needed for CodeCompanion compatibility
+---@param content string
+---@param opts table|nil Optional configuration for adjustments
+---@return string
+local function adjust_prompt_content(content, opts)
+  if not content then
+    return ""
+  end
+  
+  opts = opts or {}
+  local adjusted_content = content
+  
+  -- Adjust markdown headers to avoid conflicts with chat buffer format
+  if opts.adjust_headers ~= false then
+    adjusted_content = adjust_markdown_headers(adjusted_content)
+  end
+  
+  -- Future content adjustments can be added here
+  -- e.g., if opts.adjust_tables then ... end
+  -- e.g., if opts.adjust_code_blocks then ... end
+  
+  return adjusted_content
+end
+
 ---@param opts table
 ---@return string[]
 local function discover_prompt_files(opts)
@@ -154,7 +210,8 @@ local function process_prompt_file(file_path, opts)
             filetype = vim.bo.filetype,
             cwd = vim.fn.getcwd(),
           }
-          return apply_content_prefix(body, content_prefix, ctx)
+          local prefixed_content = apply_content_prefix(body, content_prefix, ctx)
+          return adjust_prompt_content(prefixed_content, opts.content_adjustments)
         end,
       },
     },
@@ -234,6 +291,9 @@ function M.setup(opts)
     enable_prompts = true,
     enable_chatmodes = true,
     content_prefix = "",
+    content_adjustments = {
+      adjust_headers = true,
+    },
     paths = {
       workspace = true,
       global = true,
