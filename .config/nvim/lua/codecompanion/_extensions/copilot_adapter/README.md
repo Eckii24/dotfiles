@@ -1,0 +1,135 @@
+# CodeCompanion Copilot Adapter Extension
+
+This extension imports GitHub Copilot prompt files and custom chat modes into CodeCompanion, with configurable content prefix injection.
+
+## Features
+
+- **Auto-discovery**: Finds `.prompt.md` files in workspace and global locations
+- **YAML frontmatter parsing**: Supports standard Copilot metadata
+- **Content prefix injection**: Adds configurable prefixes to prompts at runtime
+- **Slash commands**: Registers prompts as `/command_name` slash commands
+- **Multi-platform support**: Handles Windows, macOS, and Linux global paths
+- **Modes support**: Can include agent/edit modes as prompts
+
+## Configuration
+
+Add to your CodeCompanion config:
+
+```lua
+extensions = {
+  copilot_adapter = {
+    enabled = true,
+    opts = {
+      enable_prompts = true,      -- Import regular prompts
+      enable_modes = true,        -- Import modes (agent, edit) as prompts
+      content_prefix = "#buffer #rules", -- Text prepended to all prompts
+      content_prefix_role = "user",      -- "system" or "user"
+      content_prefix_when = "invoke",    -- "invoke" or "register"
+      paths = {
+        workspace = true,         -- Include ./.github/prompts/
+        global = true,           -- Include platform-specific global paths
+        extra = {               -- Additional custom paths
+          "~/my-prompts/",
+        },
+      },
+      slash_namespace = "cp",    -- Prefix commands: /cp_code_review
+    },
+    callback = "codecompanion._extensions.copilot_adapter",
+  },
+}
+```
+
+## File Discovery
+
+### Workspace Paths
+- `./.github/prompts/*.prompt.md`
+
+### Global Paths
+
+**Windows:**
+- `%APPDATA%/GitHub Copilot/prompts/`
+- `%USERPROFILE%/.github/copilot/prompts/`
+- `%USERPROFILE%/Documents/GitHub Copilot/prompts/`
+
+**macOS:**
+- `~/Library/Application Support/GitHub Copilot/prompts/`
+- `~/.github/copilot/prompts/`
+- `~/.config/github-copilot/prompts/`
+
+**Linux:**
+- `$XDG_CONFIG_HOME/github-copilot/prompts/` (or `~/.config/github-copilot/prompts/`)
+- `~/.github/copilot/prompts/`
+- `~/.local/share/github-copilot/prompts/`
+
+## Prompt File Format
+
+```markdown
+---
+mode: ask                    # ask, edit, agent
+description: "Code review"   # Description for the prompt
+model: gpt-4o               # Preferred model
+tools: ["filesystem"]       # Available tools
+cc_prefix: "#buffer #rules" # Override content prefix
+cc_prefix_role: "user"      # Override prefix role
+cc_prefix_when: "invoke"    # Override prefix timing
+---
+
+# Your Prompt Title
+
+Your prompt content goes here...
+```
+
+## Content Prefix
+
+The content prefix is injected into every prompt to provide context:
+
+- **String**: Static text prepended to prompts
+- **Function**: `function(ctx) -> string` for dynamic prefixes
+- **Role**: "system" (preferred) or "user" 
+- **Timing**: 
+  - "invoke": Apply when prompt is used (dynamic)
+  - "register": Apply when prompt is loaded (static)
+
+### Context Object
+
+When using function prefixes, the context includes:
+
+```lua
+{
+  prompt_name = "code_review",
+  source_path = "/path/to/prompt.md",
+  frontmatter = { mode = "ask", ... },
+  bufnr = 42,                    -- Current buffer
+  filetype = "lua",              -- Current filetype
+  cwd = "/current/directory",    -- Working directory
+}
+```
+
+## Usage
+
+After loading, prompts become available as slash commands:
+
+- `/code_review` - Basic code review
+- `/debug` - Debug assistant  
+- `/refactor` - Code refactoring
+- `/test_generator` - Generate tests
+
+With namespace `cp`:
+- `/cp_code_review`
+- `/cp_debug`
+- etc.
+
+## API
+
+```lua
+local copilot_adapter = require("codecompanion._extensions.copilot_adapter")
+
+-- List loaded prompts
+local prompts = copilot_adapter.list_prompts()
+
+-- List loaded modes
+local modes = copilot_adapter.list_modes()
+
+-- Reload with new options
+copilot_adapter.reload({ enable_modes = false })
+```

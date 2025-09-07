@@ -376,6 +376,23 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
             },
             callback = "codecompanion._extensions.rules_loader",
           },
+          copilot_adapter = {
+            enabled = true,
+            opts = {
+              enable_prompts = true,
+              enable_modes = true, -- Enable modes to test agent-type prompts
+              content_prefix = "#buffer #rules",
+              content_prefix_role = "user",
+              content_prefix_when = "invoke",
+              paths = {
+                workspace = true,
+                global = true,
+                extra = {},
+              },
+              slash_namespace = "cp", -- set to "cp" for /cp_code_review style commands
+            },
+            callback = "codecompanion._extensions.copilot_adapter",
+          },
         },
         display = {
           diff = {
