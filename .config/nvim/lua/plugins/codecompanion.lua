@@ -231,7 +231,7 @@ WorkItemID: ]],
           copilot_adapter = {
             enabled = true,
             opts = {
-              content_prefix = "#buffer #rules",
+              content_prefix = "Current file: #{buffer}. Current structure #{ls}. Use #{rules}.Act as @{full_stack_dev}.",
             },
             callback = "codecompanion._extensions.copilot_adapter",
           },
