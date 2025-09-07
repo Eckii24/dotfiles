@@ -380,7 +380,7 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
             enabled = true,
             opts = {
               enable_prompts = true,
-              enable_modes = true, -- Enable modes to test VS Code custom chat modes
+              enable_chatmodes = true, -- Enable chatmodes to test VS Code custom chat modes
               content_prefix = "#buffer #rules",
               paths = {
                 workspace = true,

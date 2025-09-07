@@ -124,7 +124,7 @@ local function process_prompt_file(file_path, opts)
   -- Handle VS Code custom chat modes vs prompts
   -- VS Code uses file extensions: .chatmode.md for modes, .prompt.md for prompts
   local is_mode = is_chatmode_file(file_path)
-  if is_mode and not opts.enable_modes then
+  if is_mode and not opts.enable_chatmodes then
     return nil
   elseif not is_mode and not opts.enable_prompts then
     return nil
@@ -199,11 +199,14 @@ function M.list_prompts()
   return vim.deepcopy(loaded_prompts)
 end
 
----List all loaded modes (deprecated, kept for compatibility)
+---List all loaded chatmodes (deprecated, kept for compatibility)
 ---@return table  
-function M.list_modes()
+function M.list_chatmodes()
   return {}
 end
+
+-- Backward compatibility alias
+M.list_modes = M.list_chatmodes
 
 ---Reload all prompts
 ---@param opts table|nil
@@ -232,7 +235,7 @@ function M.setup(opts)
   -- Default configuration
   local defaults = {
     enable_prompts = true,
-    enable_modes = true,
+    enable_chatmodes = true,
     content_prefix = "",
     paths = {
       workspace = true,
@@ -252,7 +255,8 @@ end
 
 M.exports = {
   list_prompts = M.list_prompts,
-  list_modes = M.list_modes,
+  list_chatmodes = M.list_chatmodes,
+  list_modes = M.list_modes, -- Backward compatibility
   reload = M.reload,
 }
 

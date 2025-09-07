@@ -9,7 +9,7 @@ This extension imports GitHub Copilot prompt files and custom chat modes into Co
 - **Content prefix injection**: Adds configurable prefixes to prompts at runtime
 - **Slash commands**: Registers prompts as `/command_name` slash commands
 - **Multi-platform support**: Handles Windows, macOS, and Linux global paths
-- **Modes support**: Can include agent/edit modes as prompts
+- **Chatmodes support**: Can include agent/edit chatmodes as prompts
 
 ## Configuration
 
@@ -21,7 +21,7 @@ extensions = {
     enabled = true,
     opts = {
       enable_prompts = true,      -- Import regular prompts
-      enable_modes = true,        -- Import modes (agent, edit) as prompts
+      enable_chatmodes = true,        -- Import chatmodes (agent, edit) as prompts
       content_prefix = "#buffer #rules", -- Text prepended to all prompts
       content_prefix_role = "user",      -- "system" or "user"
       content_prefix_when = "invoke",    -- "invoke" or "register"
@@ -127,9 +127,9 @@ local copilot_adapter = require("codecompanion._extensions.copilot_adapter")
 -- List loaded prompts
 local prompts = copilot_adapter.list_prompts()
 
--- List loaded modes
-local modes = copilot_adapter.list_modes()
+-- List loaded chatmodes
+local chatmodes = copilot_adapter.list_chatmodes()
 
 -- Reload with new options
-copilot_adapter.reload({ enable_modes = false })
+copilot_adapter.reload({ enable_chatmodes = false })
 ```
