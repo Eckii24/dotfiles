@@ -22,7 +22,6 @@ return {
       "ravitemer/mcphub.nvim",
       "ravitemer/codecompanion-history.nvim",
       "franco-ruggeri/codecompanion-spinner.nvim",
-      "lazymaniac/codecompanion-reasoning.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -364,14 +363,13 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
             },
           },
           spinner = {},
-          reasoning = { callback = "codecompanion._extensions.reasoning", opts = { enabled = true } },
           rules_loader = {
             enabled = true,
             opts = {
               paths = {
                 "AGENTS.md",
                 ".github/copilot-instructions.md",
-                 ".github/instructions/",
+                ".github/instructions/",
                 ".kilocode/rules/",
                 "~/.kilocode/rules/",
               },
