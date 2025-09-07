@@ -5,9 +5,8 @@ local M = {}
 local yaml_parser = require("codecompanion._extensions.copilot_adapter.yaml_parser")
 local path_utils = require("codecompanion._extensions.copilot_adapter.path_utils")
 
--- Internal state
-local registered_prompts = {}
-local registered_modes = {}
+-- Internal state (for listing functionality)
+local loaded_prompts = {}
 
 ---@param path string
 ---@return boolean
@@ -51,10 +50,9 @@ end
 
 ---@param content string
 ---@param prefix string|function
----@param prefix_role string
 ---@param ctx table
 ---@return string
-local function apply_content_prefix(content, prefix, prefix_role, ctx)
+local function apply_content_prefix(content, prefix, ctx)
   if not prefix or prefix == "" then
     return content
   end
@@ -68,8 +66,7 @@ local function apply_content_prefix(content, prefix, prefix_role, ctx)
     return content
   end
   
-  -- For now, always prepend to content regardless of role
-  -- TODO: Handle system role when CodeCompanion supports it
+  -- Prepend prefix to content
   return prefix_text .. "\n\n" .. content
 end
 
@@ -119,8 +116,9 @@ local function process_prompt_file(file_path, opts)
   local frontmatter, body = parse_prompt_file(content)
   local prompt_name = normalize_prompt_name(file_path)
   
-  -- Handle mode filtering
-  local is_mode = frontmatter.mode and frontmatter.mode ~= "ask"
+  -- Handle VS Code custom chat modes
+  -- VS Code uses 'mode' field for custom chat modes (not just "ask" filter)
+  local is_mode = frontmatter.mode ~= nil and frontmatter.mode ~= ""
   if is_mode and not opts.enable_modes then
     return nil
   elseif not is_mode and not opts.enable_prompts then
@@ -129,19 +127,6 @@ local function process_prompt_file(file_path, opts)
   
   -- Determine content prefix settings
   local content_prefix = frontmatter.cc_prefix or opts.content_prefix or ""
-  local content_prefix_role = frontmatter.cc_prefix_role or opts.content_prefix_role or "system"
-  local content_prefix_when = frontmatter.cc_prefix_when or opts.content_prefix_when or "invoke"
-  
-  -- Apply prefix at registration time if configured
-  local final_body = body
-  if content_prefix_when == "register" then
-    local ctx = {
-      prompt_name = prompt_name,
-      source_path = file_path,
-      frontmatter = frontmatter,
-    }
-    final_body = apply_content_prefix(body, content_prefix, content_prefix_role, ctx)
-  end
   
   -- Create prompt entry
   local prompt_entry = {
@@ -155,7 +140,7 @@ local function process_prompt_file(file_path, opts)
     prompts = {
       {
         role = "user",
-        content = content_prefix_when == "invoke" and function()
+        content = function()
           local ctx = {
             prompt_name = prompt_name,
             source_path = file_path,
@@ -164,19 +149,9 @@ local function process_prompt_file(file_path, opts)
             filetype = vim.bo.filetype,
             cwd = vim.fn.getcwd(),
           }
-          return apply_content_prefix(body, content_prefix, content_prefix_role, ctx)
-        end or final_body,
+          return apply_content_prefix(body, content_prefix, ctx)
+        end,
       },
-    },
-    -- Store metadata
-    _copilot_meta = {
-      source_path = file_path,
-      frontmatter = frontmatter,
-      original_body = body,
-      content_prefix = content_prefix,
-      content_prefix_role = content_prefix_role,
-      content_prefix_when = content_prefix_when,
-      is_mode = is_mode,
     },
   }
   
@@ -190,7 +165,6 @@ local function register_prompts(opts)
   
   local files = discover_prompt_files(opts)
   local prompt_count = 0
-  local mode_count = 0
   
   for _, file_path in ipairs(files) do
     local prompt_entry = process_prompt_file(file_path, opts)
@@ -204,37 +178,26 @@ local function register_prompts(opts)
       end
       
       cfg.prompt_library[command_name] = prompt_entry
-      
-      -- Track registration
-      if prompt_entry._copilot_meta.is_mode then
-        registered_modes[command_name] = prompt_entry
-        mode_count = mode_count + 1
-      else
-        registered_prompts[command_name] = prompt_entry
-        prompt_count = prompt_count + 1
-      end
+      loaded_prompts[command_name] = prompt_entry
+      prompt_count = prompt_count + 1
     end
   end
   
-  if prompt_count > 0 or mode_count > 0 then
-    local message = string.format("CodeCompanion: Loaded %d Copilot prompts", prompt_count)
-    if mode_count > 0 then
-      message = message .. string.format(" and %d modes", mode_count)
-    end
-    vim.notify(message, vim.log.levels.INFO)
+  if prompt_count > 0 then
+    vim.notify(string.format("CodeCompanion: Loaded %d Copilot prompts", prompt_count), vim.log.levels.INFO)
   end
 end
 
 ---List all loaded prompts
 ---@return table
 function M.list_prompts()
-  return vim.deepcopy(registered_prompts)
+  return vim.deepcopy(loaded_prompts)
 end
 
----List all loaded modes
+---List all loaded modes (deprecated, kept for compatibility)
 ---@return table  
 function M.list_modes()
-  return vim.deepcopy(registered_modes)
+  return {}
 end
 
 ---Reload all prompts
@@ -242,15 +205,11 @@ end
 function M.reload(opts)
   local cfg = require("codecompanion.config")
   
-  -- Clear existing registered prompts and modes
-  for name, _ in pairs(registered_prompts) do
+  -- Clear existing loaded prompts
+  for name, _ in pairs(loaded_prompts) do
     cfg.prompt_library[name] = nil
   end
-  for name, _ in pairs(registered_modes) do
-    cfg.prompt_library[name] = nil
-  end
-  registered_prompts = {}
-  registered_modes = {}
+  loaded_prompts = {}
   
   -- Re-register with current or provided opts
   local current_opts = M._current_opts or {}
@@ -270,8 +229,6 @@ function M.setup(opts)
     enable_prompts = true,
     enable_modes = false,
     content_prefix = "",
-    content_prefix_role = "system", 
-    content_prefix_when = "invoke",
     paths = {
       workspace = true,
       global = true,

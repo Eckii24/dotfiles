@@ -368,7 +368,6 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
             opts = {
               paths = {
                 "AGENTS.md",
-                ".github/copilot-instructions.md",
                 ".github/instructions/",
                 ".kilocode/rules/",
                 "~/.kilocode/rules/",
@@ -380,10 +379,8 @@ The current projects structure looks like #{ls}, the open file is #{buffer}, and
             enabled = true,
             opts = {
               enable_prompts = true,
-              enable_modes = true, -- Enable modes to test agent-type prompts
+              enable_modes = true, -- Enable modes to test VS Code custom chat modes
               content_prefix = "#buffer #rules",
-              content_prefix_role = "user",
-              content_prefix_when = "invoke",
               paths = {
                 workspace = true,
                 global = true,
