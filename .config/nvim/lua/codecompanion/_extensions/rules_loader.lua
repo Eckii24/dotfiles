@@ -96,12 +96,4 @@ end
 
 M.exports = {}
 
--- Export for testing
-M._test = {
-  make_rules_callback = make_rules_callback,
-  list_files = list_files,
-  normalize = normalize,
-  project_root = project_root
-}
-
 return M
