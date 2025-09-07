@@ -1,9 +1,9 @@
--- lua/codecompanion/_extensions/copilot_adapter/init.lua
+-- lua/codecompanion/_extensions/copilot_prompts/init.lua
 ---@class CodeCompanion.Extension
 local M = {}
 
-local yaml_parser = require("codecompanion._extensions.copilot_adapter.yaml_parser")
-local path_utils = require("codecompanion._extensions.copilot_adapter.path_utils")
+local yaml_parser = require("codecompanion._extensions.copilot_prompts.yaml_parser")
+local path_utils = require("codecompanion._extensions.copilot_prompts.path_utils")
 
 -- Internal state (for listing functionality)
 local loaded_prompts = {}

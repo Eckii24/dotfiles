@@ -228,12 +228,12 @@ WorkItemID: ]],
             },
             callback = "codecompanion._extensions.rules_loader",
           },
-          copilot_adapter = {
+          copilot_prompts = {
             enabled = true,
             opts = {
               content_prefix = "Current file: #{buffer}. Current structure #{ls}. Use #{rules}.Act as @{full_stack_dev}.",
             },
-            callback = "codecompanion._extensions.copilot_adapter",
+            callback = "codecompanion._extensions.copilot_prompts",
           },
         },
         display = {

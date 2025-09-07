@@ -1,4 +1,4 @@
--- lua/codecompanion/_extensions/copilot_adapter/path_utils.lua
+-- lua/codecompanion/_extensions/copilot_prompts/path_utils.lua
 -- Path utilities for finding Copilot prompt files
 
 local M = {}

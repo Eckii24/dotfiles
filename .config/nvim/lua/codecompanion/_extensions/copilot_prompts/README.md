@@ -18,7 +18,7 @@ Add to your CodeCompanion config:
 
 ```lua
 extensions = {
-  copilot_adapter = {
+  copilot_prompts = {
     enabled = true,
     opts = {
       enable_prompts = true,        -- Import .prompt.md files
@@ -36,7 +36,7 @@ extensions = {
       },
       slash_namespace = "cp",      -- Prefix commands: /cp_code_review
     },
-    callback = "codecompanion._extensions.copilot_adapter",
+    callback = "codecompanion._extensions.copilot_prompts",
   },
 }
 ```
@@ -121,14 +121,14 @@ With namespace `cp`:
 ## API
 
 ```lua
-local copilot_adapter = require("codecompanion._extensions.copilot_adapter")
+local copilot_prompts = require("codecompanion._extensions.copilot_prompts")
 
 -- List loaded prompts
-local prompts = copilot_adapter.list_prompts()
+local prompts = copilot_prompts.list_prompts()
 
 -- List loaded chatmodes
-local chatmodes = copilot_adapter.list_chatmodes()
+local chatmodes = copilot_prompts.list_chatmodes()
 
 -- Reload with new options
-copilot_adapter.reload({ enable_chatmodes = false })
+copilot_prompts.reload({ enable_chatmodes = false })
 ```

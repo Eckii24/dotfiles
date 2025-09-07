@@ -1,4 +1,4 @@
--- lua/codecompanion/_extensions/copilot_adapter/yaml_parser.lua
+-- lua/codecompanion/_extensions/copilot_prompts/yaml_parser.lua
 -- Simple YAML parser for frontmatter
 
 local M = {}
