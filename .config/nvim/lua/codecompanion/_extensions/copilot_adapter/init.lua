@@ -11,7 +11,11 @@ local loaded_prompts = {}
 ---@param path string
 ---@return boolean
 local function is_prompt_file(path)
-  return path:match("%.prompt%.md$") ~= nil
+  return path:match("%.prompt%.md$") ~= nil or path:match("%.chatmode%.md$") ~= nil
+end
+
+local function is_chatmode_file(path)
+  return path:match("%.chatmode%.md$") ~= nil
 end
 
 ---@param content string
@@ -44,7 +48,8 @@ end
 ---@return string
 local function normalize_prompt_name(name)
   -- Convert filename to snake_case command name
-  local base_name = vim.fn.fnamemodify(name, ":t:r:r") -- Remove .prompt.md
+  -- Remove .prompt.md or .chatmode.md extension
+  local base_name = vim.fn.fnamemodify(name, ":t:r:r")
   return base_name:gsub("%-", "_")
 end
 
@@ -116,9 +121,9 @@ local function process_prompt_file(file_path, opts)
   local frontmatter, body = parse_prompt_file(content)
   local prompt_name = normalize_prompt_name(file_path)
   
-  -- Handle VS Code custom chat modes
-  -- VS Code uses 'mode' field for custom chat modes (not just "ask" filter)
-  local is_mode = frontmatter.mode ~= nil and frontmatter.mode ~= ""
+  -- Handle VS Code custom chat modes vs prompts
+  -- VS Code uses file extensions: .chatmode.md for modes, .prompt.md for prompts
+  local is_mode = is_chatmode_file(file_path)
   if is_mode and not opts.enable_modes then
     return nil
   elseif not is_mode and not opts.enable_prompts then
@@ -227,7 +232,7 @@ function M.setup(opts)
   -- Default configuration
   local defaults = {
     enable_prompts = true,
-    enable_modes = false,
+    enable_modes = true,
     content_prefix = "",
     paths = {
       workspace = true,
