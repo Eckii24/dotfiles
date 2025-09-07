@@ -39,19 +39,14 @@ local function normalize(path, root)
 end
 
 local function list_files(path)
-  -- only treat as directory if path explicitly ends with "/"
-  if path:sub(-1) == "/" and vim.fn.isdirectory(path) == 1 then
-    -- recursive glob; returns list of paths; filter to files only
-    local all = vim.fn.glob(path .. "**/*", true, true)
-    local files = {}
-    for _, p in ipairs(all) do
-      if vim.fn.isdirectory(p) == 0 then table.insert(files, p) end
-    end
-    return files
-  else
-    if vim.fn.filereadable(path) == 1 then return { path } end
+  -- Use glob pattern directly - supports patterns like **/*.md, src/**/*.lua, etc.
+  local all = vim.fn.glob(path, true, true)
+  local files = {}
+  for _, p in ipairs(all) do
+    -- Only include files, not directories
+    if vim.fn.isdirectory(p) == 0 then table.insert(files, p) end
   end
-  return {}
+  return files
 end
 
 local function read_file(p)
@@ -81,7 +76,7 @@ local function make_rules_callback(opts)
 end
 
 --- Setup is called once during CodeCompanion setup
----@param opts table  Example: { paths = { ".codecompanion/rules", "/etc/cc/rules/global.md" } }
+---@param opts table  Example: { paths = { "**/*.md", "rules/**/*.txt", "/etc/cc/rules/global.md" } }
 function M.setup(opts)
   local cfg = require("codecompanion.config")
   cfg.strategies = cfg.strategies or {}
@@ -91,7 +86,7 @@ function M.setup(opts)
   cfg.strategies.chat.variables["rules"] = {
     -- You can also point this to a Lua file path, but we keep it inline for simplicity
     callback = make_rules_callback(opts or {}),
-    description = "Insert configured rule files and folders (recursive) into the chat",
+    description = "Insert files matching configured glob patterns into the chat",
     opts = {
       contains_code = true, -- improves rendering
       -- has_params = false, default
@@ -100,5 +95,13 @@ function M.setup(opts)
 end
 
 M.exports = {}
+
+-- Export for testing
+M._test = {
+  make_rules_callback = make_rules_callback,
+  list_files = list_files,
+  normalize = normalize,
+  project_root = project_root
+}
 
 return M
