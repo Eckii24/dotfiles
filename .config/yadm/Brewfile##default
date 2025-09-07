@@ -1,6 +1,7 @@
 brew "aichat"
 brew "bat"
 brew "bob"
+brew "btop"
 brew "eza"
 brew "fd"
 brew "fzf"

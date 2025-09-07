@@ -1,5 +1,6 @@
 # Base packages available via apt
 bat
+btop
 fd-find
 fzf
 git
