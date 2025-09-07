@@ -45,17 +45,25 @@ extensions = {
 
 ### Global Paths
 
+Supports both VS Code and VS Code Insiders:
+
 **Windows:**
 - `%APPDATA%/Code/User/prompts/`
 - `%APPDATA%/Code/User/.github/prompts/`
+- `%APPDATA%/Code - Insiders/User/prompts/`
+- `%APPDATA%/Code - Insiders/User/.github/prompts/`
 
 **macOS:**
 - `~/Library/Application Support/Code/User/prompts/`
 - `~/Library/Application Support/Code/User/.github/prompts/`
+- `~/Library/Application Support/Code - Insiders/User/prompts/`
+- `~/Library/Application Support/Code - Insiders/User/.github/prompts/`
 
 **Linux:**
 - `$XDG_CONFIG_HOME/Code/User/prompts/` (or `~/.config/Code/User/prompts/`)
 - `$XDG_CONFIG_HOME/Code/User/.github/prompts/` (or `~/.config/Code/User/.github/prompts/`)
+- `$XDG_CONFIG_HOME/Code - Insiders/User/prompts/` (or `~/.config/Code - Insiders/User/prompts/`)
+- `$XDG_CONFIG_HOME/Code - Insiders/User/.github/prompts/` (or `~/.config/Code - Insiders/User/.github/prompts/`)
 
 ## Prompt File Format
 

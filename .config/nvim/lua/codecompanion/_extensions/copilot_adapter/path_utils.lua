@@ -82,6 +82,7 @@ end
 
 ---Get global Copilot prompt paths for different platforms
 ---Based on VS Code documentation for user profiles and prompt files
+---Supports both VS Code and VS Code Insiders
 ---@return string[]
 function M.get_global_copilot_paths()
   local paths = {}
@@ -90,16 +91,23 @@ function M.get_global_copilot_paths()
   local is_windows = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
   local is_mac = vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1
   
+  -- VS Code variants to support
+  local vscode_variants = { "Code", "Code - Insiders" }
+  
   if is_windows then
     -- Windows: Use APPDATA for VS Code user data
     local appdata = vim.fn.expand("$APPDATA")
-    table.insert(paths, appdata .. "/Code/User/prompts/")
-    table.insert(paths, appdata .. "/Code/User/.github/prompts/")
+    for _, variant in ipairs(vscode_variants) do
+      table.insert(paths, appdata .. "/" .. variant .. "/User/prompts/")
+      table.insert(paths, appdata .. "/" .. variant .. "/User/.github/prompts/")
+    end
   elseif is_mac then
     -- macOS: Use Library/Application Support for VS Code user data
     local home = vim.fn.expand("~")
-    table.insert(paths, home .. "/Library/Application Support/Code/User/prompts/")
-    table.insert(paths, home .. "/Library/Application Support/Code/User/.github/prompts/")
+    for _, variant in ipairs(vscode_variants) do
+      table.insert(paths, home .. "/Library/Application Support/" .. variant .. "/User/prompts/")
+      table.insert(paths, home .. "/Library/Application Support/" .. variant .. "/User/.github/prompts/")
+    end
   else
     -- Linux: Use .config for VS Code user data
     local home = vim.fn.expand("~")
@@ -108,8 +116,10 @@ function M.get_global_copilot_paths()
       xdg_config = home .. "/.config"
     end
     
-    table.insert(paths, xdg_config .. "/Code/User/prompts/")
-    table.insert(paths, xdg_config .. "/Code/User/.github/prompts/")
+    for _, variant in ipairs(vscode_variants) do
+      table.insert(paths, xdg_config .. "/" .. variant .. "/User/prompts/")
+      table.insert(paths, xdg_config .. "/" .. variant .. "/User/.github/prompts/")
+    end
   end
   
   return paths
