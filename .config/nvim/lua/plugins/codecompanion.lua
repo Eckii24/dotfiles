@@ -28,41 +28,43 @@ return {
       local layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical"
       return {
         adapters = {
-          open_router = function()
-            return require("codecompanion.adapters").extend("openai_compatible", {
-              env = {
-                api_key = "OPEN_ROUTER_API_KEY",
-                url = "OPEN_ROUTER_API_URL",
-              },
-            })
-          end,
-          azure_openai = function()
-            return require("codecompanion.adapters").extend("azure_openai", {
-              env = {
-                api_key = "AZURE_API_KEY",
-                endpoint = "AZURE_API_BASE",
-                api_version = "AZURE_API_VERSION",
-              },
-              schema = {
-                model = {
-                  default = "o4-mini",
-                  choices = {
-                    "gpt-5",
-                    "gpt-5-mini",
-                    "gpt-4.1",
-                    "gpt-4.1-mini",
-                    "gpt-4o",
-                    "gpt-4o-mini",
-                    ["o1"] = { opts = { can_reason = true } },
-                    ["o1-mini"] = { opts = { can_reason = true } },
-                    ["o3"] = { opts = { can_reason = true } },
-                    ["o3-mini"] = { opts = { can_reason = true } },
-                    ["o4-mini"] = { opts = { can_reason = true } },
+          http = {
+            open_router = function()
+              return require("codecompanion.adapters").extend("openai_compatible", {
+                env = {
+                  api_key = "OPEN_ROUTER_API_KEY",
+                  url = "OPEN_ROUTER_API_URL",
+                },
+              })
+            end,
+            azure_openai = function()
+              return require("codecompanion.adapters").extend("azure_openai", {
+                env = {
+                  api_key = "AZURE_API_KEY",
+                  endpoint = "AZURE_API_BASE",
+                  api_version = "AZURE_API_VERSION",
+                },
+                schema = {
+                  model = {
+                    default = "o4-mini",
+                    choices = {
+                      "gpt-5",
+                      "gpt-5-mini",
+                      "gpt-4.1",
+                      "gpt-4.1-mini",
+                      "gpt-4o",
+                      "gpt-4o-mini",
+                      ["o1"] = { opts = { can_reason = true } },
+                      ["o1-mini"] = { opts = { can_reason = true } },
+                      ["o3"] = { opts = { can_reason = true } },
+                      ["o3-mini"] = { opts = { can_reason = true } },
+                      ["o4-mini"] = { opts = { can_reason = true } },
+                    },
                   },
                 },
-              },
-            })
-          end,
+              })
+            end,
+          },
         },
         strategies = {
           chat = {
