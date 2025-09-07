@@ -81,6 +81,7 @@ function M.list_files(path, filter)
 end
 
 ---Get global Copilot prompt paths for different platforms
+---Based on VS Code documentation for user profiles and prompt files
 ---@return string[]
 function M.get_global_copilot_paths()
   local paths = {}
@@ -90,29 +91,25 @@ function M.get_global_copilot_paths()
   local is_mac = vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1
   
   if is_windows then
-    -- Windows paths
+    -- Windows: Use APPDATA for VS Code user data
     local appdata = vim.fn.expand("$APPDATA")
-    local userprofile = vim.fn.expand("$USERPROFILE")
-    table.insert(paths, appdata .. "/GitHub Copilot/prompts/")
-    table.insert(paths, userprofile .. "/.github/copilot/prompts/")
-    table.insert(paths, userprofile .. "/Documents/GitHub Copilot/prompts/")
+    table.insert(paths, appdata .. "/Code/User/prompts/")
+    table.insert(paths, appdata .. "/Code/User/.github/prompts/")
   elseif is_mac then
-    -- macOS paths
+    -- macOS: Use Library/Application Support for VS Code user data
     local home = vim.fn.expand("~")
-    table.insert(paths, home .. "/Library/Application Support/GitHub Copilot/prompts/")
-    table.insert(paths, home .. "/.github/copilot/prompts/")
-    table.insert(paths, home .. "/.config/github-copilot/prompts/")
+    table.insert(paths, home .. "/Library/Application Support/Code/User/prompts/")
+    table.insert(paths, home .. "/Library/Application Support/Code/User/.github/prompts/")
   else
-    -- Linux/Unix paths
+    -- Linux: Use .config for VS Code user data
     local home = vim.fn.expand("~")
     local xdg_config = vim.fn.expand("$XDG_CONFIG_HOME")
     if xdg_config == "$XDG_CONFIG_HOME" then
       xdg_config = home .. "/.config"
     end
     
-    table.insert(paths, xdg_config .. "/github-copilot/prompts/")
-    table.insert(paths, home .. "/.github/copilot/prompts/")
-    table.insert(paths, home .. "/.local/share/github-copilot/prompts/")
+    table.insert(paths, xdg_config .. "/Code/User/prompts/")
+    table.insert(paths, xdg_config .. "/Code/User/.github/prompts/")
   end
   
   return paths

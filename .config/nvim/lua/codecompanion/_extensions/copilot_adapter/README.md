@@ -1,15 +1,15 @@
 # CodeCompanion Copilot Adapter Extension
 
-This extension imports GitHub Copilot prompt files and custom chat modes into CodeCompanion, with configurable content prefix injection.
+This extension imports GitHub Copilot prompt files and VS Code custom chat modes into CodeCompanion, with configurable content prefix injection.
 
 ## Features
 
-- **Auto-discovery**: Finds `.prompt.md` files in workspace and global locations
-- **YAML frontmatter parsing**: Supports standard Copilot metadata
+- **Auto-discovery**: Finds `.prompt.md` and `.chatmode.md` files in workspace and global locations
+- **YAML frontmatter parsing**: Supports standard Copilot metadata (`mode`, `description`, `model`, `tools`)
 - **Content prefix injection**: Adds configurable prefixes to prompts at runtime
 - **Slash commands**: Registers prompts as `/command_name` slash commands
 - **Multi-platform support**: Handles Windows, macOS, and Linux global paths
-- **Chatmodes support**: Can include agent/edit chatmodes as prompts
+- **VS Code custom chat modes**: Supports `.chatmode.md` files for custom chat modes
 
 ## Configuration
 
@@ -20,19 +20,17 @@ extensions = {
   copilot_adapter = {
     enabled = true,
     opts = {
-      enable_prompts = true,      -- Import regular prompts
-      enable_chatmodes = true,        -- Import chatmodes (agent, edit) as prompts
+      enable_prompts = true,        -- Import .prompt.md files
+      enable_chatmodes = true,      -- Import .chatmode.md files
       content_prefix = "#buffer #rules", -- Text prepended to all prompts
-      content_prefix_role = "user",      -- "system" or "user"
-      content_prefix_when = "invoke",    -- "invoke" or "register"
       paths = {
-        workspace = true,         -- Include ./.github/prompts/
-        global = true,           -- Include platform-specific global paths
-        extra = {               -- Additional custom paths
+        workspace = true,           -- Include ./.github/prompts/
+        global = true,             -- Include platform-specific global paths
+        extra = {                  -- Additional custom paths
           "~/my-prompts/",
         },
       },
-      slash_namespace = "cp",    -- Prefix commands: /cp_code_review
+      slash_namespace = "cp",      -- Prefix commands: /cp_code_review
     },
     callback = "codecompanion._extensions.copilot_adapter",
   },
@@ -43,35 +41,31 @@ extensions = {
 
 ### Workspace Paths
 - `./.github/prompts/*.prompt.md`
+- `./.github/prompts/*.chatmode.md`
 
 ### Global Paths
 
 **Windows:**
-- `%APPDATA%/GitHub Copilot/prompts/`
-- `%USERPROFILE%/.github/copilot/prompts/`
-- `%USERPROFILE%/Documents/GitHub Copilot/prompts/`
+- `%APPDATA%/Code/User/prompts/`
+- `%APPDATA%/Code/User/.github/prompts/`
 
 **macOS:**
-- `~/Library/Application Support/GitHub Copilot/prompts/`
-- `~/.github/copilot/prompts/`
-- `~/.config/github-copilot/prompts/`
+- `~/Library/Application Support/Code/User/prompts/`
+- `~/Library/Application Support/Code/User/.github/prompts/`
 
 **Linux:**
-- `$XDG_CONFIG_HOME/github-copilot/prompts/` (or `~/.config/github-copilot/prompts/`)
-- `~/.github/copilot/prompts/`
-- `~/.local/share/github-copilot/prompts/`
+- `$XDG_CONFIG_HOME/Code/User/prompts/` (or `~/.config/Code/User/prompts/`)
+- `$XDG_CONFIG_HOME/Code/User/.github/prompts/` (or `~/.config/Code/User/.github/prompts/`)
 
 ## Prompt File Format
 
 ```markdown
 ---
-mode: ask                    # ask, edit, agent
+mode: ask                    # ask, edit, agent (for .prompt.md)
 description: "Code review"   # Description for the prompt
 model: gpt-4o               # Preferred model
 tools: ["filesystem"]       # Available tools
 cc_prefix: "#buffer #rules" # Override content prefix
-cc_prefix_role: "user"      # Override prefix role
-cc_prefix_when: "invoke"    # Override prefix timing
 ---
 
 # Your Prompt Title
@@ -79,31 +73,14 @@ cc_prefix_when: "invoke"    # Override prefix timing
 Your prompt content goes here...
 ```
 
+For VS Code custom chat modes (`.chatmode.md`), use the same format but VS Code will treat them as custom chat modes.
+
 ## Content Prefix
 
 The content prefix is injected into every prompt to provide context:
 
 - **String**: Static text prepended to prompts
-- **Function**: `function(ctx) -> string` for dynamic prefixes
-- **Role**: "system" (preferred) or "user" 
-- **Timing**: 
-  - "invoke": Apply when prompt is used (dynamic)
-  - "register": Apply when prompt is loaded (static)
-
-### Context Object
-
-When using function prefixes, the context includes:
-
-```lua
-{
-  prompt_name = "code_review",
-  source_path = "/path/to/prompt.md",
-  frontmatter = { mode = "ask", ... },
-  bufnr = 42,                    -- Current buffer
-  filetype = "lua",              -- Current filetype
-  cwd = "/current/directory",    -- Working directory
-}
-```
+- **Per-file override**: Use `cc_prefix` in YAML frontmatter to override per file
 
 ## Usage
 
