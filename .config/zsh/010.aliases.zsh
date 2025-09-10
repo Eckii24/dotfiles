@@ -6,6 +6,7 @@ alias ylg='lazygit --git-dir ~/.local/share/yadm/repo.git/'
 alias ynvim='yadm enter nvim ~'
 alias diff='delta -n -s'
 alias rm='trash-put'
+alias specify='uvx --from git+https://github.com/github/spec-kit.git specify'
 
 # AI Neovim with CodeCompanion chat in buffer layout
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
