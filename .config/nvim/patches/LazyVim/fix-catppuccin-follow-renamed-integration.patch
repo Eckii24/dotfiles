@@ -1,0 +1,22 @@
+From f050010136751d5cef0dbfe2851b30fada32fca3 Mon Sep 17 00:00:00 2001
+From: flippette <me@flippo.cc>
+Date: Tue, 19 Aug 2025 21:22:16 +0300
+Subject: [PATCH] fix(catppuccin): follow renamed integration
+
+---
+ lua/lazyvim/plugins/colorscheme.lua | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lua/lazyvim/plugins/colorscheme.lua b/lua/lazyvim/plugins/colorscheme.lua
+index fa611bf486..4c41d49273 100644
+--- a/lua/lazyvim/plugins/colorscheme.lua
++++ b/lua/lazyvim/plugins/colorscheme.lua
+@@ -58,7 +58,7 @@ return {
+         optional = true,
+         opts = function(_, opts)
+           if (vim.g.colors_name or ""):find("catppuccin") then
+-            opts.highlights = require("catppuccin.groups.integrations.bufferline").get()
++            opts.highlights = require("catppuccin.groups.integrations.bufferline").get_theme()
+           end
+         end,
+       },

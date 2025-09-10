@@ -1,0 +1,33 @@
+From 209e1d1dea94106d6870326a846c555ea832d868 Mon Sep 17 00:00:00 2001
+From: jradtilbrook <jarryd@tilbrooktech.com>
+Date: Wed, 16 Apr 2025 14:00:11 +0800
+Subject: [PATCH] Add some kulala keymaps back to global
+
+---
+ lua/lazyvim/plugins/extras/util/rest.lua | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/lua/lazyvim/plugins/extras/util/rest.lua b/lua/lazyvim/plugins/extras/util/rest.lua
+index 9f2e6d6714..c34d22d6e9 100644
+--- a/lua/lazyvim/plugins/extras/util/rest.lua
++++ b/lua/lazyvim/plugins/extras/util/rest.lua
+@@ -8,8 +8,8 @@ return {
+     "mistweaverco/kulala.nvim",
+     ft = "http",
+     keys = {
+-      { "<leader>R", "", desc = "+Rest", ft = "http" },
+-      { "<leader>Rb", "<cmd>lua require('kulala').scratchpad()<cr>", desc = "Open scratchpad", ft = "http" },
++      { "<leader>R", "", desc = "+Rest" },
++      { "<leader>Rb", "<cmd>lua require('kulala').scratchpad()<cr>", desc = "Open scratchpad" },
+       { "<leader>Rc", "<cmd>lua require('kulala').copy()<cr>", desc = "Copy as cURL", ft = "http" },
+       { "<leader>RC", "<cmd>lua require('kulala').from_curl()<cr>", desc = "Paste from curl", ft = "http" },
+       {
+@@ -22,7 +22,7 @@ return {
+       { "<leader>Rn", "<cmd>lua require('kulala').jump_next()<cr>", desc = "Jump to next request", ft = "http" },
+       { "<leader>Rp", "<cmd>lua require('kulala').jump_prev()<cr>", desc = "Jump to previous request", ft = "http" },
+       { "<leader>Rq", "<cmd>lua require('kulala').close()<cr>", desc = "Close window", ft = "http" },
+-      { "<leader>Rr", "<cmd>lua require('kulala').replay()<cr>", desc = "Replay the last request", ft = "http" },
++      { "<leader>Rr", "<cmd>lua require('kulala').replay()<cr>", desc = "Replay the last request" },
+       { "<leader>Rs", "<cmd>lua require('kulala').run()<cr>", desc = "Send the request", ft = "http" },
+       { "<leader>RS", "<cmd>lua require('kulala').show_stats()<cr>", desc = "Show stats", ft = "http" },
+       { "<leader>Rt", "<cmd>lua require('kulala').toggle_view()<cr>", desc = "Toggle headers/body", ft = "http" },

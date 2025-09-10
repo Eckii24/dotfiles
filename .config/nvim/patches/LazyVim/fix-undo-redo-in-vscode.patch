@@ -1,0 +1,24 @@
+From b385ff2a059fdadd9c6a3cb16cd1d15c800355ba Mon Sep 17 00:00:00 2001
+From: Theo Lemay <tlemay@tesla.com>
+Date: Tue, 15 Apr 2025 12:05:39 -0700
+Subject: [PATCH] fix(vscode): don't sync undo/redo with vscode
+
+---
+ lua/lazyvim/plugins/extras/vscode.lua | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/lua/lazyvim/plugins/extras/vscode.lua b/lua/lazyvim/plugins/extras/vscode.lua
+index 5115a2b4dd..92b7f9f0de 100644
+--- a/lua/lazyvim/plugins/extras/vscode.lua
++++ b/lua/lazyvim/plugins/extras/vscode.lua
+@@ -39,10 +39,6 @@ vim.api.nvim_create_autocmd("User", {
+     vim.keymap.set("n", "<leader>/", [[<cmd>lua require('vscode').action('workbench.action.findInFiles')<cr>]])
+     vim.keymap.set("n", "<leader>ss", [[<cmd>lua require('vscode').action('workbench.action.gotoSymbol')<cr>]])
+ 
+-    -- Keep undo/redo lists in sync with VsCode
+-    vim.keymap.set("n", "u", "<Cmd>call VSCodeNotify('undo')<CR>")
+-    vim.keymap.set("n", "<C-r>", "<Cmd>call VSCodeNotify('redo')<CR>")
+-
+     -- Navigate VSCode tabs like lazyvim buffers
+     vim.keymap.set("n", "<S-h>", "<Cmd>call VSCodeNotify('workbench.action.previousEditor')<CR>")
+     vim.keymap.set("n", "<S-l>", "<Cmd>call VSCodeNotify('workbench.action.nextEditor')<CR>")
