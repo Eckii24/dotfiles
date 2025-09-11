@@ -90,12 +90,20 @@ function M.get_global_copilot_paths()
   -- Detect operating system
   local is_windows = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
   local is_mac = vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1
+  local is_wsl = vim.fn.expand("$WSL_DISTRO_NAME") ~= "$WSL_DISTRO_NAME"
   
   -- VS Code variants to support
   local vscode_variants = { "Code", "Code - Insiders" }
   
   if is_windows then
     -- Windows: Use APPDATA for VS Code user data
+    local appdata = vim.fn.expand("$APPDATA")
+    for _, variant in ipairs(vscode_variants) do
+      table.insert(paths, appdata .. "/" .. variant .. "/User/prompts/")
+      table.insert(paths, appdata .. "/" .. variant .. "/User/.github/prompts/")
+    end
+  elseif is_wsl then
+    -- WSL: Use APPDATA for VS Code user data (mounted Windows paths)
     local appdata = vim.fn.expand("$APPDATA")
     for _, variant in ipairs(vscode_variants) do
       table.insert(paths, appdata .. "/" .. variant .. "/User/prompts/")
