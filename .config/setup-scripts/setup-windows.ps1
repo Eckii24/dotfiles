@@ -14,6 +14,9 @@ winget install --accept-package-agreements mockoon
 # Setup WSL
 Write-Host "Setup WSL"
 wsl --install -d Debian
+Write-Host "Make USERPROFILE and APPDATA available inside WSL"
+setx WSLENV USERPROFILE/up
+setx WSLENV APPDATA/up
 Write-Warning "Setup certificates inside WSL"
 Write-Warning "1. Get the ZScaler root certificate from IT4U, search for 'Adding Zscaler Root Certificate to Application Specific Trust Store'"
 Write-Warning "2. Save certificate here: '/usr/local/share/ca-certificates/zscaler-root-cert.crt"
