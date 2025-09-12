@@ -2,10 +2,10 @@ return {
   {
     "ravitemer/mcphub.nvim",
     dependencies = {
-      "nvim-lua/plenary.nvim", -- Required for Job and HTTP requests
+      "nvim-lua/plenary.nvim",
     },
     cmd = "MCPHub",
-    build = "npm install -g mcp-hub@latest", -- Installs required mcp-hub npm module"ravitemer/mcphub.nvim",
+    build = "npm install -g mcp-hub@latest",
     keys = {
       { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
     },
@@ -30,14 +30,6 @@ return {
       return {
         adapters = {
           http = {
-            open_router = function()
-              return require("codecompanion.adapters").extend("openai_compatible", {
-                env = {
-                  api_key = "OPEN_ROUTER_API_KEY",
-                  url = "OPEN_ROUTER_API_URL",
-                },
-              })
-            end,
             azure_openai = function()
               return require("codecompanion.adapters").extend("azure_openai", {
                 env = {
