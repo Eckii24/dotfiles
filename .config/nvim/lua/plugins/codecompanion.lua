@@ -21,7 +21,8 @@ return {
       { "MeanderingProgrammer/render-markdown.nvim", ft = { "markdown", "codecompanion" } },
       "ravitemer/mcphub.nvim",
       "ravitemer/codecompanion-history.nvim",
-      "franco-ruggeri/codecompanion-spinner.nvim",
+      "lalitmee/codecompanion-spinners.nvim",
+      "folke/snacks.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -216,7 +217,11 @@ WorkItemID: ]],
               },
             },
           },
-          spinner = {},
+          spinner = {
+            opts = {
+              style = "snacks",
+            },
+          },
           rules_loader = {
             enabled = true,
             opts = {
