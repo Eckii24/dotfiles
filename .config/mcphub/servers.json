@@ -53,7 +53,53 @@
         "wiki_list_wikis"
       ],
       "command": "npx",
-      "disabled": false
+      "disabled": false,
+      "disabled_tools": [
+        "build_get_builds",
+        "build_get_changes",
+        "build_get_definition_revisions",
+        "build_get_definitions",
+        "build_get_log",
+        "build_get_log_by_id",
+        "build_get_status",
+        "build_run_build",
+        "build_update_build_stage",
+        "core_get_identity_ids",
+        "core_list_project_teams",
+        "core_list_projects",
+        "release_get_definitions",
+        "release_get_releases",
+        "repo_create_pull_request",
+        "repo_create_pull_request_thread",
+        "repo_get_branch_by_name",
+        "repo_get_repo_by_name_or_id",
+        "repo_list_branches_by_repo",
+        "repo_list_my_branches_by_repo",
+        "repo_list_pull_requests_by_commits",
+        "repo_list_pull_requests_by_project",
+        "repo_list_pull_requests_by_repo",
+        "repo_list_repos_by_project",
+        "repo_search_commits",
+        "testplan_add_test_cases_to_suite",
+        "testplan_create_test_case",
+        "testplan_create_test_plan",
+        "testplan_list_test_cases",
+        "testplan_list_test_plans",
+        "testplan_show_test_results_from_build_id",
+        "wit_create_work_item",
+        "wit_get_query",
+        "wit_get_query_results_by_id",
+        "wit_get_work_item_type",
+        "wit_get_work_items_batch_by_ids",
+        "wit_get_work_items_for_iteration",
+        "wit_link_work_item_to_pull_request",
+        "wit_list_backlog_work_items",
+        "wit_list_backlogs",
+        "wit_update_work_items_batch",
+        "work_assign_iterations",
+        "work_create_iterations",
+        "work_list_team_iterations"
+      ]
     },
     "context7": {
       "args": [
@@ -91,7 +137,7 @@
         "file_system_read_directory"
       ],
       "command": "repomix",
-      "disabled": false
+      "disabled": true
     },
     "sequential-thinking": {
       "args": [
@@ -102,7 +148,7 @@
         "sequentialthinking"
       ],
       "command": "npx",
-      "disabled": false
+      "disabled": true
     },
     "serena": {
       "args": [
