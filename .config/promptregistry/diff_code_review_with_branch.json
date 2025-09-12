@@ -1,0 +1,17 @@
+{
+  "id": "diff_code_review_with_branch",
+  "description": "Perform a code review on a git diff from a specified target branch.",
+  "tags": [
+    "code review",
+    "diff",
+    "git"
+  ],
+  "variables": {
+    "targetBranch": {
+      "description": "The target branch for the merge base diff (default: master).",
+      "required": false
+    }
+  },
+  "metadata": {},
+  "contentFile": "diff_code_review_with_branch.md"
+}

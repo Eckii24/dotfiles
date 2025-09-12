@@ -145,58 +145,6 @@ return {
               },
             },
           },
-          ["Load Work Item"] = {
-            strategy = "chat",
-            description = "Load work item details using MCP",
-            opts = {
-              short_name = "load_work_item",
-              is_slash_cmd = true,
-              auto_submit = false,
-            },
-            prompts = {
-              {
-                role = "user",
-                content = [[
-### Instructions
-Use the @{ado__wit_get_work_item} tool to load the details for an azure work item using MCP. 
-Extract the description of the work item and present it in a useful way.
-
-### Input
-Project: VIS - Program 0
-WorkItemID: ]],
-              },
-            },
-          },
-          ["Diff code review"] = {
-            strategy = "chat",
-            description = "Perform a code review",
-            opts = {
-              auto_submit = true,
-              user_prompt = false,
-            },
-            prompts = {
-              {
-                role = "user",
-                content = function()
-                  local target_branch = vim.fn.input("Target branch for merge base diff (default: master): ", "master")
-
-                  return string.format(
-                    [[
-                    You are a senior software engineer performing a code review. Analyze the following code changes.
-                    Identify any potential bugs, performance issues, security vulnerabilities, or areas that could be refactored for better readability or maintainability.
-                    Explain your reasoning clearly and provide specific suggestions for improvement.
-                    Consider edge cases, error handling, and adherence to best practices and coding standards.
-                    Here are the code changes:
-                    ```
-                    %s
-                    ```
-                    ]],
-                    vim.fn.system("git diff --merge-base " .. target_branch)
-                  )
-                end,
-              },
-            },
-          },
         },
         extensions = {
           mcphub = {
