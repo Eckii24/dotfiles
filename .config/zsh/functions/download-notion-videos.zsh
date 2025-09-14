@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # YouTube Notion Sync
-# Download YouTube videos from a Notion DB and mark them as Downloaded.
+# Download YouTube videos from a Notion DB.
 
 download-notion-videos() {
     local -r NOTION_API="https://api.notion.com/v1"
@@ -69,7 +69,7 @@ download-notion-videos() {
         cat << 'EOF'
 Usage: download-notion-videos [options]
 
-Download YouTube videos from a Notion database and mark them as Downloaded.
+Download YouTube videos from a Notion database.
 
 Options:
   -t, --target DIR         Target directory for downloads (default: $VIDEO_FOLDER)
@@ -82,9 +82,11 @@ Options:
 
 Behavior:
   - Queries Notion DB for items where:
-      Typ == "Video", Plattform == "Youtube", Status == "Next", Downloaded == false
-  - Downloads each Url via yt-dlp sequentially
-  - On success, sets Downloaded=true for that Notion page
+      Typ == "Video", Plattform == "Youtube", Status == "Next"
+  - Checks if each video is already downloaded by matching video ID in filename
+  - Downloads only new videos via yt-dlp sequentially  
+  - Removes orphaned files (files in target dir not in Notion video list)
+  - Does NOT modify the Downloaded flag in Notion
 
 Dependencies: curl, jq, yt-dlp
 EOF
@@ -182,11 +184,10 @@ EOF
 
     # Build Notion filter payload with multiple criteria
     _build_query_body() {
-        # Filter by all required criteria:
+        # Filter by required criteria (removed Downloaded flag):
         # Typ multi_select contains "Video"
         # Plattform multi_select contains "Youtube"  
         # Status select equals "Next"
-        # Downloaded checkbox equals false
         jq -n '{
             "page_size": 100,
             "filter": {
@@ -208,12 +209,6 @@ EOF
                         "status": {
                             "equals": "Next"
                         }
-                    },
-                    {
-                        "property": "Downloaded",
-                        "checkbox": {
-                            "equals": false
-                        }
                     }
                 ]
             }
@@ -226,7 +221,7 @@ EOF
         local body next_cursor has_more
         body="$(_build_query_body)"
         
-        _log "Querying database with filter: Typ=Video AND Plattform=Youtube AND Status=Next AND Downloaded=false"
+        _log "Querying database with filter: Typ=Video AND Plattform=Youtube AND Status=Next"
         
         local H_AUTH=(
             -H "Authorization: Bearer ${NOTION_TOKEN_VAL}"
@@ -291,6 +286,116 @@ EOF
         done
     }
     
+    # Extract YouTube video ID from URL
+    _extract_video_id() {
+        local url="$1"
+        # Handle different YouTube URL formats:
+        # https://www.youtube.com/watch?v=VIDEO_ID
+        # https://youtu.be/VIDEO_ID
+        # https://www.youtube.com/embed/VIDEO_ID
+        echo "$url" | sed -n 's/.*[?&]v=\([^&]*\).*/\1/p; s/.*youtu\.be\/\([^?]*\).*/\1/p; s/.*embed\/\([^?]*\).*/\1/p' | head -1
+    }
+    
+    # Extract video ID from filename (format: title-VIDEO_ID.ext)
+    _extract_id_from_filename() {
+        local filename="$1"
+        # Extract the video ID from filename pattern: title-VIDEO_ID.ext
+        # YouTube video IDs are exactly 11 characters long
+        # Look for 11 characters before the file extension
+        echo "$filename" | sed -n 's/.*-\(.\{11\}\)\.[^.]*$/\1/p'
+    }
+    
+    # Get list of existing downloaded files and their video IDs
+    _get_existing_files() {
+        local target_dir="$1"
+        declare -A existing_files
+        
+        if [[ -d "$target_dir" ]]; then
+            local file
+            for file in "$target_dir"/*; do
+                if [[ -f "$file" ]]; then
+                    local basename_file
+                    basename_file="$(basename "$file")"
+                    local video_id
+                    video_id="$(_extract_id_from_filename "$basename_file")"
+                    if [[ -n "$video_id" ]]; then
+                        existing_files["$video_id"]="$basename_file"
+                    fi
+                fi
+            done
+        fi
+        
+        # Output video_id:filename pairs
+        for video_id in "${!existing_files[@]}"; do
+            echo "$video_id:${existing_files[$video_id]}"
+        done
+    }
+    
+    # Check if video is already downloaded
+    _is_video_downloaded() {
+        local url="$1"
+        local video_id
+        video_id="$(_extract_video_id "$url")"
+        
+        if [[ -z "$video_id" ]]; then
+            _log "Could not extract video ID from URL: $url"
+            return 1  # Assume not downloaded if we can't extract ID
+        fi
+        
+        # Check if any existing file contains this video ID
+        while IFS= read -r line; do
+            local existing_id="${line%%:*}"
+            if [[ "$existing_id" == "$video_id" ]]; then
+                local filename="${line##*:}"
+                _log "Video $video_id already downloaded as: $filename"
+                return 0  # Already downloaded
+            fi
+        done < <(_get_existing_files "$TARGET_DIR")
+        
+        return 1  # Not downloaded
+    }
+    
+    # Clean up orphaned files (files not in Notion video list)
+    _cleanup_orphaned_files() {
+        local items_ref=("$@")
+        local -A notion_video_ids
+        local item
+        
+        # Build set of video IDs from Notion
+        for item in "${items_ref[@]}"; do
+            local page_id url title
+            IFS=$'\t' read -r page_id url title <<< "$item"
+            local video_id
+            video_id="$(_extract_video_id "$url")"
+            if [[ -n "$video_id" ]]; then
+                notion_video_ids["$video_id"]=1
+            fi
+        done
+        
+        # Check existing files and remove orphans
+        local orphaned_count=0
+        while IFS= read -r line; do
+            local existing_id="${line%%:*}"
+            local filename="${line##*:}"
+            
+            if [[ -z "${notion_video_ids[$existing_id]:-}" ]]; then
+                local filepath="$TARGET_DIR/$filename"
+                _info "Removing orphaned file: $filename (video ID: $existing_id)"
+                if rm -f "$filepath"; then
+                    ((orphaned_count++))
+                else
+                    _error "Failed to remove orphaned file: $filepath"
+                fi
+            fi
+        done < <(_get_existing_files "$TARGET_DIR")
+        
+        if [[ $orphaned_count -gt 0 ]]; then
+            _info "Removed $orphaned_count orphaned file(s)"
+        else
+            _log "No orphaned files found"
+        fi
+    }
+    
     # Update page: set Downloaded=true
     _mark_downloaded() {
         local page_id="$1"
@@ -321,6 +426,13 @@ EOF
         IFS=$'\t' read -r page_id url title <<< "$rec"
         
         _info "Processing video $index of $total: $title"
+        
+        # Check if video is already downloaded
+        if _is_video_downloaded "$url"; then
+            _info "Video already downloaded, skipping: $title"
+            return 0
+        fi
+        
         # Download with yt-dlp
         yt-dlp \
             -o "%(title)s-%(id)s.%(ext)s" \
@@ -329,12 +441,7 @@ EOF
         local rc=$?
         
         if [[ $rc -eq 0 ]]; then
-            _log "Downloaded $url -> marking downloaded"
-            if _mark_downloaded "$page_id"; then
-                _log "Updated Notion page $page_id"
-            else
-                _error "Downloaded, but failed to update Notion for $page_id"
-            fi
+            _log "Downloaded $url successfully"
         else
             _error "yt-dlp exit $rc for $url"
         fi
@@ -379,6 +486,10 @@ EOF
         done
         
         _info "Downloads completed."
+        
+        # Clean up orphaned files
+        _log "Checking for orphaned files to clean up..."
+        _cleanup_orphaned_files "${items[@]}"
     }
     
     # Parse arguments
