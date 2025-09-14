@@ -254,21 +254,7 @@ EOF
                 return 1
             fi
             
-            # Emit lines - use clean response and include title information
-            local titles_found
-            titles_found="$(echo "$clean_resp" | jq -r '
-                .results[]
-                | select(.properties.Url.url != null and .properties.Url.url != "")
-                | .properties.Name.title[0].plain_text // "Untitled"
-            ')"
-            
-            if [[ -n "$titles_found" ]]; then
-                _log "Found videos:"
-                while IFS= read -r title; do
-                    _log "  - $title"
-                done <<< "$titles_found"
-            fi
-            
+            # Emit lines - use clean response
             echo "$clean_resp" | jq -r '
                 .results[]
                 | .id as $id
@@ -303,16 +289,39 @@ EOF
         
         # YouTube video IDs are exactly 11 characters long
         # Handle multiple filename formats:
-        # 1. title-VIDEO_ID.ext (e.g., "Some Video-Kf5-HWJPTIE.webm")
-        # 2. [VIDEO_ID].ext (e.g., "[n4Lp4cV8YR0].mp4")
+        # 1. [VIDEO_ID].ext (e.g., "[n4Lp4cV8YR0].mp4")  
+        # 2. title-VIDEO_ID.ext (e.g., "Some Video-Kf5-HWJPTIE.webm")
         
-        # Try format: [VIDEO_ID].ext
-        video_id=$(echo "$filename" | sed -n 's/.*\[\([^]]\{11\}\)\]\..*$/\1/p')
+        # Try format: [VIDEO_ID].ext first
+        if [[ "$filename" == *"["*"]"* ]]; then
+            # Extract content between brackets
+            local temp="${filename##*[}"
+            temp="${temp%%]*}"
+            if [[ ${#temp} -eq 11 ]]; then
+                video_id="$temp"
+            fi
+        fi
         
         # If not found, try format: title-VIDEO_ID.ext
-        # Look for 11 characters followed by a dot and extension at the end
         if [[ -z "$video_id" ]]; then
-            video_id=$(echo "$filename" | sed -n 's/.*-\(.\{11\}\)\.[^.]*$/\1/p')
+            # Remove extension first
+            local basename="${filename%.*}"
+            
+            # Look for 11-character sequences that end the basename
+            # Start from the end and work backwards
+            local len=${#basename}
+            for ((i=len-11; i>=0; i--)); do
+                local candidate="${basename:i:11}"
+                # Check if this is a valid YouTube ID pattern (alphanumeric, hyphens, underscores)
+                if [[ "$candidate" =~ ^[A-Za-z0-9_-]+$ ]]; then
+                    # Make sure it's at the end or followed by a separator
+                    local after_pos=$((i+11))
+                    if [[ $after_pos -eq $len ]] || [[ "${basename:after_pos:1}" =~ [^A-Za-z0-9_-] ]]; then
+                        video_id="$candidate"
+                        break
+                    fi
+                fi
+            done
         fi
         
         echo "$video_id"
@@ -321,7 +330,6 @@ EOF
     # Get list of existing downloaded files and their video IDs
     _get_existing_files() {
         local target_dir="$1"
-        local -A existing_files
         
         if [[ -d "$target_dir" ]]; then
             local file basename_file video_id
@@ -330,17 +338,11 @@ EOF
                     basename_file=$(basename "$file")
                     video_id=$(_extract_id_from_filename "$basename_file")
                     if [[ -n "$video_id" ]]; then
-                        existing_files["$video_id"]="$basename_file"
+                        echo "$video_id:$basename_file"
                     fi
                 fi
             done
         fi
-        
-        # Output video_id:filename pairs
-        local vid
-        for vid in "${!existing_files[@]}"; do
-            echo "$vid:${existing_files[$vid]}"
-        done
     }
     
     # Check if video is already downloaded
@@ -356,6 +358,7 @@ EOF
         
         # Check if any existing file contains this video ID
         while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
             local existing_id="${line%%:*}"
             if [[ "$existing_id" == "$video_id" ]]; then
                 local filename="${line##*:}"
@@ -437,22 +440,31 @@ EOF
         local page_id url title
         IFS=$'\t' read -r page_id url title <<< "$rec"
         
-        _info "  $index. $title"
-        _log "page_id=$page_id"
-        _log "url='$url'"
-        _log "title='$title'"
+        if [[ "$verbose" == true ]]; then
+            _log "page_id=$page_id"
+            _log "url='$url'"
+            _log "title='$title'"
+        fi
         
         # Check if video is already downloaded
         if _is_video_downloaded "$url"; then
-            _info "    ✓ Already downloaded, skipping"
-            return 0
+            return 0  # Skip, already shown in the summary
         fi
         
         # Download with yt-dlp
-        yt-dlp \
-            -o "%(title)s-%(id)s.%(ext)s" \
-            -P "$TARGET_DIR" \
-            "$url"
+        if [[ "$verbose" == true ]]; then
+            yt-dlp \
+                -o "%(title)s-%(id)s.%(ext)s" \
+                -P "$TARGET_DIR" \
+                "$url"
+        else
+            # Suppress yt-dlp output in non-verbose mode
+            yt-dlp \
+                -o "%(title)s-%(id)s.%(ext)s" \
+                -P "$TARGET_DIR" \
+                --quiet \
+                "$url"
+        fi
         local rc=$?
         
         if [[ $rc -eq 0 ]]; then
@@ -479,13 +491,43 @@ EOF
             return 0
         fi
         
-        _log "Found ${#items[@]} items. Starting sequential downloads. Target: $TARGET_DIR"
+        _log "Found ${#items[@]} items. Checking download status..."
         
-        # Process each item sequentially
+        # Show complete list of videos with download status
         local index=1
+        local to_download=()
         for item in "${items[@]}"; do
-            _process_record "$item" "$index" "${#items[@]}"
+            local page_id url title
+            IFS=$'\t' read -r page_id url title <<< "$item"
+            
+            if _is_video_downloaded "$url"; then
+                _info "  $index. $title ✓ Already downloaded"
+            else
+                _info "  $index. $title"
+                to_download+=("$item")
+            fi
             ((index++))
+        done
+        
+        if [[ ${#to_download[@]} -eq 0 ]]; then
+            _info "All videos are already downloaded."
+            # Still run cleanup for orphaned files
+            _log "Checking for orphaned files to clean up..."
+            _cleanup_orphaned_files "${items[@]}"
+            return 0
+        fi
+        
+        _info ""
+        _info "Starting downloads for ${#to_download[@]} new video(s). Target: $TARGET_DIR"
+        
+        # Process only videos that need to be downloaded
+        local download_index=1
+        for item in "${to_download[@]}"; do
+            local page_id url title
+            IFS=$'\t' read -r page_id url title <<< "$item"
+            _info "Downloading $download_index/${#to_download[@]}: $title"
+            _process_record "$item" "$download_index" "${#to_download[@]}"
+            ((download_index++))
         done
         
         _info "Downloads completed."
