@@ -296,28 +296,39 @@ EOF
         echo "$url" | sed -n 's/.*[?&]v=\([^&]*\).*/\1/p; s/.*youtu\.be\/\([^?]*\).*/\1/p; s/.*embed\/\([^?]*\).*/\1/p' | head -1
     }
     
-    # Extract video ID from filename (format: title-VIDEO_ID.ext)
+    # Extract video ID from filename (supports multiple formats)
     _extract_id_from_filename() {
         local filename="$1"
-        # Extract the video ID from filename pattern: title-VIDEO_ID.ext
+        local video_id=""
+        
         # YouTube video IDs are exactly 11 characters long
-        # Look for 11 characters before the file extension
-        echo "$filename" | sed -n 's/.*-\(.\{11\}\)\.[^.]*$/\1/p'
+        # Handle multiple filename formats:
+        # 1. title-VIDEO_ID.ext (e.g., "Some Video-Kf5-HWJPTIE.webm")
+        # 2. [VIDEO_ID].ext (e.g., "[n4Lp4cV8YR0].mp4")
+        
+        # Try format: [VIDEO_ID].ext
+        video_id=$(echo "$filename" | sed -n 's/.*\[\([^]]\{11\}\)\]\..*$/\1/p')
+        
+        # If not found, try format: title-VIDEO_ID.ext
+        # Look for 11 characters followed by a dot and extension at the end
+        if [[ -z "$video_id" ]]; then
+            video_id=$(echo "$filename" | sed -n 's/.*-\(.\{11\}\)\.[^.]*$/\1/p')
+        fi
+        
+        echo "$video_id"
     }
     
     # Get list of existing downloaded files and their video IDs
     _get_existing_files() {
         local target_dir="$1"
-        declare -A existing_files
+        local -A existing_files
         
         if [[ -d "$target_dir" ]]; then
-            local file
+            local file basename_file video_id
             for file in "$target_dir"/*; do
                 if [[ -f "$file" ]]; then
-                    local basename_file
-                    basename_file="$(basename "$file")"
-                    local video_id
-                    video_id="$(_extract_id_from_filename "$basename_file")"
+                    basename_file=$(basename "$file")
+                    video_id=$(_extract_id_from_filename "$basename_file")
                     if [[ -n "$video_id" ]]; then
                         existing_files["$video_id"]="$basename_file"
                     fi
@@ -326,8 +337,9 @@ EOF
         fi
         
         # Output video_id:filename pairs
-        for video_id in "${!existing_files[@]}"; do
-            echo "$video_id:${existing_files[$video_id]}"
+        local vid
+        for vid in "${!existing_files[@]}"; do
+            echo "$vid:${existing_files[$vid]}"
         done
     }
     
@@ -425,11 +437,14 @@ EOF
         local page_id url title
         IFS=$'\t' read -r page_id url title <<< "$rec"
         
-        _info "Processing video $index of $total: $title"
+        _info "  $index. $title"
+        _log "page_id=$page_id"
+        _log "url='$url'"
+        _log "title='$title'"
         
         # Check if video is already downloaded
         if _is_video_downloaded "$url"; then
-            _info "Video already downloaded, skipping: $title"
+            _info "    ✓ Already downloaded, skipping"
             return 0
         fi
         
@@ -462,18 +477,6 @@ EOF
         if [[ ${#items[@]} -eq 0 ]]; then
             _info "No matching items."
             return 0
-        fi
-        
-        # Show found videos in non-verbose mode
-        if [[ "$verbose" != true ]]; then
-            _info "Found videos:"
-            local count=1
-            for item in "${items[@]}"; do
-                local page_id url title
-                IFS=$'\t' read -r page_id url title <<< "$item"
-                _info "  $count. $title"
-                ((count++))
-            done
         fi
         
         _log "Found ${#items[@]} items. Starting sequential downloads. Target: $TARGET_DIR"
