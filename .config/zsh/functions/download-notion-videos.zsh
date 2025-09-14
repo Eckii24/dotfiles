@@ -336,17 +336,17 @@ EOF
     # Clean up orphaned files (files not in Notion video list)
     _cleanup_orphaned_files() {
         local items_ref=("$@")
-        local -A notion_video_ids
+        local notion_video_ids=""
         local item
         
-        # Build set of video IDs from Notion
+        # Build set of video IDs from Notion (using simple string instead of associative array)
         for item in "${items_ref[@]}"; do
             local page_id url title
             IFS=$'\t' read -r page_id url title <<< "$item"
             local video_id
             video_id="$(_extract_video_id "$url")"
             if [[ -n "$video_id" ]]; then
-                notion_video_ids["$video_id"]=1
+                notion_video_ids="${notion_video_ids} ${video_id}"
             fi
         done
         
@@ -357,7 +357,8 @@ EOF
             
             # Check if this file contains any of the known video IDs
             local is_orphan=true
-            for video_id in "${!notion_video_ids[@]}"; do
+            local video_id
+            for video_id in $notion_video_ids; do
                 if _video_id_in_filename "$filename" "$video_id"; then
                     is_orphan=false
                     break
@@ -366,7 +367,11 @@ EOF
             
             if [[ "$is_orphan" == true ]]; then
                 local filepath="$TARGET_DIR/$filename"
-                _info "Removing orphaned file: $filename"
+                if [[ "$verbose" == true ]]; then
+                    _info "Removing orphaned file: $filename"
+                else
+                    _info "Removing: $filename"
+                fi
                 if rm -f "$filepath"; then
                     ((orphaned_count++))
                 else
@@ -411,11 +416,8 @@ EOF
         local page_id url title
         IFS=$'\t' read -r page_id url title <<< "$rec"
         
-        if [[ "$verbose" == true ]]; then
-            _log "page_id=$page_id"
-            _log "url='$url'"
-            _log "title='$title'"
-        fi
+        # Only show details in verbose mode (these are debug details)
+        _log "Processing: page_id=$page_id, url='$url', title='$title'"
         
         # Check if video is already downloaded
         if _is_video_downloaded "$url"; then
