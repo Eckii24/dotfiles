@@ -307,18 +307,37 @@ EOF
             # Remove extension first
             local basename="${filename%.*}"
             
-            # Look for 11-character sequences that end the basename
-            # Start from the end and work backwards
+            # Simple approach: look for the last 11-character sequence before the extension
+            # that looks like a YouTube ID (contains valid characters)
             local len=${#basename}
+            
+            # Try different positions starting from the end
             for ((i=len-11; i>=0; i--)); do
                 local candidate="${basename:i:11}"
-                # Check if this is a valid YouTube ID pattern (alphanumeric, hyphens, underscores)
-                if [[ "$candidate" =~ ^[A-Za-z0-9_-]+$ ]]; then
-                    # Make sure it's at the end or followed by a separator
+                
+                # Check if candidate contains only valid YouTube ID characters
+                # Using case statement for zsh compatibility
+                local is_valid=true
+                for ((j=0; j<11; j++)); do
+                    local char="${candidate:j:1}"
+                    case "$char" in
+                        [A-Za-z0-9_-]) ;;
+                        *) is_valid=false; break ;;
+                    esac
+                done
+                
+                if [[ "$is_valid" == true ]]; then
+                    # Check if this is at the end or followed by a non-alphanumeric character
                     local after_pos=$((i+11))
-                    if [[ $after_pos -eq $len ]] || [[ "${basename:after_pos:1}" =~ [^A-Za-z0-9_-] ]]; then
+                    if [[ $after_pos -eq $len ]]; then
                         video_id="$candidate"
                         break
+                    elif [[ $after_pos -lt $len ]]; then
+                        local next_char="${basename:after_pos:1}"
+                        case "$next_char" in
+                            [A-Za-z0-9_-]) ;;
+                            *) video_id="$candidate"; break ;;
+                        esac
                     fi
                 fi
             done
