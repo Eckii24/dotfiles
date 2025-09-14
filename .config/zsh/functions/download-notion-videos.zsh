@@ -282,83 +282,29 @@ EOF
         echo "$url" | sed -n 's/.*[?&]v=\([^&]*\).*/\1/p; s/.*youtu\.be\/\([^?]*\).*/\1/p; s/.*embed\/\([^?]*\).*/\1/p' | head -1
     }
     
-    # Extract video ID from filename (supports multiple formats)
-    _extract_id_from_filename() {
+    # Check if video ID is contained in filename (simple contains check)
+    _video_id_in_filename() {
         local filename="$1"
-        local video_id=""
+        local video_id="$2"
         
-        # YouTube video IDs are exactly 11 characters long
-        # Handle multiple filename formats:
-        # 1. [VIDEO_ID].ext (e.g., "[n4Lp4cV8YR0].mp4")  
-        # 2. title-VIDEO_ID.ext (e.g., "Some Video-Kf5-HWJPTIE.webm")
-        
-        # Try format: [VIDEO_ID].ext first
-        if [[ "$filename" == *"["*"]"* ]]; then
-            # Extract content between brackets
-            local temp="${filename##*[}"
-            temp="${temp%%]*}"
-            if [[ ${#temp} -eq 11 ]]; then
-                video_id="$temp"
-            fi
+        # Simple contains check - if video ID is anywhere in the filename, consider it a match
+        if [[ "$filename" == *"$video_id"* ]]; then
+            return 0  # Found
         fi
         
-        # If not found, try format: title-VIDEO_ID.ext
-        if [[ -z "$video_id" ]]; then
-            # Remove extension first
-            local basename="${filename%.*}"
-            
-            # Simple approach: look for the last 11-character sequence before the extension
-            # that looks like a YouTube ID (contains valid characters)
-            local len=${#basename}
-            
-            # Try different positions starting from the end
-            for ((i=len-11; i>=0; i--)); do
-                local candidate="${basename:i:11}"
-                
-                # Check if candidate contains only valid YouTube ID characters
-                # Using case statement for zsh compatibility
-                local is_valid=true
-                for ((j=0; j<11; j++)); do
-                    local char="${candidate:j:1}"
-                    case "$char" in
-                        [A-Za-z0-9_-]) ;;
-                        *) is_valid=false; break ;;
-                    esac
-                done
-                
-                if [[ "$is_valid" == true ]]; then
-                    # Check if this is at the end or followed by a non-alphanumeric character
-                    local after_pos=$((i+11))
-                    if [[ $after_pos -eq $len ]]; then
-                        video_id="$candidate"
-                        break
-                    elif [[ $after_pos -lt $len ]]; then
-                        local next_char="${basename:after_pos:1}"
-                        case "$next_char" in
-                            [A-Za-z0-9_-]) ;;
-                            *) video_id="$candidate"; break ;;
-                        esac
-                    fi
-                fi
-            done
-        fi
-        
-        echo "$video_id"
+        return 1  # Not found
     }
     
-    # Get list of existing downloaded files and their video IDs
+    # Get list of existing downloaded files
     _get_existing_files() {
         local target_dir="$1"
         
         if [[ -d "$target_dir" ]]; then
-            local file basename_file video_id
+            local file basename_file
             for file in "$target_dir"/*; do
                 if [[ -f "$file" ]]; then
                     basename_file=$(basename "$file")
-                    video_id=$(_extract_id_from_filename "$basename_file")
-                    if [[ -n "$video_id" ]]; then
-                        echo "$video_id:$basename_file"
-                    fi
+                    echo "$basename_file"
                 fi
             done
         fi
@@ -376,11 +322,9 @@ EOF
         fi
         
         # Check if any existing file contains this video ID
-        while IFS= read -r line; do
-            [[ -z "$line" ]] && continue
-            local existing_id="${line%%:*}"
-            if [[ "$existing_id" == "$video_id" ]]; then
-                local filename="${line##*:}"
+        while IFS= read -r filename; do
+            [[ -z "$filename" ]] && continue
+            if _video_id_in_filename "$filename" "$video_id"; then
                 _log "Video $video_id already downloaded as: $filename"
                 return 0  # Already downloaded
             fi
@@ -408,13 +352,21 @@ EOF
         
         # Check existing files and remove orphans
         local orphaned_count=0
-        while IFS= read -r line; do
-            local existing_id="${line%%:*}"
-            local filename="${line##*:}"
+        while IFS= read -r filename; do
+            [[ -z "$filename" ]] && continue
             
-            if [[ -z "${notion_video_ids[$existing_id]:-}" ]]; then
+            # Check if this file contains any of the known video IDs
+            local is_orphan=true
+            for video_id in "${!notion_video_ids[@]}"; do
+                if _video_id_in_filename "$filename" "$video_id"; then
+                    is_orphan=false
+                    break
+                fi
+            done
+            
+            if [[ "$is_orphan" == true ]]; then
                 local filepath="$TARGET_DIR/$filename"
-                _info "Removing orphaned file: $filename (video ID: $existing_id)"
+                _info "Removing orphaned file: $filename"
                 if rm -f "$filepath"; then
                     ((orphaned_count++))
                 else
