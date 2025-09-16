@@ -3,7 +3,10 @@
   "autoupdate": true,
   "theme": "catppuccin",
   "permission": {
-    "bash": "ask"
+    "bash": {
+      "dotnet build": "allow",
+      "dotnet test": "allow"
+    }
   },
   "formatter": {
     "csharpier": {
