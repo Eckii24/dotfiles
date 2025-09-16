@@ -8,12 +8,10 @@ alias diff='delta -n -s'
 alias rm='trash-put'
 alias specify='uvx --from git+https://github.com/github/spec-kit.git specify'
 
-# AI Neovim with CodeCompanion chat in buffer layout
+# AI related stuff
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
 alias mcp='nvim +"MCPHub"'
-
-# Function aliases
-alias youtube-notionsync='download-notion-videos'
+alias update-copilot-instructions='cp /home/vimateck/Development/Repos/Notes/p0-rules.instructions.md /mnt/c/Users/vimateck/AppData/Roaming/Code/User/prompts/'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
