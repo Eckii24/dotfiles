@@ -61,7 +61,10 @@ return {
         },
         strategies = {
           chat = {
-            adapter = "copilot",
+            adapter = {
+              name = "copilot",
+              model = "gpt-5-mini",
+            },
             keymaps = {
               close = {
                 modes = {
@@ -116,7 +119,10 @@ return {
             },
           },
           inline = {
-            adapter = "copilot",
+            adapter = {
+              name = "copilot",
+              model = "gpt-5-mini",
+            },
           },
         },
         prompt_library = {
