@@ -23,6 +23,7 @@ return {
       "ravitemer/codecompanion-history.nvim",
       "lalitmee/codecompanion-spinners.nvim",
       "folke/snacks.nvim",
+      { dir = "~/Development/codecompanion-filewise.nvim/" },
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -144,6 +145,19 @@ return {
             },
           },
         },
+        memory = {
+          copilot = {
+            description = "Instruction files from copilot",
+            files = {
+              vim.env.HOME .. "/Library/Application Support/Code - Insiders/User/prompts/*.instructions.md",
+            },
+          },
+          opts = {
+            chat = {
+              enabled = true,
+            },
+          },
+        },
         extensions = {
           mcphub = {
             callback = "mcphub.extensions.codecompanion",
@@ -168,26 +182,26 @@ return {
               style = "snacks",
             },
           },
-          rules_loader = {
-            enabled = true,
+          custom_instructions = {
             opts = {
-              paths = {
-                "AGENTS.md",
-                ".github/copilot-instructions.md",
-                ".github/instructions/**/*",
-                ".kilocode/rules/**/*",
-                "~/.kilocode/rules/**/*",
-                "$APPDATA/Code/User/prompts/*.instructions.md",
+              conditional = {
+                vim.env.HOME .. "/Library/Application Support/Code - Insiders/User/prompts/*.instructions.md",
               },
             },
-            callback = "codecompanion._extensions.rules_loader",
           },
-          copilot_prompts = {
-            enabled = true,
+          custom_modes = {
             opts = {
-              content_prefix = "Current file: #{buffer}. Current structure #{ls}. Use #{rules}.Act as @{full_stack_dev}.",
+              mode_dirs = {
+                vim.env.HOME .. "/Library/Application Support/Code - Insiders/User/prompts/",
+              },
             },
-            callback = "codecompanion._extensions.copilot_prompts",
+          },
+          custom_prompts = {
+            opts = {
+              prompt_dirs = {
+                vim.env.HOME .. "/Library/Application Support/Code - Insiders/User/prompts/",
+              },
+            },
           },
         },
         display = {
