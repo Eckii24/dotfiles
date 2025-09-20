@@ -106,6 +106,7 @@ return {
               list = {
                 keys = {
                   ["<leader>n"] = "create_new_note",
+                  ["<C-n>"] = { "create_new_note", mode = { "n", "i" } },
                 },
               },
             },
