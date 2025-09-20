@@ -101,6 +101,45 @@ return {
               end,
             },
           },
+          files = {
+            win = {
+              list = {
+                keys = {
+                  ["<leader>n"] = "create_new_note",
+                },
+              },
+            },
+            actions = {
+              create_new_note = function(picker)
+                local notes_dir = vim.env.NOTES_DIR or vim.fn.expand("~/Development/Repos/Notes")
+                local current_date = os.date("%y%m%d")
+                local default_name = current_date .. "_"
+                
+                local input = vim.fn.input({
+                  prompt = "New note name: ",
+                  default = default_name,
+                  completion = "file",
+                })
+                
+                if input and input ~= "" then
+                  local full_path = notes_dir .. "/" .. input
+                  if not string.match(input, "%.md$") then
+                    full_path = full_path .. ".md"
+                  end
+                  
+                  -- Create directory if needed
+                  local dir = vim.fn.fnamemodify(full_path, ":h")
+                  vim.fn.mkdir(dir, "p")
+                  
+                  -- Create and open the file
+                  vim.cmd("edit " .. vim.fn.fnameescape(full_path))
+                  
+                  -- Close the picker
+                  picker:close()
+                end
+              end,
+            },
+          },
         },
       },
       dashboard = {
