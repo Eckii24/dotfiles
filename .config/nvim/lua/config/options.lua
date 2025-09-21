@@ -4,9 +4,6 @@
 -- Add any additional options here
 vim.opt.colorcolumn = "120"
 
--- Use the default vim clipboard behavior.
-vim.opt.clipboard = ""
-
 vim.lsp.config("roslyn", {
   settings = {
     ["csharp|inlay_hints"] = {
