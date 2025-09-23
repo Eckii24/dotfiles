@@ -195,6 +195,21 @@ return {
         end,
         desc = "Restore",
       },
+      { "<leader>Nd", "", desc = "Diagnostics" },
+      {
+        "<leader>Ndw",
+        function()
+          require("easy-dotnet.actions.diagnostics").get_workspace_diagnostics("warning")
+        end,
+        desc = "Warnings",
+      },
+      {
+        "<leader>Nde",
+        function()
+          require("easy-dotnet.actions.diagnostics").get_workspace_diagnostics("error")
+        end,
+        desc = "Errors",
+      },
     },
   },
   {
