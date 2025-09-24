@@ -12,7 +12,6 @@ echo "Updating package lists..."
 sudo apt-get update
 
 bin_dir="$HOME/.local/bin"
-mkdir -p "$bin_dir"
 
 # Function to install apt packages
 install_apt_packages() {
