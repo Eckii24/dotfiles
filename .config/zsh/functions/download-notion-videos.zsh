@@ -43,9 +43,13 @@ Dependencies: curl, jq, yt-dlp
 EOF
     }
     
-    # Simple logging functions
-    _log() {
+    # Unified logging functions
+    _debug() {
         [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] $1" >&2
+    }
+    
+    _info() {
+        echo "[$FUNCTION_NAME] $1"
     }
     
     _error() {
@@ -65,7 +69,7 @@ EOF
     # Query Notion database
     _fetch_items() {
         local db_id="$1"
-        _log "Querying Notion database"
+        _debug "Querying Notion database"
         
         local resp
         resp="$(curl -sS \
@@ -101,7 +105,6 @@ EOF
     # Download a video
     _download_video() {
         local url="$1" title="$2"
-        echo "Downloading: $title"
         
         # Use the simple approach that works - just basic options
         local yt_opts=(
@@ -122,7 +125,7 @@ EOF
     mkdir -p "$TARGET_DIR" || { _error "Cannot create target directory: $TARGET_DIR"; return 1; }
     
     # Main execution logic
-    _log "Querying Notion database"
+    _debug "Querying Notion database"
     local -a to_download=()
     local downloaded=0 total=0
     
@@ -130,32 +133,32 @@ EOF
     while IFS=$'\t' read -r page_id url title; do
         ((total++))
         if _is_video_downloaded "$url"; then
-            _log "$total. $title ✓ Already downloaded"
+            _debug "$total. $title ✓ Already downloaded"
             ((downloaded++))
         else
-            echo "$total. $title"
+            _info "$total. $title"
             to_download+=("$page_id"$'\t'"$url"$'\t'"$title")
         fi
     done < <(_fetch_items "$RES_DB_ID")
     
-    [[ $total -eq 0 ]] && echo "No videos found" && return 0
+    [[ $total -eq 0 ]] && _info "No videos found" && return 0
     
     if [[ ${#to_download[@]} -eq 0 ]]; then
-        echo "All videos are already downloaded ($total/$total)"
+        _info "All videos are already downloaded ($total/$total)"
         return 0
     fi
     
     echo ""
-    echo "Starting downloads for ${#to_download[@]} video(s):"
+    _info "Starting downloads for ${#to_download[@]} video(s):"
     
     # Second pass: download the videos
     local i=1
     for item in "${to_download[@]}"; do
         IFS=$'\t' read -r page_id url title <<< "$item"
-        echo "[$i/${#to_download[@]}] Downloading: $title"
+        _info "[$i/${#to_download[@]}] Downloading: $title"
         _download_video "$url" "$title"
         ((i++))
     done
     
-    echo "Complete. Downloaded: ${#to_download[@]}/$total videos"
+    _info "Complete. Downloaded: ${#to_download[@]}/$total videos"
 }
