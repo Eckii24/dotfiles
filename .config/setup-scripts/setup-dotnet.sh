@@ -41,7 +41,6 @@ echo "Install dotnet tools..."
 dotnet tool install -g csharpier
 dotnet tool install -g dotnet-outdated-tool
 dotnet tool install -g dotnet-ef
-dotnet tool install -g JetBrains.ReSharper.GlobalTools
 
 echo "Sync Neovim plugins..."
 ~/.local/share/bob/nvim-bin/nvim --headless "+Lazy! sync" +qa
