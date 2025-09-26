@@ -95,7 +95,7 @@ return {
                 return string.format(
                   "  %s%s",
                   adapter.formatted_name,
-                  adapter.schema.model.default and " (" .. adapter.schema.model.default .. ")" or ""
+                  adapter.schema and adapter.schema.model.default and " (" .. adapter.schema.model.default .. ")" or ""
                 )
               end,
             },
