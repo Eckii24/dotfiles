@@ -21,15 +21,7 @@ function code() {
     command code-insiders "${args[@]}"
   else
     # Try to find external code command (not the function)
-    local code_path
-    for dir in ${(s/:/)PATH}; do
-      if [[ -x "$dir/code" ]]; then
-        code_path="$dir/code"
-        break
-      fi
-    done
-    
-    if [[ -n "$code_path" ]]; then
+    if command -v code >/dev/null 2>&1; then
       command code "${args[@]}"
     else
       command code-insiders "${args[@]}"
