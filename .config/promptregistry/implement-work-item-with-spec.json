@@ -1,0 +1,16 @@
+{
+  "id": "implement-work-item-with-spec",
+  "description": "Prompt to create a specification for a work item using its ID.",
+  "tags": [
+    "work item",
+    "specification"
+  ],
+  "variables": {
+    "workItemId": {
+      "description": "The Azure Work Item ID to load.",
+      "required": true
+    }
+  },
+  "metadata": {},
+  "contentFile": "implement-work-item-with-spec.md"
+}
