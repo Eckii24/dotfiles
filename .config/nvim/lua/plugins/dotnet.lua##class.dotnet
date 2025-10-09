@@ -298,6 +298,8 @@ return {
           }
         end
       end
+
+      require("easy-dotnet.netcoredbg").register_dap_variables_viewer()
     end,
   },
 }
