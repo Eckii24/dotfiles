@@ -16,6 +16,9 @@ return {
             end
           end,
           "snippet_forward",
+          function() -- sidekick next edit suggestion
+            return require("sidekick").nes_jump_or_apply()
+          end,
           "fallback",
         },
         ["<S-Tab>"] = { "snippet_backward", "fallback" },
@@ -205,6 +208,25 @@ return {
         "<leader>hp",
         "<cmd>Gitsigns preview_hunk_inline<cr>",
         desc = "Preview Hunk Inline",
+      },
+    },
+  },
+  {
+    "folke/sidekick.nvim",
+    keys = {
+      {
+        "<leader>ag",
+        function()
+          require("sidekick.cli").toggle({ name = "copilot", focus = true })
+        end,
+        desc = "Sidekick Toggle Copilot",
+      },
+      {
+        "<leader>ao",
+        function()
+          require("sidekick.cli").toggle({ name = "opencode", focus = true })
+        end,
+        desc = "Sidekick Toggle Opencode",
       },
     },
   },

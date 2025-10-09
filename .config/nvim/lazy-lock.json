@@ -52,6 +52,7 @@
   "refactoring.nvim": { "branch": "master", "commit": "74b608dfee827c2372250519d433cc21cb083407" },
   "render-markdown.nvim": { "branch": "main", "commit": "f3321d0b74d61a8305cf19d891f3c7046bc4dac2" },
   "roslyn.nvim": { "branch": "main", "commit": "7d8819239c5e2c4a0d8150da1c00fa583f761704" },
+  "sidekick.nvim": { "branch": "main", "commit": "f694c23a53dd6a726ee8c0fc216d80dffe53bd22" },
   "snacks.nvim": { "branch": "main", "commit": "bfe8c26dbd83f7c4fbc222787552e29b4eccfcc0" },
   "todo-comments.nvim": { "branch": "main", "commit": "304a8d204ee787d2544d8bc23cd38d2f929e7cc5" },
   "tokyonight.nvim": { "branch": "main", "commit": "4d159616aee17796c2c94d2f5f87d2ee1a3f67c7" },
