@@ -228,6 +228,8 @@ return {
         end,
         desc = "Sidekick Toggle Opencode",
       },
+      { "<leader>aa", false },
+      { "<leader>ac", false },
     },
   },
 }
