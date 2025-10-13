@@ -9,11 +9,23 @@ return {
       keymap = {
         ["<Tab>"] = {
           function(cmp)
+            -- 1) If a snippet is active, accept it
             if cmp.snippet_active() then
               return cmp.accept()
-            else
-              return cmp.select_and_accept()
             end
+            -- 2) Try to accept an inline LSP completion (copilot-native)
+            local ok, res = pcall(function()
+              if vim.lsp and vim.lsp.inline_completion and vim.lsp.inline_completion.get then
+                return vim.lsp.inline_completion.get()
+              end
+            end)
+            if ok and type(res) == "function" then
+              -- call the accept function returned by the API
+              pcall(res)
+              return true
+            end
+            -- 3) Fallback to select_and_accept (existing behavior)
+            return cmp.select_and_accept()
           end,
           "snippet_forward",
           function() -- sidekick next edit suggestion
