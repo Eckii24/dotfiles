@@ -31,6 +31,7 @@ download-notion-videos() {
 Usage: download-notion-videos [options]
 
 Download YouTube videos from a Notion database.
+Checks recursively in all subdirectories to avoid re-downloading existing videos.
 
 Options:
   -t, --target DIR    Target directory for downloads (default: $VIDEO_FOLDER)
@@ -98,7 +99,7 @@ EOF
         
         [[ -z "$video_id" ]] && return 1
         
-        # Check if any file in target dir contains this video ID
+        # Check if any file in target dir (recursively searching all subdirectories) contains this video ID
         [[ -d "$TARGET_DIR" ]] && find "$TARGET_DIR" -name "*$video_id*" -type f | grep -q .
     }
 
