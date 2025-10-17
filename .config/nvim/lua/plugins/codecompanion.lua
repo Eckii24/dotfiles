@@ -70,17 +70,23 @@ return {
                 modes = {
                   n = "q",
                 },
-                index = 3,
+                index = 4,
                 callback = "keymaps.close",
                 description = "Close Chat",
               },
               stop = {
                 modes = {
-                  n = "<C-c",
+                  n = "gs",
                 },
-                index = 4,
+                index = 5,
                 callback = "keymaps.stop",
                 description = "Stop Request",
+              },
+              system_prompt = {
+                modes = { n = "gP" },
+                index = 17,
+                callback = "keymaps.toggle_system_prompt",
+                description = "Toggle system prompt",
               },
             },
             tools = {
