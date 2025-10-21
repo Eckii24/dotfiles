@@ -33,7 +33,12 @@ return {
             opencode = function()
               return require("codecompanion.adapters").extend("acp", {
                 name = "opencode",
-                url = "http://localhost:3210/acp",
+                commands = {
+                  default = {
+                    "opencode",
+                    "acp",
+                  },
+                },
                 schema = {
                   model = {
                     default = "claude-3-5-sonnet-20241022",
