@@ -7,3 +7,4 @@ uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
 
 echo "Install OpenCode"
 curl -fsSL https://opencode.ai/install | bash
+ln -sf "$HOME"/.opencode/bin/opencode "$HOME"/.local/bin/opencode
