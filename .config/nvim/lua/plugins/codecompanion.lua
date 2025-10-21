@@ -29,6 +29,19 @@ return {
       local layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical"
       return {
         adapters = {
+          acp = {
+            opencode = function()
+              return require("codecompanion.adapters").extend("acp", {
+                name = "opencode",
+                url = "http://localhost:3210/acp",
+                schema = {
+                  model = {
+                    default = "claude-3-5-sonnet-20241022",
+                  },
+                },
+              })
+            end,
+          },
           http = {
             azure_openai = function()
               return require("codecompanion.adapters").extend("azure_openai", {
