@@ -13,18 +13,18 @@ return {
       "DiffviewFileHistory",
     },
     keys = {
-      { "<leader>gD", desc = "+diffview" },
-      { "<leader>gDi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
-      { "<leader>gDl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "HEAD to Last Commit" },
-      { "<leader>gDm", "<cmd>DiffviewOpen origin/master<cr>", desc = "HEAD to Origin/master" },
-      { "<leader>gDf", "<cmd>DiffviewFileHistory %<cr>", desc = "Current File History" },
-      { "<leader>gDf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
-      { "<leader>gDq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
+      { "<leader>gV", desc = "+diffview" },
+      { "<leader>gVi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
+      { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "HEAD to Last Commit" },
+      { "<leader>gVm", "<cmd>DiffviewOpen origin/master<cr>", desc = "HEAD to Origin/master" },
+      { "<leader>gVf", "<cmd>DiffviewFileHistory %<cr>", desc = "Current File History" },
+      { "<leader>gVf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
+      { "<leader>gVq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
       {
-        "<leader>gDc",
+        "<leader>gVc",
         function()
           require("snacks.picker").git_log({
-            confirm = function (_, item)
+            confirm = function(_, item)
               if item and item.commit then
                 vim.cmd("DiffviewOpen " .. item.commit)
               end
@@ -34,18 +34,18 @@ return {
         desc = "HEAD to Commit (Picker)",
       },
       {
-        "<leader>gDb",
+        "<leader>gVb",
         function()
           require("snacks.picker").git_branches({
-            confirm = function (_, item)
+            confirm = function(_, item)
               if item and item.branch then
                 vim.cmd("DiffviewOpen " .. item.branch)
               end
-            end
+            end,
           })
         end,
         desc = "HEAD to Branch (Picker)",
-      }
+      },
     },
     opts = {
       keymaps = {
