@@ -27,7 +27,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     local client = vim.lsp.get_client_by_id(args.data.client_id)
     local bufnr = args.buf
 
-    if client and (client.name == "roslyn" or client.name == "roslyn_ls") then
+    if client and (client.name == "roslyn" or client.name == "roslyn_ls" or client.name == "easy_dotnet") then
       vim.api.nvim_create_autocmd("InsertCharPre", {
         desc = "Roslyn: Trigger an auto insert on '/'.",
         buffer = bufnr,
