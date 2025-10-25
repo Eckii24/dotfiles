@@ -77,6 +77,9 @@ return {
       },
       picker = {
         sources = {
+          projects = {
+            dev = { "~/Development/" },
+          },
           explorer = {
             win = {
               list = {
