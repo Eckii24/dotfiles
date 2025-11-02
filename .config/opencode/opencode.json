@@ -19,6 +19,9 @@
       ]
     }
   },
+  "instructions": [
+    ".github/copilot-instructions.md"
+  ],
   "mcp": {
     "mcphub": {
       "type": "remote",
