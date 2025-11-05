@@ -292,9 +292,7 @@ return {
       formatters = {
         csharpier = {
           command = "csharpier",
-          args = { "format", "--write-stdout" },
-          stdin = true,
-          require_cwd = true,
+          args = { "format", "--write-stdout", "$FILENAME" },
         },
       },
     },
