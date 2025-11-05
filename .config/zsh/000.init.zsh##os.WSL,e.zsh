@@ -1,5 +1,6 @@
 autoload -Uz compinit
 compinit
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 
 # ZSH plugins for Linux (installed via git clones, not brew)
 ZSH_PLUGINS_DIR="$HOME/.local/share/zsh-plugins"

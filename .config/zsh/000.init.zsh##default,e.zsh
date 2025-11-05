@@ -1,5 +1,6 @@
 autoload -Uz compinit
 compinit
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 
 # Source brew director, if not already done
 if [[  -x "/opt/homebrew/bin/brew"  ]]; then
