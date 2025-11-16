@@ -3,7 +3,7 @@
 # Download YouTube videos from Karakeep bookmarks.
 
 download-karakeep-videos() {
-    local -r KARAKEEP_API="https://api.karakeep.app/api/v1"
+    local -r KARAKEEP_API="${KARAKEEP_API:-https://api.karakeep.app/api/v1}"
     local -r FUNCTION_NAME="download-karakeep-videos"
     
     # Display help information
@@ -62,7 +62,7 @@ EOF
     # Build Karakeep search query
     # Search for bookmarks with YouTube URLs using the query language
     # URL filter supports multiple YouTube URL variants
-    local search_query='url:youtube.com OR url:youtu.be OR url:youtube.com/embed'
+    local search_query='url:youtube.com OR url:youtu.be'
     
     # Query Karakeep API
     _fetch_items() {
