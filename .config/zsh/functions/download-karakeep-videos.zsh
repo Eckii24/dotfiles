@@ -62,18 +62,22 @@ EOF
     # Build Karakeep search query
     # Search for bookmarks with YouTube URLs using the query language
     # URL filter supports multiple YouTube URL variants
-    local search_query='(url:youtube.com OR url:youtu.be) AND -is:archived'
+    local search_query='(url:youtube.com or url:youtu.be) and -is:archived'
     
     # Query Karakeep API
     _fetch_items() {
         _debug "Querying Karakeep API"
+        
+        # URL-encode the search query
+        local encoded_query
+        encoded_query="$(echo -n "$search_query" | jq -sRr @uri)"
         
         local resp
         resp="$(curl -sS \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
             -H "Content-Type: application/json" \
             -X GET \
-            "$KARAKEEP_HOST/api/v1/bookmarks?limit=10")" || { _error "Failed to query Karakeep API"; return 1; }
+            "$KARAKEEP_HOST/api/v1/bookmarks/search?q=$encoded_query")" || { _error "Failed to query Karakeep API"; return 1; }
         
         # Clean control characters from response before parsing
         resp="$(echo "$resp" | tr -d '\000-\037')"
