@@ -3,7 +3,6 @@
 # Download YouTube videos from Karakeep bookmarks.
 
 download-karakeep-videos() {
-    local -r KARAKEEP_API="${KARAKEEP_API:-https://api.karakeep.app/api/v1}"
     local -r FUNCTION_NAME="download-karakeep-videos"
     
     # Display help information
@@ -26,6 +25,7 @@ EOF
     # Defaults from env
     local TARGET_DIR="${VIDEO_FOLDER:-}"
     local KARAKEEP_TOKEN_VAL="${KARAKEEP_TOKEN:-}"
+    local KARAKEEP_HOST="${KARAKEEP_HOST:-}"
     local verbose=false
     
     # Parse command line arguments
@@ -62,7 +62,7 @@ EOF
     # Build Karakeep search query
     # Search for bookmarks with YouTube URLs using the query language
     # URL filter supports multiple YouTube URL variants
-    local search_query='url:youtube.com OR url:youtu.be'
+    local search_query='(url:youtube.com OR url:youtu.be) AND -is:archived'
     
     # Query Karakeep API
     _fetch_items() {
@@ -73,7 +73,10 @@ EOF
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
             -H "Content-Type: application/json" \
             -X GET \
-            "$KARAKEEP_API/bookmarks/search?q=$(printf %s "$search_query" | jq -sRr @uri)")" || { _error "Failed to query Karakeep API"; return 1; }
+            "$KARAKEEP_HOST/api/v1/bookmarks?limit=10")" || { _error "Failed to query Karakeep API"; return 1; }
+        
+        # Clean control characters from response before parsing
+        resp="$(echo "$resp" | tr -d '\000-\037')"
         
         # Check for API error
         if echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
@@ -81,8 +84,8 @@ EOF
             return 1
         fi
         
-        # Extract bookmarks with URL and title
-        echo "$resp" | jq -r '.bookmarks[]? | select(.url) | (.id + "\t" + .url + "\t" + (.title // "Untitled"))'
+        # Extract bookmarks with URL and title - filter for YouTube URLs
+        echo "$resp" | jq -r '.bookmarks[]? | select(.content.url) | select(.content.url | test("youtube\\.com|youtu\\.be")) | (.id + "\t" + .content.url + "\t" + (.title // "Untitled"))'
     }
     
     # Check if video is already downloaded
@@ -116,6 +119,7 @@ EOF
     # Validate required parameters
     [[ -z "$TARGET_DIR" ]] && { _error "Target directory not set. Use -t or VIDEO_FOLDER env"; return 1; }
     [[ -z "$KARAKEEP_TOKEN_VAL" ]] && { _error "Karakeep token not set. Use --token or KARAKEEP_TOKEN env"; return 1; }
+    [[ -z "$KARAKEEP_HOST" ]] && { _error "Karakeep host not set. Use KARAKEEP_HOST env"; return 1; }
     
     mkdir -p "$TARGET_DIR" || { _error "Cannot create target directory: $TARGET_DIR"; return 1; }
     
