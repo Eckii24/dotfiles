@@ -125,10 +125,10 @@ bindsym $mod+a focus parent
 # Define names for default workspaces for which we configure key bindings later on.
 # We use variables to avoid repeating the names in multiple places.
 set $ws1 "1"
-set $ws2 "2"
+set $ws2 "2 Rider"
 set $ws3 "3"
 set $ws4 "4"
-set $ws5 "5"
+set $ws5 "5 VSCode"
 set $ws6 "6 Edge"
 set $ws7 "7 Mockoon"
 set $ws8 "8 Zeebe"
@@ -169,6 +169,7 @@ bindsym $mod+Shift+q exec "i3-nagbar -t warning -m 'You pressed the power off sh
 
 # Assign Worksapces:
 for_window [class="Rider|rider"] move to workspace $ws2
+for_window [class="Code - Insiders|code - insiders"] move to workspace $ws5
 for_window [class="Microsoft Edge|edge"] move to workspace $ws6
 for_window [class="Mockoon|mockoon"] move to workspace $ws7
 for_window [class="Camunda Modeler|camunda-modeler"] move to workspace $ws8
@@ -176,11 +177,12 @@ for_window [class="OpenLens"] move to workspace $ws9
 
 # Auto start applications
 exec --no-startup-id alacritty
-exec --no-startup-id rider
+# exec --no-startup-id rider
 exec --no-startup-id edge
 exec --no-startup-id mockoon
-exec --no-startup-id camunda-modeler
+# exec --no-startup-id camunda-modeler
 exec --no-startup-id open-lens
+exec --no-startup-id code-insiders
 
 # Other settings
 focus_follows_mouse yes
