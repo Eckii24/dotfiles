@@ -81,7 +81,7 @@
           "style": "diamond",
           "leading_diamond": "<transparent,background>\ue0b0</>",
           "trailing_diamond": "\ue0b0",
-          "template": "{{ if gt (.Output | trim | int) 0 }} \uf0ae {{ .Output }} {{ end }}",
+          "template": "{{ if .Output }}{{ if gt (.Output | trim | int) 0 }} \uf0ae {{ .Output }} {{ end }}{{ end }}",
           "type": "command",
           "properties": {
             "command": "task status:pending count",
