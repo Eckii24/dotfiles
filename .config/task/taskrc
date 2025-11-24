@@ -21,11 +21,13 @@ include solarized-dark-256.theme
 #include solarized-light-256.theme
 #include no-color.theme
 
+news.version=3.4.2
+
 # CALENDAR
 weekstart=Monday
 
 # URGENCY
-urgency.age.coefficient=-2
+urgency.age.coefficient=-3
 urgency.age.max=90
 urgency.tags.coefficient=0
 urgency.project.coefficient=0
