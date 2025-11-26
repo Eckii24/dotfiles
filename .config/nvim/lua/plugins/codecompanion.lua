@@ -174,27 +174,6 @@ return {
               style = "snacks",
             },
           },
-          rules_loader = {
-            enabled = true,
-            opts = {
-              paths = {
-                "AGENTS.md",
-                ".github/copilot-instructions.md",
-                ".github/instructions/**/*",
-                ".kilocode/rules/**/*",
-                "~/.kilocode/rules/**/*",
-                "$APPDATA/Code/User/prompts/*.instructions.md",
-              },
-            },
-            callback = "codecompanion._extensions.rules_loader",
-          },
-          copilot_prompts = {
-            enabled = true,
-            opts = {
-              content_prefix = "Current file: #{buffer}. Current structure #{ls}. Use #{rules}.Act as @{full_stack_dev}.",
-            },
-            callback = "codecompanion._extensions.copilot_prompts",
-          },
         },
         display = {
           diff = {
@@ -203,6 +182,22 @@ return {
           chat = {
             window = {
               layout = layout,
+            },
+          },
+        },
+        memory = {
+          default = {
+            description = "Collection of common files for all projects",
+            files = {
+              "AGENTS.md",
+              ".github/copilot-instructions.md",
+              ".github/instructions/**/*",
+              "$APPDATA/Code/User/prompts/*.instructions.md",
+            },
+          },
+          opts = {
+            chat = {
+              enabled = true,
             },
           },
         },
