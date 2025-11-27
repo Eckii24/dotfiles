@@ -1,0 +1,9 @@
+[general]
+targets = ["ado_issues"]
+
+[ado_issues]
+service = "azuredevops"
+PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+project = "VIS - Program 0"
+organization = "ZEISSgroup-VIS"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'"
