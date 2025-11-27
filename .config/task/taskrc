@@ -17,7 +17,7 @@ hooks.location=~/.config/task/hooks
 #include dark-yellow-green.theme
 #include dark-gray-256.theme
 #include dark-gray-blue-256.theme
-include solarized-dark-256.theme
+#include solarized-dark-256.theme
 #include solarized-light-256.theme
 #include no-color.theme
 
@@ -44,3 +44,43 @@ uda.effort.label=Zeitaufwand
 uda.effort.values=5 Min,15 Min,30 Min,1h,2h,4h,1d
 uda.notion_id.type=string
 uda.notion_id.label=Notion ID
+
+# ----------------------------------------------------------------------
+# Azure Devops Integration
+# ----------------------------------------------------------------------
+
+# UDAs
+uda.adotitle.type=string
+uda.adotitle.label=Azure Devops Title
+uda.adodescription.type=string
+uda.adodescription.label=Azure Devops Description
+uda.adoid.type=numeric
+uda.adoid.label=Azure Devops ID number
+uda.adourl.type=string
+uda.adourl.label=Azure Devops URL
+uda.adotype.type=string
+uda.adotype.label=Azure Devops Work Item Type
+uda.adostate.type=string
+uda.adostate.label=Azure Devops Work Item State
+uda.adoactivity.type=string
+uda.adoactivity.label=Azure Devops Activity
+uda.adopriority.type=numeric
+uda.adopriority.label=Azure Devops Priority
+uda.adoremainingwork.type=numeric
+uda.adoremainingwork.label=Azure Devops Amount of Remaining Work
+uda.adoparent.type=string
+uda.adoparent.label=Azure Devops Parent Work Item Name
+uda.adonamespace.type=string
+uda.adonamespace.label=Azure Devops Namespace
+
+# Urgency
+urgency.uda.adostate.Ready for Development.coefficient=1.5
+urgency.uda.adostate.Active.coefficient=2
+urgency.uda.adostate.Resolved.coefficient=1
+
+# Report
+report.ado.description=List all Azure Devops tasks
+report.ado.columns=id,priority,tags,adoid,adotype,adotitle,adostate,urgency
+report.ado.labels=ID,Prio,Tags,ADO ID,Type,Title,State,Urgency
+report.ado.filter=status:pending
+report.ado.sort=urgency-
