@@ -1,5 +1,6 @@
 [general]
 targets = ["ado_issues"]
+static_fields = ["project"]
 
 [ado_issues]
 service = "azuredevops"
