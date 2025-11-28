@@ -136,6 +136,11 @@ install_python_packages() {
     echo "Installing Python packages..."
     uv tool install pre-commit
   fi
+
+  if ! command -v tldr &>/dev/null; then
+    echo "Installing tldr..."
+    uv tool install tldr
+  fi
 }
 
 # Function to install Node packages

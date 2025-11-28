@@ -8,7 +8,6 @@ jq
 nodejs
 python3-pip
 ripgrep
-tldr
 trash-cli
 unzip
 zip
