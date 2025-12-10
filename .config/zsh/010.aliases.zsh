@@ -17,3 +17,6 @@ alias "map-esc"='setxkbmap -option caps:escape'
 
 # Mac specific
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
+
+# dotnet specific
+alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
