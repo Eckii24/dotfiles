@@ -300,6 +300,24 @@ return {
     },
   },
   {
+    "saghen/blink.cmp",
+    optional = true,
+    opts = {
+      sources = {
+        default = { "easy-dotnet" },
+        providers = {
+          ["easy-dotnet"] = {
+            name = "easy-dotnet",
+            enabled = true,
+            module = "easy-dotnet.completion.blink",
+            score_offset = 10000,
+            async = true,
+          },
+        },
+      },
+    },
+  },
+  {
     "mfussenegger/nvim-dap",
     optional = true,
     opts = function()
