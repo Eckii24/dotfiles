@@ -77,13 +77,19 @@ uda.adonamespace.type=string
 uda.adonamespace.label=Azure Devops Namespace
 
 # Urgency
-urgency.uda.adostate.Ready for Development.coefficient=1.5
 urgency.uda.adostate.Active.coefficient=2
+urgency.uda.adostate.Ready for Development.coefficient=1.5
 urgency.uda.adostate.Resolved.coefficient=1
+urgency.uda.adotype.Bug.coefficient=1
+urgency.uda.adotype.User Story.coefficient=0.5
+urgency.uda.adotype.Task.coefficient=0
+urgency.uda.adotype.Feature.coefficient=-3
+urgency.user.tag.OMR.coefficient=2
+urgency.user.tag.RXP.coefficient=1
 
 # Report
 report.ado.description=List all Azure Devops tasks
-report.ado.columns=id,priority,tags,adoid,adotype,adotitle,adostate,urgency
-report.ado.labels=ID,Prio,Tags,ADO ID,Type,Title,State,Urgency
+report.ado.columns=id,priority,tags,adoid,adotype,adotitle,adostate,entry.age,urgency
+report.ado.labels=ID,Prio,Tags,ADO ID,Type,Title,State,Age,Urgency
 report.ado.filter=status:pending
 report.ado.sort=urgency-

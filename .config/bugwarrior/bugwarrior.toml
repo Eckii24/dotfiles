@@ -1,10 +1,41 @@
 [general]
-targets = ["ado_issues"]
-static_fields = ["project"]
+targets = ["ado_issues_omr", "ado_issues_rxp", "ado_issues_infra", "ado_issues_other"]
+static_fields = ["project", "priority"]
+annotation_comments = false
+annotation_links = false
 
-[ado_issues]
+[ado_issues_omr]
 service = "azuredevops"
+description_template = "{{adotitle}}"
 PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
-wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\OM LOG'"
+add_tags = ["OMR"]
+
+[ado_issues_rxp]
+service = "azuredevops"
+description_template = "{{adotitle}}"
+PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+project = "VIS - Program 0"
+organization = "ZEISSgroup-VIS"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\Rx Recognition App'"
+add_tags = ["RXP"]
+
+[ado_issues_infra]
+service = "azuredevops"
+description_template = "{{adotitle}}"
+PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+project = "VIS - Program 0"
+organization = "ZEISSgroup-VIS"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
+add_tags = ["INFRA"]
+
+[ado_issues_other]
+service = "azuredevops"
+description_template = "{{adotitle}}"
+PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+project = "VIS - Program 0"
+organization = "ZEISSgroup-VIS"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] <> 'VIS - Program 0\\OM LOG' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure'"
+
