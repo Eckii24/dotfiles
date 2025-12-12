@@ -10,6 +10,8 @@ return {
         },
       }
       vim.g.vimwiki_global_ext = 0
+      vim.g.vimwiki_markdown_link_ext = 1
+      vim.g.vimwiki_auto_header = 1
       vim.g.vimwiki_folding = "list"
     end,
     keys = {
