@@ -69,9 +69,9 @@ echo "Installing Snapd..."
 sudo apt install snapd
 sudo snap install snapd
 
-# Install Alacritty
-echo "Installing Alacritty..."
-sudo snap install alacritty --classic
+# Install Ghostty
+echo "Installing Ghostty..."
+sudo snap install ghostty --classic
 
 # Install Postman
 echo "Installing Postman..."

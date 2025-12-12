@@ -61,7 +61,7 @@ floating_modifier $mod
 tiling_drag modifier titlebar
 
 # start a terminal
-bindsym $mod+Return exec alacritty
+bindsym $mod+Return exec ghostty
 
 # kill focused window
 bindsym $mod+q kill
@@ -176,7 +176,7 @@ for_window [class="Camunda Modeler|camunda-modeler"] move to workspace $ws8
 for_window [class="OpenLens"] move to workspace $ws9
 
 # Auto start applications
-exec --no-startup-id alacritty
+exec --no-startup-id ghostty
 # exec --no-startup-id rider
 exec --no-startup-id edge
 exec --no-startup-id mockoon
