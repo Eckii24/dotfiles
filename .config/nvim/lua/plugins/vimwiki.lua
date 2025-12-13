@@ -42,8 +42,10 @@ return {
   },
   {
     "tbabej/taskwiki",
+    build = "uv venv --allow-existing && uv pip install tasklib pynvim six packaging",
     init = function()
-      vim.g.python3_host_prog = "~/.config/task/.venv/bin/python3"
+      -- TODO: Move this to somewhere more general, not inside the plugin...
+      vim.g.python3_host_prog = "~/.local/share/nvim/lazy/taskwiki/.venv/bin/python3"
       vim.g.taskwiki_taskrc_location = "~/.config/task/taskrc"
     end,
   },
