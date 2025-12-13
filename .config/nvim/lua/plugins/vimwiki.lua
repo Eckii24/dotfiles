@@ -43,6 +43,7 @@ return {
   {
     "tbabej/taskwiki",
     build = "cd ~/.local/share/nvim/ && uv venv --allow-existing && uv pip install tasklib pynvim six packaging",
+    ft = "vimwiki",
     init = function()
       vim.g.python3_host_prog = "~/.local/share/nvim/.venv/bin/python3"
       vim.g.taskwiki_taskrc_location = "~/.config/task/taskrc"
