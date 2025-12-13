@@ -40,4 +40,11 @@ return {
       { "<leader>WC", "<Plug>VimwikiColorizeNormal", desc = "Colorize Normal" },
     },
   },
+  {
+    "tbabej/taskwiki",
+    init = function()
+      vim.g.python3_host_prog = "~/.config/task/.venv/bin/python3"
+      vim.g.taskwiki_taskrc_location = "~/.config/task/taskrc"
+    end,
+  },
 }
