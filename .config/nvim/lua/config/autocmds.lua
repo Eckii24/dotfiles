@@ -82,3 +82,11 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.diagnostic.enable(false, { bufnr = 0 })
   end,
 })
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "vimwiki",
+  callback = function(args)
+    -- make LSP and other Markdown-aware tools see this buffer as Markdown
+    vim.bo[args.buf].filetype = "markdown"
+  end,
+})
