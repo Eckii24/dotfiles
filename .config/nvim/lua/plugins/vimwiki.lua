@@ -14,6 +14,7 @@ return {
       vim.g.vimwiki_auto_header = 1
       vim.g.vimwiki_folding = "list"
     end,
+    cmd = { "VimwikiIndex", "VimwikiMakeDiaryNote" },
     keys = {
       { "<leader>W", desc = "Vimwiki" },
 

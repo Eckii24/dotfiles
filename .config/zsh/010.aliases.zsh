@@ -7,6 +7,9 @@ alias ynvim='yadm enter nvim ~'
 alias diff='delta -n -s'
 alias rm='trash-put'
 
+alias wiki='nvim +VimwikiIndex'
+alias daily='nvim +VimwikiMakeDiaryNote'
+
 # AI related stuff
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
 alias mcp='nvim +"MCPHub"'
