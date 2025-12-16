@@ -318,7 +318,7 @@ return {
     opts = {
       linters = {
         ["markdownlint-cli2"] = {
-          args = { "--config", vim.fn.expand("$HOME/.config/markdownlint-cli2/config.yaml"), "--" },
+          args = { "--config", vim.fn.expand("$HOME/.config/markdownlint-cli2/config.markdownlint-cli2.yaml"), "--" },
         },
       },
     },
