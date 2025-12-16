@@ -9,6 +9,7 @@ alias rm='trash-put'
 
 alias wiki='nvim +VimwikiIndex'
 alias daily='nvim +VimwikiMakeDiaryNote'
+alias wikisync='gitsync $VIMWIKI_HOME'
 
 # AI related stuff
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
