@@ -59,7 +59,7 @@ return {
             end,
           },
         },
-        strategies = {
+        interactions = {
           chat = {
             adapter = {
               name = "copilot",
@@ -138,7 +138,7 @@ return {
             opts = {
               is_slash_cmd = true,
               auto_submit = false,
-              short_name = "agent_mode_current_buffer",
+              alias = "agent_mode_current_buffer",
             },
             prompts = {
               {
@@ -185,7 +185,7 @@ return {
             },
           },
         },
-        memory = {
+        rules = {
           default = {
             description = "Collection of common files for all projects",
             files = {
