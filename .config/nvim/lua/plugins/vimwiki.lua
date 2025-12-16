@@ -20,6 +20,8 @@ return {
       { "<leader>Wi", "<Plug>VimwikiIndex", desc = "Index" },
       { "<leader>WI", "<Plug>VimwikiTabIndex", desc = "Index (Tab)" },
 
+      { "<leader>Wn", "<Plug>VimwikiMakeDiaryNote", desc = "New Diary Note" },
+      { "<leader>WN", "<Plug>VimwikiTabMakeDiaryNote", desc = "New Diary Note (Tab)" },
       { "<leader>Wd", desc = "Diary" },
       { "<leader>Wdi", "<Plug>VimwikiDiaryIndex", desc = "Index" },
       { "<leader>Wdg", "<Plug>VimwikiDiaryGenerateLinks", desc = "Generate Links" },
