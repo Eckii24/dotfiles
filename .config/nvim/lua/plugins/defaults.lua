@@ -61,13 +61,6 @@ return {
         end,
         desc = "Git Log File",
       },
-      {
-        "<leader>fN",
-        function()
-          Snacks.picker.files({ cwd = vim.env.NOTES_DIR })
-        end,
-        desc = "Find Notes",
-      },
     },
     opts = {
       terminal = {
