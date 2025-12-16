@@ -21,7 +21,8 @@
     }
   },
   "instructions": [
-    ".github/copilot-instructions.md"
+    ".github/copilot-instructions.md",
+    ".github/instructions/*.md"
   ],
   "mcp": {
     "mcphub": {
