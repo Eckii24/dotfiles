@@ -39,6 +39,8 @@ uda.effort.values=5 Min,15 Min,30 Min,1h,2h,4h,1d
 uda.notion_id.type=string
 uda.notion_id.label=Notion ID
 
+uda.priority.default=M
+
 # REPORTS
 report.next.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
 
@@ -71,12 +73,9 @@ uda.adonamespace.type=string
 uda.adonamespace.label=Azure Devops Namespace
 
 # Urgency
-urgency.uda.adostate.Active.coefficient=2
-urgency.uda.adostate.Ready for Development.coefficient=1.5
-urgency.uda.adostate.Resolved.coefficient=1
-urgency.uda.adotype.Bug.coefficient=1
-urgency.uda.adotype.User Story.coefficient=0.5
-urgency.uda.adotype.Task.coefficient=0
+urgency.uda.adostate.Active.coefficient=1
+urgency.uda.adostate.Ready for Development.coefficient=0.5
+urgency.uda.adotype.Task.coefficient=-1
 urgency.uda.adotype.Feature.coefficient=-3
 urgency.user.tag.OMR.coefficient=2
 urgency.user.tag.RXP.coefficient=1
@@ -85,5 +84,5 @@ urgency.user.tag.RXP.coefficient=1
 report.ado.description=List all Azure Devops tasks
 report.ado.columns=id,priority,tags,adoid,adotype,adotitle,adostate,entry.age,urgency
 report.ado.labels=ID,Prio,Tags,ADO ID,Type,Title,State,Age,Urgency
-report.ado.filter=status:pending
+report.ado.filter=status:pending adoid
 report.ado.sort=urgency-
