@@ -5,6 +5,8 @@
     "body": [
       "## Planning",
       "",
+      "- [ ] Check calender for events",
+      "- [ ] Check tasks and assign `+next` to the priorities",
       "<!-- markdownlint-disable -->",
       "### Tasks | status:pending scheduled:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}",
       "<!-- markdownlint-disable -->",
