@@ -1,3 +1,4 @@
 config:
   MD004: false # Unordered list style
   MD013: false # Line length
+  MD026: false # Trailing punctuation in heading
