@@ -1,0 +1,20 @@
+{
+  "Vimwiki Daily Template": {
+    "prefix": "daily",
+    "description": "Daily template for vimwiki diary entries.",
+    "body": [
+      "## Planning",
+      "",
+      "<!-- markdownlint-disable -->",
+      "### Tasks | status:pending scheduled:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}",
+      "<!-- markdownlint-disable -->",
+      "## Topics",
+      "",
+      "## Summary",
+      "<!-- markdownlint-disable -->",
+      "### Created Tasks | status.not:completed entry:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}",
+      "",
+      "### Completed Tasks | status:completed end:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}"
+    ]
+  }
+}
