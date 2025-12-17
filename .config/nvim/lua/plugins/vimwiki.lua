@@ -13,6 +13,14 @@ return {
       vim.g.vimwiki_markdown_link_ext = 1
       vim.g.vimwiki_auto_header = 1
       vim.g.vimwiki_folding = "list"
+
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "vimwiki",
+        callback = function(args)
+          -- make LSP and other Markdown-aware tools see this buffer as Markdown
+          vim.bo[args.buf].filetype = "markdown"
+        end,
+      })
     end,
     cmd = { "VimwikiIndex", "VimwikiMakeDiaryNote" },
     keys = {
