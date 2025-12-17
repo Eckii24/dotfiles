@@ -316,4 +316,19 @@ return {
       },
     },
   },
+  {
+    "stevearc/conform.nvim",
+    opts = {
+      formatters = {
+        ["markdownlint-cli2"] = {
+          args = {
+            "--config",
+            vim.fn.expand("$HOME/.config/markdownlint-cli2/config.markdownlint-cli2.yaml"),
+            "--fix",
+            "$FILENAME",
+          },
+        },
+      },
+    },
+  },
 }
