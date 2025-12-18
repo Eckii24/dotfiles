@@ -12,7 +12,10 @@ return {
       vim.g.vimwiki_global_ext = 0
       vim.g.vimwiki_markdown_link_ext = 1
       vim.g.vimwiki_auto_header = 1
-      vim.g.vimwiki_folding = "list"
+      vim.g.vimwiki_folding = "custom"
+      vim.g.vimwiki_key_mappings = {
+        all_maps = 0,
+      }
 
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "vimwiki",
@@ -42,13 +45,6 @@ return {
       { "<leader>Wf", desc = "File" },
       { "<leader>Wfd", "<Plug>VimwikiDeleteFile", desc = "Delete" },
       { "<leader>Wfr", "<Plug>VimwikiRenameFile", desc = "Rename" },
-      { "<leader>Wfh", "<Plug>Vimwiki2HTML", desc = "To HTML" },
-      { "<leader>WfH", "<Plug>Vimwiki2HTMLBrowse", desc = "To HTML and Open" },
-
-      { "<leader>Ws", "<Plug>VimwikiUISelect", desc = "UI Select" },
-      { "<leader>Wg", "<Plug>VimwikiGoto", desc = "Goto" },
-      { "<leader>Wc", "<Plug>VimwikiColorize", desc = "Colorize" },
-      { "<leader>WC", "<Plug>VimwikiColorizeNormal", desc = "Colorize Normal" },
     },
   },
   {
