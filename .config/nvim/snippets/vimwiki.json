@@ -6,17 +6,17 @@
       "## Planning",
       "",
       "- [ ] Check calender for events",
-      "- [ ] Check tasks and assign `+next` to the priorities",
-      "<!-- markdownlint-disable -->",
-      "### Tasks | status:pending scheduled:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}",
-      "<!-- markdownlint-disable -->",
+      "- [ ] Check [tasks](../tasks.md) and assign `+next` to the priorities",
+      "",
       "## Topics",
-      "",
-      "## Summary",
-      "<!-- markdownlint-disable -->",
-      "### Created Tasks | status.not:completed entry:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}",
-      "",
-      "### Completed Tasks | status:completed end:${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}"
+      ""
+    ]
+  },
+  "Todo Template": {
+    "prefix": "todo",
+    "description": "Template for todo entries in vimwiki.",
+    "body": [
+      "* [ ] "
     ]
   }
 }
