@@ -1,0 +1,37 @@
+# Color theme (uncomment one to use)
+#include solarized-dark-256.theme
+
+sync.server.url=http://localhost:8080
+sync.encryption_secret=12345
+sync.server.client_id=b3577642-bb8e-43a5-8d75-f74b2a05252e
+news.version=3.4.2
+
+verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
+
+# CALENDAR
+weekstart=Monday
+
+# URGENCY
+urgency.age.coefficient=-3
+urgency.age.max=90
+urgency.tags.coefficient=0
+urgency.project.coefficient=0
+urgency.annotations.coefficient=0
+
+# UDAs
+uda.energy.type=string
+uda.energy.label=Energieaufwand
+uda.energy.values=Hohe Energie,Mittlere Energie,Wenig Energie
+uda.context.type=string
+uda.context.label=Context
+uda.effort.type=string
+uda.effort.label=Zeitaufwand
+uda.effort.values=5 Min,15 Min,30 Min,1h,2h,4h,1d
+uda.notion_id.type=string
+uda.notion_id.label=Notion ID
+
+uda.priority.default=M
+
+# REPORTS
+report.next.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
+

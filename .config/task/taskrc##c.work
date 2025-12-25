@@ -1,20 +1,3 @@
-# Color theme (uncomment one to use)
-#include light-16.theme
-#include light-256.theme
-#include bubblegum-256.theme
-#include dark-16.theme
-#include dark-256.theme
-#include dark-red-256.theme
-#include dark-green-256.theme
-#include dark-blue-256.theme
-#include dark-violets-256.theme
-#include dark-yellow-green.theme
-#include dark-gray-256.theme
-#include dark-gray-blue-256.theme
-#include solarized-dark-256.theme
-#include solarized-light-256.theme
-#include no-color.theme
-
 news.version=2.6.2
 
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
@@ -30,17 +13,6 @@ urgency.project.coefficient=0
 urgency.annotations.coefficient=0
 
 # UDAs
-uda.energy.type=string
-uda.energy.label=Energieaufwand
-uda.energy.values=Hohe Energie,Mittlere Energie,Wenig Energie
-uda.context.type=string
-uda.context.label=Context
-uda.effort.type=string
-uda.effort.label=Zeitaufwand
-uda.effort.values=5 Min,15 Min,30 Min,1h,2h,4h,1d
-uda.notion_id.type=string
-uda.notion_id.label=Notion ID
-
 uda.priority.default=M
 
 # REPORTS
