@@ -1,9 +1,9 @@
 # Color theme (uncomment one to use)
 #include solarized-dark-256.theme
 
-sync.server.url=http://localhost:8080
-sync.encryption_secret=12345
-sync.server.client_id=b3577642-bb8e-43a5-8d75-f74b2a05252e
+sync.server.url={{env.TASKSERVER_HOST}}
+sync.encryption_secret={{env.TASKSERVER_ENCRYPTION_SECRET}}
+sync.server.client_id={{env.TASKSERVER_CLIENT_ID}}
 news.version=3.4.2
 
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
