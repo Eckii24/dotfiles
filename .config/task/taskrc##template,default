@@ -1,6 +1,4 @@
-# Color theme (uncomment one to use)
-#include solarized-dark-256.theme
-
+# SYNC and OTHERS
 sync.server.url={{env.TASKSERVER_HOST}}
 sync.encryption_secret={{env.TASKSERVER_ENCRYPTION_SECRET}}
 sync.server.client_id={{env.TASKSERVER_CLIENT_ID}}
@@ -17,6 +15,7 @@ urgency.age.max=90
 urgency.tags.coefficient=0
 urgency.project.coefficient=0
 urgency.annotations.coefficient=0
+urgency.user.tag.later.coefficient=-6.0
 
 # UDAs
 uda.energy.type=string
@@ -35,3 +34,9 @@ uda.priority.default=M
 # REPORTS
 report.next.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
 
+# COLORS
+color.due=
+color.due.today=color9
+color.error=rgb555 on rgb500
+color.overdue=rgb400
+color.scheduled=rgb530
