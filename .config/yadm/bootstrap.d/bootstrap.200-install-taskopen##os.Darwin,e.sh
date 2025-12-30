@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 set -euo pipefail
 
+brew install nim
+
 REPO=/tmp/taskopen
 
 # Remove any existing checkout to ensure a clean clone
