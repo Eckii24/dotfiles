@@ -54,6 +54,7 @@ return {
     init = function()
       vim.g.python3_host_prog = "~/.local/share/nvim/.venv/bin/python3"
       vim.g.taskwiki_taskrc_location = "~/.config/task/taskrc"
+      vim.g.taskwiki_scan_for_duplicates = "yes"
     end,
   },
 }
