@@ -133,10 +133,10 @@ EOF
         basename="$(basename "$file")"
         local file_has_match=false
         
-        # Extract video ID from filename and check if it's in Karakeep
-        # Try to find any YouTube video ID pattern in the filename
+        # Extract video ID from filename based on yt-dlp naming pattern: %(title)s-%(id)s.%(ext)s
+        # The video ID is the part between the last hyphen and the extension
         local potential_id
-        potential_id="$(echo "$basename" | grep -oE '[A-Za-z0-9_-]{11}' | head -1)"
+        potential_id="$(echo "$basename" | sed -n 's/.*-\([A-Za-z0-9_-]\{11\}\)\.[^.]*$/\1/p')"
         
         if [[ -n "$potential_id" && -n "${karakeep_video_ids[$potential_id]}" ]]; then
             file_has_match=true
