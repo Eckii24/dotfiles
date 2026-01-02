@@ -107,20 +107,20 @@ EOF
     _debug "Querying Karakeep API to get current bookmarks"
     
     # Build a set of video IDs that are in Karakeep
-    local -a karakeep_video_ids=()
+    local -A karakeep_video_ids=()
     while IFS=$'\t' read -r _bookmark_id url _title; do
         local video_id
         video_id="$(_extract_video_id "$url")"
-        [[ -n "$video_id" ]] && karakeep_video_ids+=("$video_id")
+        [[ -n "$video_id" ]] && karakeep_video_ids[$video_id]=1
     done < <(_fetch_items)
     
     _debug "Found ${#karakeep_video_ids[@]} video(s) in Karakeep"
     
-    # Find all video files in the target directory
+    # Find all video files in the target directory (top level only)
     local -a downloaded_files=()
     while IFS= read -r file; do
         downloaded_files+=("$file")
-    done < <(find "$TARGET_DIR" -type f \( -name "*.mp4" -o -name "*.webm" -o -name "*.mkv" -o -name "*.m4a" -o -name "*.opus" \) 2>/dev/null)
+    done < <(find "$TARGET_DIR" -maxdepth 1 -type f \( -name "*.mp4" -o -name "*.webm" -o -name "*.mkv" -o -name "*.m4a" -o -name "*.opus" \) 2>/dev/null)
     
     [[ ${#downloaded_files[@]} -eq 0 ]] && { _info "No video files found in $TARGET_DIR"; return 0; }
     
@@ -133,13 +133,14 @@ EOF
         basename="$(basename "$file")"
         local file_has_match=false
         
-        # Check if this file contains any of the Karakeep video IDs
-        for video_id in "${karakeep_video_ids[@]}"; do
-            if [[ "$basename" == *"$video_id"* ]]; then
-                file_has_match=true
-                break
-            fi
-        done
+        # Extract video ID from filename and check if it's in Karakeep
+        # Try to find any YouTube video ID pattern in the filename
+        local potential_id
+        potential_id="$(echo "$basename" | grep -oE '[A-Za-z0-9_-]{11}' | head -1)"
+        
+        if [[ -n "$potential_id" && -n "${karakeep_video_ids[$potential_id]}" ]]; then
+            file_has_match=true
+        fi
         
         # If no match found, this file is orphaned
         [[ "$file_has_match" == false ]] && orphaned_files+=("$file")
