@@ -5,6 +5,8 @@ sync.server.client_id={{env.TASKSERVER_CLIENT_ID}}
 news.version=3.4.2
 
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
+recurrence=0
+search.case.sensitive=0
 
 # CALENDAR
 weekstart=Monday

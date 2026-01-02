@@ -1,6 +1,7 @@
 news.version=2.6.2
 
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
+search.case.sensitive=0
 
 # CALENDAR
 weekstart=Monday
