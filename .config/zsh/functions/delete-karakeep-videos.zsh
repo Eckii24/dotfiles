@@ -111,10 +111,20 @@ EOF
     while IFS=$'\t' read -r _bookmark_id url _title; do
         local video_id
         video_id="$(_extract_video_id "$url")"
-        [[ -n "$video_id" ]] && karakeep_video_ids[$video_id]=1
+        if [[ -n "$video_id" ]]; then
+            karakeep_video_ids[$video_id]=1
+            _debug "Found Karakeep video ID: $video_id (from URL: $url)"
+        fi
     done < <(_fetch_items)
     
     _debug "Found ${#karakeep_video_ids[@]} video(s) in Karakeep"
+    
+    if [[ "$verbose" == true ]]; then
+        _debug "Karakeep video IDs:"
+        for vid_id in "${!karakeep_video_ids[@]}"; do
+            _debug "  - $vid_id"
+        done
+    fi
     
     # Find all video files in the target directory (top level only)
     local -a downloaded_files=()
@@ -138,8 +148,24 @@ EOF
         local potential_id
         potential_id="$(echo "$basename" | sed -n 's/.*-\([A-Za-z0-9_-]\{11\}\)\.[^.]*$/\1/p')"
         
+        # First, try fast O(1) lookup with extracted ID
         if [[ -n "$potential_id" && -n "${karakeep_video_ids[$potential_id]}" ]]; then
             file_has_match=true
+            _debug "File '$basename' matches Karakeep video ID: $potential_id (fast path)"
+        else
+            # Fallback: check if any Karakeep video ID appears in the filename
+            # This handles edge cases where extraction might fail or filename format differs
+            for video_id in "${!karakeep_video_ids[@]}"; do
+                if [[ "$basename" == *"$video_id"* ]]; then
+                    file_has_match=true
+                    _debug "File '$basename' matches Karakeep video ID: $video_id (fallback path)"
+                    break
+                fi
+            done
+        fi
+        
+        if [[ "$file_has_match" == false ]]; then
+            _debug "File '$basename' has no matching video ID in Karakeep"
         fi
         
         # If no match found, this file is orphaned
