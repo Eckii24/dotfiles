@@ -19,20 +19,33 @@ python3 -m venv "$VENV_DIR"
 # Create symlink to make bugwarrior globally accessible
 ln -sf "$VENV_DIR/bin/bugwarrior" "$BIN_DIR/bugwarrior"
 
-# Enable automatic pulling of updates via cron (use full path so cron can run it)
-CRON_ENTRY="0 */2 * * * $BIN_DIR/bugwarrior pull"
+# Use provided crontab block for bugwarrior (keeps user-specified environment)
+CRON_BLOCK="$(
+  cat <<'CRON'
+BUGWARRIORRC="/home/vimateck/.config/task/bugwarrior.toml"
+TASKRC="/home/vimateck/.config/task/taskrc"
+TASKDATA="/home/vimateck/VimWiki/task"
 
-# List current crontab to temp file
-crontab -l >/tmp/current_cron 2>/dev/null
+# Run `bugwarrior pull` every 15 min
+*/15 * * * * bugwarrior pull
+CRON
+)"
 
-# Grep for the entry; add if missing
-if ! grep -Fxq "$CRON_ENTRY" /tmp/current_cron; then
-  echo "$CRON_ENTRY" >>/tmp/current_cron
-  crontab /tmp/current_cron
-  echo "Crontab entry added."
-else
-  echo "Crontab entry already exists."
-fi
+# List current crontab to temp file (allow empty crontab)
+crontab -l >/tmp/current_cron 2>/dev/null || true
+
+# Remove any previous BUGWARRIOR block to avoid duplicates
+sed -i '/^# BUGWARRIOR-BEGIN$/,/^# BUGWARRIOR-END$/d' /tmp/current_cron || true
+
+# Append new block with markers
+{
+  printf '%s\n' "# BUGWARRIOR-BEGIN"
+  printf '%s\n' "$CRON_BLOCK"
+  printf '%s\n' "# BUGWARRIOR-END"
+} >>/tmp/current_cron
+
+crontab /tmp/current_cron
+echo "Crontab updated."
 
 # Optional cleanup
 rm -f /tmp/current_cron
