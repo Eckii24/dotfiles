@@ -109,7 +109,7 @@ EOF
     _slugify() {
         local title="$1"
         # Convert to lowercase, replace spaces with hyphens, remove special chars
-        echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//'
+        echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
     }
     
     # Summarize a YouTube video
@@ -125,7 +125,7 @@ EOF
         cleanup() {
             command rm -rf "$tmp_dir"
         }
-        trap cleanup EXIT
+        trap cleanup RETURN
         
         local outtmpl
         outtmpl="$tmp_dir/subtitle"
@@ -202,7 +202,7 @@ EOF
         # Fetch the content
         _debug "Fetching content from: $url"
         local content
-        content="$(curl -sS -L "$url" 2>/dev/null)" || { _error "Failed to fetch content from: $url"; return 1; }
+        content="$(curl -sS -L --max-time 30 --max-redirs 5 "$url" 2>/dev/null)" || { _error "Failed to fetch content from: $url"; return 1; }
         
         if [[ -z "$content" ]]; then
             _error "Empty content fetched from: $url"
