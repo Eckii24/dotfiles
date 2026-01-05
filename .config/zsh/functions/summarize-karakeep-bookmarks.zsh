@@ -157,19 +157,32 @@ EOF
     }
     
     # Detach a tag from a bookmark (best-effort)
+    # Karakeep API: DELETE /api/v1/bookmarks/:bookmarkId/tags
+    # Body: {"tags": [{"tagId": "<tagId>"}]}
     _detach_tag() {
-        local bookmark_id="$1" tag_name="$2"
+        local bookmark_id="$1" tag_id="$2"
 
-        _debug "Detaching tag '$tag_name' from bookmark $bookmark_id"
+        _debug "Detaching tag id '$tag_id' from bookmark $bookmark_id"
 
-        curl -sS --compressed \
+        local resp http_code
+        resp="$(curl -sS --compressed \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
             -H "Accept: application/json" \
             -H "Content-Type: application/json" \
-            -X POST \
-            -d "{\"tags\":[\"$tag_name\"]}" \
-            "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags/detach" \
-            >/dev/null 2>&1
+            -X DELETE \
+            -d "{\"tags\":[{\"tagId\":\"$tag_id\"}]}" \
+            -w "\n%{http_code}" \
+            "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags" 2>/dev/null)" || return 1
+
+        http_code="${resp##*$'\n'}"
+        resp="${resp%$'\n'*}"
+
+        if [[ "$http_code" != "200" ]]; then
+            [[ "$verbose" == true ]] && _error "Detach tag failed (HTTP $http_code): $resp"
+            return 1
+        fi
+
+        return 0
     }
 
     # Summarize a YouTube video
@@ -185,7 +198,8 @@ EOF
         cleanup() {
             command rm -rf "$tmp_dir"
         }
-        trap cleanup RETURN
+        # bash supports RETURN traps; zsh does not. Use a local EXIT trap instead.
+        trap cleanup EXIT
         
         local outtmpl
         outtmpl="$tmp_dir/subtitle"
@@ -252,7 +266,7 @@ EOF
 
         _info "✓ Saved summary to: $output_file"
 
-        if _detach_tag "$bookmark_id" "SUMMARIZE"; then
+        if _detach_tag "$bookmark_id" "dve9xcn3na386hrvvijno3ys"; then
             _info "✓ Removed SUMMARIZE tag"
         else
             _error "Failed to remove SUMMARIZE tag (continuing)"
@@ -324,7 +338,7 @@ EOF
 
         _info "✓ Saved summary to: $output_file"
 
-        if _detach_tag "$bookmark_id" "SUMMARIZE"; then
+        if _detach_tag "$bookmark_id" "dve9xcn3na386hrvvijno3ys"; then
             _info "✓ Removed SUMMARIZE tag"
         else
             _error "Failed to remove SUMMARIZE tag (continuing)"
