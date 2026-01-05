@@ -68,8 +68,8 @@ EOF
     local RESOURCES_DIR="$VIMWIKI_DIR/resources"
     mkdir -p "$RESOURCES_DIR" || { _error "Cannot create resources directory: $RESOURCES_DIR"; return 1; }
     
-     # Build Karakeep search query for bookmarks with SUMMARIZE tag
-     local search_query='#SUMMARIZE'
+    # Build Karakeep search query for bookmarks with SUMMARIZE tag
+    local search_query='#SUMMARIZE'
     
     # Query Karakeep API
     _fetch_bookmarks() {
@@ -156,6 +156,22 @@ EOF
         echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
     }
     
+    # Detach a tag from a bookmark (best-effort)
+    _detach_tag() {
+        local bookmark_id="$1" tag_name="$2"
+
+        _debug "Detaching tag '$tag_name' from bookmark $bookmark_id"
+
+        curl -sS --compressed \
+            -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "{\"tags\":[\"$tag_name\"]}" \
+            "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags/detach" \
+            >/dev/null 2>&1
+    }
+
     # Summarize a YouTube video
     _summarize_video() {
         local url="$1" title="$2" bookmark_id="$3"
@@ -186,7 +202,7 @@ EOF
             _error "No English transcript found for: $title"
             return 1
         fi
-        
+
         local prompt
         prompt=$(cat <<'EOF'
 You are an AI assistant tasked with summarizing a YouTube video based on its transcript.
@@ -233,8 +249,14 @@ EOF
             echo ""
             echo "$summary"
         } > "$output_file"
-        
+
         _info "✓ Saved summary to: $output_file"
+
+        if _detach_tag "$bookmark_id" "SUMMARIZE"; then
+            _info "✓ Removed SUMMARIZE tag"
+        else
+            _error "Failed to remove SUMMARIZE tag (continuing)"
+        fi
     }
     
     # Summarize non-video content
@@ -299,8 +321,14 @@ EOF
             echo ""
             echo "$summary"
         } > "$output_file"
-        
+
         _info "✓ Saved summary to: $output_file"
+
+        if _detach_tag "$bookmark_id" "SUMMARIZE"; then
+            _info "✓ Removed SUMMARIZE tag"
+        else
+            _error "Failed to remove SUMMARIZE tag (continuing)"
+        fi
     }
     
     # Main execution logic
