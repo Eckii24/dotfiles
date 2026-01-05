@@ -60,8 +60,8 @@ EOF
 
     _detach_tag() {
         local bookmark_id="$1"
-        # Tag ID for "SUMMARIZE" is hardcoded in original script: dve9xcn3na386hrvvijno3ys
-        local tag_id="dve9xcn3na386hrvvijno3ys"
+        # Tag ID for "SUMMARIZE" (can be overridden via KARAKEEP_SUMMARIZE_TAG_ID)
+        local tag_id="${KARAKEEP_SUMMARIZE_TAG_ID:-dve9xcn3na386hrvvijno3ys}"
         
         curl -sS -X DELETE \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
