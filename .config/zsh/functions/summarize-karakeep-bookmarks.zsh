@@ -110,7 +110,7 @@ EOF
         fi
 
         local slug="$(_slugify "$title")"
-        local output_file="$RESOURCES_DIR/${slug}-${id}.md"
+        local output_file="$RESOURCES_DIR/$(date +%Y%m%d)-${slug}-${id}.md"
         
         _log "Processing: $title ($url)"
         
