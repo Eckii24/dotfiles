@@ -20,6 +20,10 @@ return {
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "vimwiki",
         callback = function(args)
+          pcall(function()
+            vim.cmd("TaskWikiBufferLoad")
+          end)
+
           -- make LSP and other Markdown-aware tools see this buffer as Markdown
           vim.bo[args.buf].filetype = "markdown"
         end,
