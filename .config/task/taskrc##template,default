@@ -30,6 +30,11 @@ report.pro.labels=ID,Active,Age,Deps,P,Project,Tag,Recur,S,Due,Until,Description
 report.pro.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
 report.pro.sort=project+,urgency-
 
+report.inbox.filter=status:pending project:
+report.inbox.labels=ID,Active,Created,Age,Deps,P,Project,Tag,Recur,S,Due,Until,Description,Urg
+report.inbox.columns=id,start.age,entry,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
+report.inbox.sort=entry-
+
 # COLORS
 color.due=
 color.due.today=color9
