@@ -56,7 +56,7 @@ EOF
     }
     
     # Check dependencies
-    for cmd in curl jq yt-dlp aichat; do
+    for cmd in curl jq yt-dlp aichat perl; do
         command -v "$cmd" >/dev/null || { _error "Missing dependency: $cmd"; return 1; }
     done
     
@@ -68,35 +68,79 @@ EOF
     local RESOURCES_DIR="$VIMWIKI_DIR/resources"
     mkdir -p "$RESOURCES_DIR" || { _error "Cannot create resources directory: $RESOURCES_DIR"; return 1; }
     
-    # Build Karakeep search query for bookmarks with SUMMARIZE tag
-    local search_query='tag:SUMMARIZE'
+     # Build Karakeep search query for bookmarks with SUMMARIZE tag
+     local search_query='#SUMMARIZE'
     
     # Query Karakeep API
     _fetch_bookmarks() {
         _debug "Querying Karakeep API for bookmarks with tag SUMMARIZE"
-        
+
         # URL-encode the search query
         local encoded_query
         encoded_query="$(echo -n "$search_query" | jq -sRr @uri)"
-        
-        local resp
-        resp="$(curl -sS \
+
+        # Fetch response and stream-extract the bookmarks array without requiring
+        # the entire payload to be valid JSON (Karakeep sometimes emits broken JSON).
+        local raw
+        raw="$(curl -sS --compressed \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
+            -H "Accept: application/json" \
             -H "Content-Type: application/json" \
             -X GET \
             "$KARAKEEP_HOST/api/v1/bookmarks/search?q=$encoded_query")" || { _error "Failed to query Karakeep API"; return 1; }
-        
-        # Clean control characters from response before parsing
-        resp="$(echo "$resp" | tr -d '\000-\037')"
-        
-        # Check for API error
-        if echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
-            _error "Karakeep API error: $(echo "$resp" | jq -r '.error')"
+
+        # Strip UTF-8 BOM if present
+        raw="${raw#\ufeff}"
+
+        # Remove ASCII control characters except TAB/LF/CR so downstream parsing is stable.
+        raw="$(printf '%s' "$raw" | LC_ALL=C tr -d '\000-\010\013\014\016-\037')"
+
+        _debug "Response size: $(printf '%s' "$raw" | wc -c | tr -d ' ') bytes"
+
+        # Extract the .bookmarks array and compact each element to one line.
+        # This does not depend on the trailing part of the response being valid.
+        local bookmarks_ndjson
+        bookmarks_ndjson="$(printf '%s' "$raw" | perl -0777 -ne '
+            my $s = $_;
+            my $idx = index($s, "\"bookmarks\"");
+            if ($idx < 0) { exit 2; }
+            my $lb = index($s, "[", $idx);
+            if ($lb < 0) { exit 3; }
+            my $i = $lb;
+            my $depth = 0;
+            my $in_str = 0;
+            my $esc = 0;
+            for (; $i < length($s); $i++) {
+                my $ch = substr($s, $i, 1);
+                if ($in_str) {
+                    if ($esc) { $esc = 0; next; }
+                    if ($ch eq "\\") { $esc = 1; next; }
+                    if ($ch eq "\"") { $in_str = 0; next; }
+                    next;
+                }
+                if ($ch eq "\"") { $in_str = 1; next; }
+                if ($ch eq "[") { $depth++; next; }
+                if ($ch eq "]") {
+                    $depth--;
+                    if ($depth == 0) {
+                        my $arr = substr($s, $lb, $i - $lb + 1);
+                        $arr =~ s/^\s+|\s+$//g;
+                        print $arr;
+                        exit 0;
+                    }
+                    next;
+                }
+            }
+            exit 4;
+        ')" || true
+
+        if [[ -z "$bookmarks_ndjson" ]]; then
+            _error "Failed to locate bookmarks array in response"
             return 1
         fi
-        
-        # Extract bookmarks with id, url, title, and type
-        echo "$resp" | jq -r '.bookmarks[]? | (.id + "\t" + (.content.url // "") + "\t" + (.title // "Untitled") + "\t" + (.content.type // "unknown"))'
+
+        # Now that we have a standalone JSON array, jq can safely parse it.
+        printf '%s' "$bookmarks_ndjson" | jq -r '.[]? | (.id + "\t" + (.content.url // "") + "\t" + (.title // "Untitled") + "\t" + (.content.type // "unknown"))'
     }
     
     # Check if bookmark is a YouTube video
