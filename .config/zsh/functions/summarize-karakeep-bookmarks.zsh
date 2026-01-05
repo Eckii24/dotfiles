@@ -5,8 +5,15 @@
 summarize-karakeep-bookmarks() {
     local -r FUNCTION_NAME="summarize-karakeep-bookmarks"
     
-    # Display help information
-    _show_help() {
+    # Defaults
+    local KARAKEEP_TOKEN_VAL="${KARAKEEP_TOKEN:-}"
+    local KARAKEEP_HOST="${KARAKEEP_HOST:-}"
+    local VIMWIKI_DIR="${VIMWIKI_HOME:-}"
+    local model=""
+    local verbose=false
+    
+    # Help
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
         cat << 'EOF'
 Usage: summarize-karakeep-bookmarks [options]
 
@@ -15,367 +22,141 @@ Fetch bookmarks with tag SUMMARIZE from Karakeep, generate summaries, and save t
 Options:
   --token TOKEN       Karakeep API token (default: $KARAKEEP_TOKEN)
   --vimwiki DIR       Vimwiki home directory (default: $VIMWIKI_HOME)
-  -m, --model MODEL   AI model to use for summaries (passed to aichat)
+  -m, --model MODEL   AI model to use (passed to aichat)
   -v, --verbose       Enable verbose output
   -h, --help          Show this help
 
-Dependencies: curl, jq, yt-dlp, aichat
+Dependencies: curl, jq, aichat, summarize-youtube
 EOF
-    }
-    
-    # Defaults from env
-    local KARAKEEP_TOKEN_VAL="${KARAKEEP_TOKEN:-}"
-    local KARAKEEP_HOST="${KARAKEEP_HOST:-}"
-    local VIMWIKI_DIR="${VIMWIKI_HOME:-}"
-    local model=""
-    local verbose=false
-    
-    # Parse command line arguments
+        return 0
+    fi
+
+    # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --token) KARAKEEP_TOKEN_VAL="$2"; shift 2 ;;
             --vimwiki) VIMWIKI_DIR="$2"; shift 2 ;;
             -m|--model) model="$2"; shift 2 ;;
             -v|--verbose) verbose=true; shift ;;
-            -h|--help) _show_help; return 0 ;;
             *) echo "Unknown option: $1" >&2; return 1 ;;
         esac
     done
     
-    # Unified logging functions
-    _debug() {
-        [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] $1" >&2
-    }
-    
-    _info() {
-        echo "[$FUNCTION_NAME] $1"
-    }
-    
-    _error() {
-        echo "[$FUNCTION_NAME] ERROR: $1" >&2
-    }
-    
-    # Check dependencies
-    for cmd in curl jq yt-dlp aichat perl; do
-        command -v "$cmd" >/dev/null || { _error "Missing dependency: $cmd"; return 1; }
-    done
-    
-    # Validate required parameters
-    [[ -z "$KARAKEEP_TOKEN_VAL" ]] && { _error "Karakeep token not set. Use --token or KARAKEEP_TOKEN env"; return 1; }
-    [[ -z "$KARAKEEP_HOST" ]] && { _error "Karakeep host not set. Use KARAKEEP_HOST env"; return 1; }
-    [[ -z "$VIMWIKI_DIR" ]] && { _error "Vimwiki directory not set. Use --vimwiki or VIMWIKI_HOME env"; return 1; }
+    # Validation
+    [[ -z "$KARAKEEP_TOKEN_VAL" ]] && { echo "Error: Karakeep token not set." >&2; return 1; }
+    [[ -z "$KARAKEEP_HOST" ]] && { echo "Error: Karakeep host not set." >&2; return 1; }
+    [[ -z "$VIMWIKI_DIR" ]] && { echo "Error: Vimwiki directory not set." >&2; return 1; }
     
     local RESOURCES_DIR="$VIMWIKI_DIR/resources"
-    mkdir -p "$RESOURCES_DIR" || { _error "Cannot create resources directory: $RESOURCES_DIR"; return 1; }
+    mkdir -p "$RESOURCES_DIR"
+
+    # Helpers
+    _log() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] $1" >&2; }
+    _error() { echo "[$FUNCTION_NAME] ERROR: $1" >&2; }
     
-    # Build Karakeep search query for bookmarks with SUMMARIZE tag
-    local search_query='#SUMMARIZE'
-    
-    # Query Karakeep API
-    _fetch_bookmarks() {
-        _debug "Querying Karakeep API for bookmarks with tag SUMMARIZE"
-
-        # URL-encode the search query
-        local encoded_query
-        encoded_query="$(echo -n "$search_query" | jq -sRr @uri)"
-
-        # Fetch response and stream-extract the bookmarks array without requiring
-        # the entire payload to be valid JSON (Karakeep sometimes emits broken JSON).
-        local raw
-        raw="$(curl -sS --compressed \
-            -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -X GET \
-            "$KARAKEEP_HOST/api/v1/bookmarks/search?q=$encoded_query")" || { _error "Failed to query Karakeep API"; return 1; }
-
-        # Strip UTF-8 BOM if present
-        raw="${raw#\ufeff}"
-
-        # Remove ASCII control characters except TAB/LF/CR so downstream parsing is stable.
-        raw="$(printf '%s' "$raw" | LC_ALL=C tr -d '\000-\010\013\014\016-\037')"
-
-        _debug "Response size: $(printf '%s' "$raw" | wc -c | tr -d ' ') bytes"
-
-        # Extract the .bookmarks array and compact each element to one line.
-        # This does not depend on the trailing part of the response being valid.
-        local bookmarks_ndjson
-        bookmarks_ndjson="$(printf '%s' "$raw" | perl -0777 -ne '
-            my $s = $_;
-            my $idx = index($s, "\"bookmarks\"");
-            if ($idx < 0) { exit 2; }
-            my $lb = index($s, "[", $idx);
-            if ($lb < 0) { exit 3; }
-            my $i = $lb;
-            my $depth = 0;
-            my $in_str = 0;
-            my $esc = 0;
-            for (; $i < length($s); $i++) {
-                my $ch = substr($s, $i, 1);
-                if ($in_str) {
-                    if ($esc) { $esc = 0; next; }
-                    if ($ch eq "\\") { $esc = 1; next; }
-                    if ($ch eq "\"") { $in_str = 0; next; }
-                    next;
-                }
-                if ($ch eq "\"") { $in_str = 1; next; }
-                if ($ch eq "[") { $depth++; next; }
-                if ($ch eq "]") {
-                    $depth--;
-                    if ($depth == 0) {
-                        my $arr = substr($s, $lb, $i - $lb + 1);
-                        $arr =~ s/^\s+|\s+$//g;
-                        print $arr;
-                        exit 0;
-                    }
-                    next;
-                }
-            }
-            exit 4;
-        ')" || true
-
-        if [[ -z "$bookmarks_ndjson" ]]; then
-            _error "Failed to locate bookmarks array in response"
-            return 1
-        fi
-
-        # Now that we have a standalone JSON array, jq can safely parse it.
-        printf '%s' "$bookmarks_ndjson" | jq -r '.[]? | (.id + "\t" + (.content.url // "") + "\t" + (.title // "Untitled") + "\t" + (.content.type // "unknown"))'
-    }
-    
-    # Check if bookmark is a YouTube video
-    _is_youtube_url() {
-        local url="$1"
-        [[ "$url" =~ (youtube\.com|youtu\.be) ]]
-    }
-    
-    # Slugify a title for filename
     _slugify() {
-        local title="$1"
-        # Convert to lowercase, replace spaces with hyphens, remove special chars
-        echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
+        echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
     }
-    
-    # Detach a tag from a bookmark (best-effort)
-    # Karakeep API: DELETE /api/v1/bookmarks/:bookmarkId/tags
-    # Body: {"tags": [{"tagId": "<tagId>"}]}
+
     _detach_tag() {
-        local bookmark_id="$1" tag_id="$2"
-
-        _debug "Detaching tag id '$tag_id' from bookmark $bookmark_id"
-
-        local resp http_code
-        resp="$(curl -sS --compressed \
+        local bookmark_id="$1"
+        # Tag ID for "SUMMARIZE" is hardcoded in original script: dve9xcn3na386hrvvijno3ys
+        local tag_id="dve9xcn3na386hrvvijno3ys"
+        
+        curl -sS -X DELETE \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
-            -H "Accept: application/json" \
             -H "Content-Type: application/json" \
-            -X DELETE \
             -d "{\"tags\":[{\"tagId\":\"$tag_id\"}]}" \
-            -w "\n%{http_code}" \
-            "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags" 2>/dev/null)" || return 1
+            "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags" >/dev/null
+    }
 
-        http_code="${resp##*$'\n'}"
-        resp="${resp%$'\n'*}"
+    # Fetch bookmarks
+    _log "Fetching bookmarks..."
+    local search_query='#SUMMARIZE'
+    local encoded_query
+    encoded_query="$(echo -n "$search_query" | jq -sRr @uri)"
+    
+    local json_response
+    json_response="$(curl -sS \
+        -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
+        "$KARAKEEP_HOST/api/v1/bookmarks/search?q=$encoded_query")"
 
-        if [[ "$http_code" != "200" ]]; then
-            [[ "$verbose" == true ]] && _error "Detach tag failed (HTTP $http_code): $resp"
-            return 1
-        fi
-
+    # Parse with jq
+    local bookmarks
+    bookmarks="$(echo "$json_response" | tr -d '\000-\037' | jq -r '.bookmarks[]? | @base64')"
+    
+    if [[ -z "$bookmarks" ]]; then
+        _log "No bookmarks found."
         return 0
-    }
+    fi
 
-    # Summarize a YouTube video
-    _summarize_video() {
-        local url="$1" title="$2" bookmark_id="$3"
-        
-        _info "Processing video: $title"
-        
-        local tmp_dir
-        tmp_dir="$(mktemp -d)" || { _error "Failed to create temp dir"; return 1; }
-        
-        local cleanup
-        cleanup() {
-            command rm -rf "$tmp_dir"
-        }
-        # bash supports RETURN traps; zsh does not. Use a local EXIT trap instead.
-        trap cleanup EXIT
-        
-        local outtmpl
-        outtmpl="$tmp_dir/subtitle"
-        
-        _debug "Fetching transcript for: $url"
-        yt-dlp --quiet --no-warnings \
-            --write-auto-subs --sub-langs "en.*" --sub-format "vtt" \
-            --skip-download -o "$outtmpl" \
-            "$url" 2>/dev/null || { _error "Failed to fetch transcript for: $title"; return 1; }
-        
-        local transcript_file
-        transcript_file="$(find "$tmp_dir" -maxdepth 1 -type f -name "*.vtt" -print -quit 2>/dev/null)"
-        if [[ -z "$transcript_file" ]]; then
-            _error "No English transcript found for: $title"
-            return 1
-        fi
+    local total=0 success=0 failed=0
 
-        local prompt
-        prompt=$(cat <<'EOF'
-You are an AI assistant tasked with summarizing a YouTube video based on its transcript.
-
-Follow these guidelines:
-- Write a concise, high-signal summary of what the video is about.
-- Capture the main thesis, key points, and any practical takeaways.
-- Use clear structure with headings and bullet points where appropriate.
-- If the transcript is noisy or incomplete, state assumptions and avoid hallucinations.
-
-Output format:
-## Summary
-
-## Key Points
-
-## Takeaways
-EOF
-        )
-        
-        local -a aichat_args
-        aichat_args=()
-        [[ -n "$model" ]] && aichat_args+=( -m "$model" )
-        
-        _debug "Generating summary with aichat"
-        local summary
-        summary=$(aichat "${aichat_args[@]}" "$prompt" < "$transcript_file" 2>/dev/null)
-        
-        if [[ -z "$summary" ]]; then
-            _error "Failed to generate summary for: $title"
-            return 1
-        fi
-        
-        # Generate filename
-        local slug
-        slug=$(_slugify "$title")
-        local output_file="$RESOURCES_DIR/${slug}-${bookmark_id}.md"
-        
-        # Write summary to file
-        {
-            echo "# $title"
-            echo ""
-            echo "**Source:** $url"
-            echo "**Bookmark ID:** $bookmark_id"
-            echo ""
-            echo "$summary"
-        } > "$output_file"
-
-        _info "✓ Saved summary to: $output_file"
-
-        if _detach_tag "$bookmark_id" "dve9xcn3na386hrvvijno3ys"; then
-            _info "✓ Removed SUMMARIZE tag"
-        else
-            _error "Failed to remove SUMMARIZE tag (continuing)"
-        fi
-    }
-    
-    # Summarize non-video content
-    _summarize_content() {
-        local url="$1" title="$2" bookmark_id="$3"
-        
-        _info "Processing content: $title"
-        
-        # Fetch the content
-        _debug "Fetching content from: $url"
-        local content
-        content="$(curl -sS -L --max-time 30 --max-redirs 5 "$url" 2>/dev/null)" || { _error "Failed to fetch content from: $url"; return 1; }
-        
-        if [[ -z "$content" ]]; then
-            _error "Empty content fetched from: $url"
-            return 1
-        fi
-        
-        local prompt
-        prompt=$(cat <<'EOF'
-You are an AI assistant tasked with summarizing web content.
-
-Follow these guidelines:
-- Write a concise, high-signal summary of what the content is about.
-- Capture the main thesis, key points, and any practical takeaways.
-- Use clear structure with headings and bullet points where appropriate.
-- If the content is noisy or incomplete, state assumptions and avoid hallucinations.
-
-Output format:
-## Summary
-
-## Key Points
-
-## Takeaways
-EOF
-        )
-        
-        local -a aichat_args
-        aichat_args=()
-        [[ -n "$model" ]] && aichat_args+=( -m "$model" )
-        
-        _debug "Generating summary with aichat"
-        local summary
-        summary=$(echo "$content" | aichat "${aichat_args[@]}" "$prompt" 2>/dev/null)
-        
-        if [[ -z "$summary" ]]; then
-            _error "Failed to generate summary for: $title"
-            return 1
-        fi
-        
-        # Generate filename
-        local slug
-        slug=$(_slugify "$title")
-        local output_file="$RESOURCES_DIR/${slug}-${bookmark_id}.md"
-        
-        # Write summary to file
-        {
-            echo "# $title"
-            echo ""
-            echo "**Source:** $url"
-            echo "**Bookmark ID:** $bookmark_id"
-            echo ""
-            echo "$summary"
-        } > "$output_file"
-
-        _info "✓ Saved summary to: $output_file"
-
-        if _detach_tag "$bookmark_id" "dve9xcn3na386hrvvijno3ys"; then
-            _info "✓ Removed SUMMARIZE tag"
-        else
-            _error "Failed to remove SUMMARIZE tag (continuing)"
-        fi
-    }
-    
-    # Main execution logic
-    _debug "Fetching bookmarks with SUMMARIZE tag"
-    local total=0
-    local success=0
-    local failed=0
-    
-    while IFS=$'\t' read -r bookmark_id url title content_type; do
+    for row in $bookmarks; do
         ((total++))
         
-        if [[ -z "$url" ]]; then
-            _error "Skipping bookmark '$title' (ID: $bookmark_id): No URL found"
-            ((failed++))
-            continue
-        fi
+        # Decode base64 row
+        local _decoded
+        _decoded="$(echo "$row" | base64 --decode)"
         
-        if _is_youtube_url "$url"; then
-            if _summarize_video "$url" "$title" "$bookmark_id"; then
-                ((success++))
+        local id url title
+        id="$(echo "$_decoded" | jq -r .id)"
+        url="$(echo "$_decoded" | jq -r .content.url)"
+        title="$(echo "$_decoded" | jq -r '.title // "Untitled"')"
+        
+        if [[ -z "$url" || "$url" == "null" ]]; then
+            _error "Skipping '$title': No URL"
+            ((failed++)); continue
+        fi
+
+        local slug="$(_slugify "$title")"
+        local output_file="$RESOURCES_DIR/${slug}-${id}.md"
+        
+        _log "Processing: $title ($url)"
+        
+        # Prepare file header
+        {
+            echo "# $title"
+            echo ""
+            echo "**Source:** $url"
+            echo "**Bookmark ID:** $id"
+            echo ""
+        } > "$output_file"
+
+        local summary_result=""
+        
+        if [[ "$url" =~ (youtube\.com|youtu\.be) ]]; then
+            # REUSE: summarize-youtube
+            # Note: We append to output_file
+            if summarize-youtube ${model:+--model "$model"} "$url" >> "$output_file"; then
+                summary_result=0
             else
-                ((failed++))
+                summary_result=1
             fi
         else
-            if _summarize_content "$url" "$title" "$bookmark_id"; then
-                ((success++))
+            # Web content summary
+            local content
+            content="$(curl -sS -L --max-time 30 "$url")"
+            if [[ -n "$content" ]]; then
+                 echo "$content" | aichat ${model:+-m "$model"} \
+                    "Summarize this web content. Concise, high-signal, markdown format." \
+                    >> "$output_file"
+                 summary_result=$?
             else
-                ((failed++))
+                summary_result=1
             fi
         fi
-    done < <(_fetch_bookmarks)
-    
-    [[ $total -eq 0 ]] && _info "No bookmarks found with SUMMARIZE tag" && return 0
-    
-    _info "Complete. Processed: $total bookmarks (Success: $success, Failed: $failed)"
+
+        if [[ "$summary_result" -eq 0 ]]; then
+            echo "Saved: $output_file"
+            _detach_tag "$id"
+            ((success++))
+        else
+            _error "Failed to summarize: $title"
+            rm -f "$output_file"
+            ((failed++))
+        fi
+    done
+
+    echo "Complete. Processed: $total (Success: $success, Failed: $failed)"
 }
