@@ -47,7 +47,7 @@ EOF
     [[ -z "$KARAKEEP_HOST" ]] && { echo "Error: Karakeep host not set." >&2; return 1; }
     [[ -z "$VIMWIKI_DIR" ]] && { echo "Error: Vimwiki directory not set." >&2; return 1; }
     
-    local RESOURCES_DIR="$VIMWIKI_DIR/resources"
+    local RESOURCES_DIR="$VIMWIKI_DIR/resources/summaries"
     mkdir -p "$RESOURCES_DIR"
 
     # Helpers
