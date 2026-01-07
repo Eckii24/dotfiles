@@ -20,6 +20,16 @@ uda.priority.default=M
 # REPORTS
 report.next.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
 
+report.pro.filter=status:pending -WAITING limit:page
+report.pro.labels=ID,Active,Age,Deps,P,Project,Tag,Recur,S,Due,Until,Description,Urg
+report.pro.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
+report.pro.sort=project+,urgency-
+
+report.inbox.filter=status:pending project:
+report.inbox.labels=ID,Active,Created,Age,Deps,P,Project,Tag,Recur,S,Due,Until,Description,Urg
+report.inbox.columns=id,start.age,entry,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.count,urgency 
+report.inbox.sort=entry-
+
 # COLORS
 color.due=
 color.due.today=color9
@@ -57,12 +67,12 @@ uda.adonamespace.type=string
 uda.adonamespace.label=Azure Devops Namespace
 
 # Urgency
-urgency.uda.adostate.Active.coefficient=1
-urgency.uda.adostate.Ready for Development.coefficient=0.5
+urgency.uda.adostate.Active.coefficient=2
+urgency.uda.adostate.Ready for Development.coefficient=1
 urgency.uda.adotype.Task.coefficient=-1
 urgency.uda.adotype.Feature.coefficient=-3
-urgency.user.tag.OMR.coefficient=2
-urgency.user.tag.RXP.coefficient=1
+urgency.user.project.OMR.coefficient=2
+urgency.user.project.RXP.coefficient=1
 
 # Report
 report.ado.description=List all Azure Devops tasks

@@ -12,7 +12,7 @@ project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\OM LOG'"
 project_template = "OMR"
-add_tags = ["ADO"]
+add_tags = ["ado"]
 
 [ado_issues_rxp]
 service = "azuredevops"
@@ -22,7 +22,7 @@ project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\Rx Recognition App'"
 project_template = "RXP"
-add_tags = ["ADO"]
+add_tags = ["ado"]
 
 [ado_issues_infra]
 service = "azuredevops"
@@ -32,7 +32,7 @@ project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
 project_template = "INFRA"
-add_tags = ["ADO"]
+add_tags = ["ado"]
 
 [ado_issues_other]
 service = "azuredevops"
@@ -42,5 +42,5 @@ project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] <> 'VIS - Program 0\\OM LOG' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure'"
 project_template = ""
-add_tags = ["ADO"]
+add_tags = ["ado"]
 
