@@ -66,7 +66,7 @@ urgency.user.tag.RXP.coefficient=1
 
 # Report
 report.ado.description=List all Azure Devops tasks
-report.ado.columns=id,priority,tags,adoid,adotype,adotitle,adostate,entry.age,urgency
-report.ado.labels=ID,Prio,Tags,ADO ID,Type,Title,State,Age,Urgency
+report.ado.columns=id,priority,project,adoid,adotype,adotitle,adostate,entry.age,urgency
+report.ado.labels=ID,Prio,Project,ADO ID,Type,Title,State,Age,Urgency
 report.ado.filter=status:pending adoid
 report.ado.sort=urgency-

@@ -11,7 +11,8 @@ PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\OM LOG'"
-add_tags = ["OMR"]
+project_template = "OMR"
+add_tags = ["ADO"]
 
 [ado_issues_rxp]
 service = "azuredevops"
@@ -20,7 +21,8 @@ PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\Rx Recognition App'"
-add_tags = ["RXP"]
+project_template = "RXP"
+add_tags = ["ADO"]
 
 [ado_issues_infra]
 service = "azuredevops"
@@ -29,7 +31,8 @@ PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
-add_tags = ["INFRA"]
+project_template = "INFRA"
+add_tags = ["ADO"]
 
 [ado_issues_other]
 service = "azuredevops"
@@ -38,4 +41,6 @@ PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] <> 'VIS - Program 0\\OM LOG' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure'"
+project_template = ""
+add_tags = ["ADO"]
 
