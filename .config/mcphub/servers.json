@@ -102,53 +102,8 @@
       ]
     },
     "context7": {
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ],
-      "autoApprove": [
-        "resolve-library-id",
-        "get-library-docs"
-      ],
-      "command": "npx",
-      "disabled": false
-    },
-    "mcp-promptregistry": {
-      "args": [
-        "mcp-promptregistry"
-      ],
-      "autoApprove": [],
-      "command": "npx",
-      "disabled": false,
-      "env": {
-        "PROMPT_REGISTRY_PROJECT_DIR": ""
-      }
-    },
-    "repomix": {
-      "args": [
-        "--mcp"
-      ],
-      "autoApprove": [
-        "pack_codebase",
-        "pack_remote_repository",
-        "read_repomix_output",
-        "grep_repomix_output",
-        "file_system_read_file",
-        "file_system_read_directory"
-      ],
-      "command": "repomix",
-      "disabled": true
-    },
-    "sequential-thinking": {
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "autoApprove": [
-        "sequentialthinking"
-      ],
-      "command": "npx",
-      "disabled": true
+      "type": "streamable-http",
+      "url": "https://mcp.context7.com/mcp"
     },
     "serena": {
       "args": [
@@ -161,15 +116,6 @@
       ],
       "command": "uvx",
       "disabled": true
-    },
-    "vectorcode": {
-      "autoApprove": [
-        "ls",
-        "query",
-        "files_ls"
-      ],
-      "command": "vectorcode-mcp-server",
-      "disabled": false
     }
   },
   "nativeMCPServers": {
