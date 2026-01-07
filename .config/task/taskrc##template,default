@@ -41,3 +41,4 @@ color.due.today=color9
 color.error=rgb555 on rgb500
 color.overdue=rgb400
 color.scheduled=rgb530
+color.tagged=
