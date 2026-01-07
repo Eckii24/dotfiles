@@ -1,1 +1,1 @@
-export VIMWIKI_HOME="$HOME/Development/Repos/Notes/vimwiki"
+export VIMWIKI_HOME="$HOME/Development/Repos/Notes"

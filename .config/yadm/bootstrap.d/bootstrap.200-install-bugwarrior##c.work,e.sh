@@ -24,7 +24,7 @@ CRON_BLOCK="$(
   cat <<'CRON'
 BUGWARRIORRC="/home/vimateck/.config/task/bugwarrior.toml"
 TASKRC="/home/vimateck/.config/task/taskrc"
-TASKDATA="/home/vimateck/VimWiki/task"
+TASKDATA="/home/vimateck/Development/Repos/Notes/task"
 
 # Run `bugwarrior pull` every 15 min
 */15 * * * * bugwarrior pull
