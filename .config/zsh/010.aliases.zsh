@@ -7,8 +7,8 @@ alias ynvim='yadm enter nvim ~'
 alias diff='delta -n -s'
 alias rm='trash-put'
 
-alias wiki='nvim +VimwikiIndex'
-alias daily='nvim +VimwikiMakeDiaryNote'
+alias wiki='nvim $VIMWIKI_HOME/index.md'
+alias daily='nvim +Obsidian today'
 alias wikisync='gitsync $VIMWIKI_HOME'
 
 # AI related stuff
