@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Karakeep Bookmark Summarizer
-# Summarizes Karakeep bookmarks tagged with SUMMARIZE and saves them to Vimwiki
+# Summarizes Karakeep bookmarks tagged with SUMMARIZE and saves them to Wiki
 
 summarize-karakeep-bookmarks() {
     local -r FUNCTION_NAME="summarize-karakeep-bookmarks"
@@ -8,7 +8,7 @@ summarize-karakeep-bookmarks() {
     # Defaults
     local KARAKEEP_TOKEN_VAL="${KARAKEEP_TOKEN:-}"
     local KARAKEEP_HOST="${KARAKEEP_HOST:-}"
-    local VIMWIKI_DIR="${VIMWIKI_HOME:-}"
+    local WIKI_DIR="${WIKI_HOME:-}"
     local model=""
     local verbose=false
     
@@ -17,11 +17,11 @@ summarize-karakeep-bookmarks() {
         cat << 'EOF'
 Usage: summarize-karakeep-bookmarks [options]
 
-Fetch bookmarks with tag SUMMARIZE from Karakeep, generate summaries, and save to Vimwiki.
+Fetch bookmarks with tag SUMMARIZE from Karakeep, generate summaries, and save to Wiki.
 
 Options:
   --token TOKEN       Karakeep API token (default: $KARAKEEP_TOKEN)
-  --vimwiki DIR       Vimwiki home directory (default: $VIMWIKI_HOME)
+  --wiki DIR          Wiki home directory (default: $WIKI_HOME)
   -m, --model MODEL   AI model to use (passed to aichat)
   -v, --verbose       Enable verbose output
   -h, --help          Show this help
@@ -35,7 +35,7 @@ EOF
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --token) KARAKEEP_TOKEN_VAL="$2"; shift 2 ;;
-            --vimwiki) VIMWIKI_DIR="$2"; shift 2 ;;
+            --wiki) WIKI_DIR="$2"; shift 2 ;;
             -m|--model) model="$2"; shift 2 ;;
             -v|--verbose) verbose=true; shift ;;
             *) echo "Unknown option: $1" >&2; return 1 ;;
@@ -45,9 +45,9 @@ EOF
     # Validation
     [[ -z "$KARAKEEP_TOKEN_VAL" ]] && { echo "Error: Karakeep token not set." >&2; return 1; }
     [[ -z "$KARAKEEP_HOST" ]] && { echo "Error: Karakeep host not set." >&2; return 1; }
-    [[ -z "$VIMWIKI_DIR" ]] && { echo "Error: Vimwiki directory not set." >&2; return 1; }
+    [[ -z "$WIKI_DIR" ]] && { echo "Error: Wiki directory not set." >&2; return 1; }
     
-    local RESOURCES_DIR="$VIMWIKI_DIR/resources/summaries"
+    local RESOURCES_DIR="$WIKI_DIR/resources/summaries"
     mkdir -p "$RESOURCES_DIR"
 
     # Helpers

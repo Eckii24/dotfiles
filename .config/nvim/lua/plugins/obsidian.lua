@@ -15,8 +15,8 @@ return {
       },
       workspaces = {
         {
-          name = "vimwiki",
-          path = vim.fn.expand(vim.env.VIMWIKI_HOME),
+          name = "Wiki",
+          path = vim.fn.expand(vim.env.WIKI_HOME),
         },
       },
     },

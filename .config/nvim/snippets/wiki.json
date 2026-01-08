@@ -1,7 +1,7 @@
 {
-  "Vimwiki Daily Template": {
+  "Wiki Daily Template": {
     "prefix": "daily",
-    "description": "Daily template for vimwiki diary entries.",
+    "description": "Daily template for wiki diary entries.",
     "body": [
       "## Planning",
       "",
@@ -14,7 +14,7 @@
   },
   "Todo Template": {
     "prefix": "todo",
-    "description": "Template for todo entries in vimwiki.",
+    "description": "Template for todo entries in wiki.",
     "body": [
       "* [ ] "
     ]

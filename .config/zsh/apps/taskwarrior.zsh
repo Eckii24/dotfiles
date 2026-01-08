@@ -1,6 +1,6 @@
-source $HOME/.config/zsh/apps/vimwiki.zsh
+source $HOME/.config/zsh/apps/wiki.zsh
 
 export BUGWARRIORRC="$HOME/.config/task/bugwarrior.toml"
 export TASKRC="$HOME/.config/task/taskrc"
-export TASKDATA="$VIMWIKI_HOME/task"
+export TASKDATA="$WIKI_HOME/task"
 export TASKOPENRC="$HOME/.config/task/taskopenrc"
