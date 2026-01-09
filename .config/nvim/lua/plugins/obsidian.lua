@@ -4,6 +4,7 @@ return {
     ft = "markdown",
     cmd = { "Obsidian" },
     opts = {
+      wiki_link_func = "use_alias_only",
       daily_notes = {
         folder = "diary",
       },
@@ -27,9 +28,10 @@ return {
       { "<leader>W", desc = "Obsidian" },
 
       { "<leader>Wi", "<cmd>Obsidian quick_switch<cr>", desc = "Quick Switch" },
-      { "<leader>WI", "<cmd>Obsidian open index<cr>", desc = "Index" },
-
+      { "<leader>WI", string.format("<cmd>e %s/index.md<cr>", vim.fn.expand(vim.env.WIKI_HOME)), desc = "Index" },
       { "<leader>WD", "<cmd>Obsidian today<cr>", desc = "New Daily Note (Today)" },
+      { "<leader>Wt", "<cmd>Obsidian tags<cr>", desc = "Tags" },
+
       { "<leader>Wd", desc = "Diary" },
       { "<leader>Wdi", "<cmd>Obsidian dailies -7 3<cr>", desc = "Index" },
       { "<leader>Wdt", "<cmd>Obsidian tomorrow<cr>", desc = "New Diary Note (Tomorrow)" },
@@ -41,6 +43,8 @@ return {
       { "<leader>Wnl", "<cmd>Obsidian links<cr>", desc = "Links" },
       { "<leader>Wnr", "<cmd>Obsidian rename<cr>", desc = "Rename" },
       { "<leader>Wnt", "<cmd>Obsidian toc<cr>", desc = "TOC" },
+
+      { "<CR>", "<cmd>Obsidian link_new<cr>", mode = "v", desc = "Link New" },
     },
   },
   {
