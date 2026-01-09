@@ -7,11 +7,14 @@ search.case.sensitive=0
 weekstart=Monday
 
 # URGENCY
-urgency.age.coefficient=-3
 urgency.age.max=90
+
+urgency.blocking.coefficient=3.0
+urgency.age.coefficient=-3
 urgency.tags.coefficient=0
 urgency.project.coefficient=0
 urgency.annotations.coefficient=0
+urgency.blocked.coefficient=-3.0
 urgency.user.tag.later.coefficient=-6.0
 
 # UDAs
