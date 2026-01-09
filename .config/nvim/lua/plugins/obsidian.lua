@@ -10,6 +10,9 @@ return {
       frontmatter = {
         enabled = false,
       },
+      footer = {
+        enabled = false,
+      },
       ui = {
         enable = false,
       },
@@ -43,6 +46,7 @@ return {
   {
     "eckii24/m_taskwarrior_d.nvim",
     branch = "dev",
+    -- dir = "~/Development/m_taskwarrior_d.nvim/",
     dependencies = { "MunifTanjim/nui.nvim" },
     ft = { "markdown" },
     opts = {
@@ -60,6 +64,7 @@ return {
       { "<leader>tD", "<cmd>TWRunWithCurrent mod status:pending<cr>", desc = "TaskWarrior Run with Current" },
       { "<leader>tt", "<cmd>TWToggle<cr>", desc = "TaskWarrior Toggle" },
       { "<leader>ti", "<cmd>TWView<cr>", desc = "TaskWarrior View" },
+      { "<leader>tq", "<cmd>TWQueryTasks<cr>", desc = "TaskWarrior Query Tasks" },
       { "<leader>tu", "<cmd>TWUpdateCurrent<cr>", desc = "TaskWarrior Update Current" },
       { "<leader>ts", "<cmd>TWSyncTasks<cr>", desc = "TaskWarrior Sync Tasks" },
     },
