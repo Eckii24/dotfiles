@@ -84,7 +84,7 @@
           "template": "{{ if .Output }}{{ if gt (.Output | trim | int) 0 }} \uf0ae {{ .Output }} {{ end }}{{ end }}",
           "type": "command",
           "properties": {
-            "command": "task status:pending scheduled.before:now count",
+            "command": "task status:pending '(scheduled.before:tomorrow or due.before:tomorrow)' count",
             "shell": "bash"
           }
         }
