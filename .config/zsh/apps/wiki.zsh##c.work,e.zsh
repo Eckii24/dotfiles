@@ -1,1 +1,5 @@
 export WIKI_HOME="$HOME/Development/Repos/Notes"
+export BUGWARRIORRC="$HOME/.config/task/bugwarrior.toml"
+export TASKRC="$HOME/.config/task/taskrc"
+export TASKDATA="$WIKI_HOME/task"
+export TASKOPENRC="$HOME/.config/task/taskopenrc"
