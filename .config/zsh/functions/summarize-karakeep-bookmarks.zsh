@@ -47,7 +47,7 @@ EOF
     [[ -z "$KARAKEEP_HOST" ]] && { echo "Error: Karakeep host not set." >&2; return 1; }
     [[ -z "$WIKI_DIR" ]] && { echo "Error: Wiki directory not set." >&2; return 1; }
     
-    local RESOURCES_DIR="$WIKI_DIR/resources/summaries"
+    local RESOURCES_DIR="$WIKI_DIR/resources/inbox"
     mkdir -p "$RESOURCES_DIR"
 
     # Helpers
