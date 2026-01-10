@@ -7,12 +7,16 @@ return {
       wiki_link_func = "use_alias_only",
       daily_notes = {
         folder = "diary",
+        template = "daily.md",
       },
       frontmatter = {
         enabled = false,
       },
       footer = {
         enabled = false,
+      },
+      templates = {
+        folder = "templates",
       },
       ui = {
         enable = false,
