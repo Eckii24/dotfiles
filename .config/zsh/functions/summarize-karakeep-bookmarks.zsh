@@ -92,28 +92,39 @@ EOF
 
     local total=0 success=0 failed=0
 
-    for row in $bookmarks; do
+    _b64decode() {
+        # macOS: `base64 -D`; GNU coreutils: `base64 --decode`
+        base64 --decode 2>/dev/null || base64 -D 2>/dev/null
+    }
+
+    while IFS= read -r row; do
+        [[ -z "$row" ]] && continue
         ((total++))
-        
+
         # Decode base64 row
         local _decoded
-        _decoded="$(echo "$row" | base64 --decode)"
-        
+        if ! _decoded="$(printf '%s' "$row" | _b64decode)"; then
+            _error "Failed to decode bookmark row (base64)"
+            ((failed++))
+            continue
+        fi
+
         local id url title
-        id="$(echo "$_decoded" | jq -r .id)"
-        url="$(echo "$_decoded" | jq -r .content.url)"
-        title="$(echo "$_decoded" | jq -r '.title // "Untitled"')"
-        
+        id="$(printf '%s' "$_decoded" | jq -r .id)"
+        url="$(printf '%s' "$_decoded" | jq -r .content.url)"
+        title="$(printf '%s' "$_decoded" | jq -r '.title // "Untitled"')"
+
         if [[ -z "$url" || "$url" == "null" ]]; then
             _error "Skipping '$title': No URL"
-            ((failed++)); continue
+            ((failed++))
+            continue
         fi
 
         local slug="$(_slugify "$title")"
         local output_file="$RESOURCES_DIR/$(date +%Y%m%d)-${slug}-${id}.md"
-        
+
         _log "Processing: $title ($url)"
-        
+
         # Prepare file header
         {
             echo "# $title"
@@ -124,11 +135,16 @@ EOF
         } > "$output_file"
 
         local summary_result=""
-        
+
         if [[ "$url" =~ (youtube\.com|youtu\.be) ]]; then
             # REUSE: summarize-youtube
             # Note: We append to output_file
-            if summarize-youtube ${model:+--model "$model"} "$url" >> "$output_file"; then
+            local -a yt_args
+            yt_args=()
+            [[ -n "$model" ]] && yt_args+=(--model "$model")
+            yt_args+=("$url")
+
+            if summarize-youtube "${yt_args[@]}" >> "$output_file"; then
                 summary_result=0
             else
                 summary_result=1
@@ -138,10 +154,10 @@ EOF
             local content
             content="$(curl -sS -L --max-time 30 "$url")"
             if [[ -n "$content" ]]; then
-                 echo "$content" | aichat ${model:+-m "$model"} \
+                printf '%s' "$content" | aichat ${model:+-m "$model"} \
                     "Summarize this web content. Concise, high-signal, markdown format." \
                     >> "$output_file"
-                 summary_result=$?
+                summary_result=$?
             else
                 summary_result=1
             fi
@@ -156,7 +172,7 @@ EOF
             rm -f "$output_file"
             ((failed++))
         fi
-    done
+    done <<< "$bookmarks"
 
     echo "Complete. Processed: $total (Success: $success, Failed: $failed)"
 }
