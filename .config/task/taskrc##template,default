@@ -22,6 +22,8 @@ urgency.annotations.coefficient=0
 urgency.blocked.coefficient=-3.0
 urgency.user.tag.later.coefficient=-6.0
 
+urgency.user.project.Wohnen.Haus.coefficient=5.0
+
 # UDAs
 uda.priority.default=M
 
