@@ -1,7 +1,15 @@
 summarize-youtube() {
-  local output_file
-  local model
-  local youtube_url
+  local -r FUNCTION_NAME="summarize-youtube"
+
+  local output_file=""
+  local model=""
+  local youtube_url=""
+  local verbose=false
+
+  _log_info() { echo "[$FUNCTION_NAME] INFO: $1" >&2; }
+  _log_step() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] STEP: $1" >&2; }
+  _log_debug() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] DEBUG: $1" >&2; }
+  _error() { echo "[$FUNCTION_NAME] ERROR: $1" >&2; }
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -13,6 +21,10 @@ summarize-youtube() {
         model="$2"
         shift 2
         ;;
+      --verbose|-v)
+        verbose=true
+        shift
+        ;;
       --help|-h)
         cat << 'EOF'
 Usage: summarize-youtube [options] <youtube-url>
@@ -23,6 +35,7 @@ sending it to aichat.
 Options:
   -o, --output FILE   Write summary to FILE (default: stdout)
   -m, --model MODEL   Pass MODEL to aichat (-m)
+  -v, --verbose       Enable verbose logs
   -h, --help          Show this help
 
 Dependencies: yt-dlp, aichat
@@ -30,7 +43,7 @@ EOF
         return 0
         ;;
       -* )
-        echo "Unknown option: $1" >&2
+        _error "Unknown option: $1"
         return 1
         ;;
       *)
@@ -41,41 +54,23 @@ EOF
   done
 
   if [[ -z "$youtube_url" ]]; then
-    echo "Usage: summarize-youtube [options] <youtube-url>" >&2
+    _error "Usage: summarize-youtube [options] <youtube-url>"
     return 1
   fi
 
+  _log_info "Processing: $youtube_url"
+
   for cmd in yt-dlp aichat; do
-    command -v "$cmd" >/dev/null || { echo "Missing dependency: $cmd" >&2; return 1; }
+    command -v "$cmd" >/dev/null || { _error "Missing dependency: $cmd"; return 1; }
   done
 
   local prompt
-  prompt=$(cat <<'EOF'
-You are an AI assistant tasked with summarizing a YouTube video based on its transcript.
-
-Follow these guidelines:
-- Write a concise, high-signal summary of what the video is about.
-- Capture the main thesis, key points, and any practical takeaways.
-- Use clear structure with headings and bullet points where appropriate.
-- If the transcript is noisy or incomplete, state assumptions and avoid hallucinations.
-
-Output format:
-## Summary
-
-## Key Points
-
-## Takeaways
-EOF
-  )
-
-  local -a aichat_args
-  aichat_args=()
-  [[ -n "$model" ]] && aichat_args+=( -m "$model" )
+  prompt=$'You are an AI assistant tasked with summarizing a YouTube video based on its transcript.\n\nFollow these guidelines:\n- Write a concise, high-signal summary of what the video is about.\n- Capture the main thesis, key points, and any practical takeaways.\n- Use clear structure with headings and bullet points where appropriate.\n- If the transcript is noisy or incomplete, state assumptions and avoid hallucinations.\n\nOutput format:\n## Summary\n\n## Key Points\n\n## Takeaways\n'
 
   local tmp_dir
-  tmp_dir="$(mktemp -d)" || { echo "Error: failed to create temp dir" >&2; return 1; }
+  tmp_dir="$(mktemp -d)" || { _error "Failed to create temp dir"; return 1; }
+  _log_step "Using temp dir: $tmp_dir"
 
-  local cleanup
   cleanup() {
     command rm -rf "$tmp_dir"
   }
@@ -84,27 +79,42 @@ EOF
   local outtmpl
   outtmpl="$tmp_dir/subtitle"
 
+  _log_step "Downloading English auto-subs (yt-dlp)"
+  _log_debug "Running: yt-dlp --write-auto-subs --sub-langs en.* --sub-format vtt --skip-download -o $outtmpl <url>"
   yt-dlp --quiet --no-warnings \
     --write-auto-subs --sub-langs "en.*" --sub-format "vtt" \
     --skip-download -o "$outtmpl" \
-    "$youtube_url" 2>/dev/null || { echo "Error: yt-dlp failed" >&2; return 1; }
+    "$youtube_url" 2>/dev/null || { _error "yt-dlp failed"; return 1; }
 
   local transcript_file
   transcript_file="$(find "$tmp_dir" -maxdepth 1 -type f -name "*.vtt" -print -quit 2>/dev/null)"
   if [[ -z "$transcript_file" ]]; then
-    echo "Error: no English transcript found (expected .vtt)." >&2
+    _error "No English transcript found (expected .vtt)."
     return 1
+  fi
+  _log_step "Transcript file: $transcript_file"
+
+  _log_step "Summarizing transcript with aichat"
+  if [[ -n "$model" ]]; then
+    _log_debug "Running: aichat -m $model <transcript>"
+  else
+    _log_debug "Running: aichat <transcript>"
   fi
 
   local summary
-  summary=$(aichat "${aichat_args[@]}" "$prompt" < "$transcript_file" 2>/dev/null)
+  if [[ -n "$model" ]]; then
+    summary=$(aichat -m "$model" "$prompt" < "$transcript_file" 2>/dev/null)
+  else
+    summary=$(aichat "$prompt" < "$transcript_file" 2>/dev/null)
+  fi
 
   if [[ -z "$summary" ]]; then
-    echo "Error: failed to fetch transcript or generate summary." >&2
+    _error "Failed to generate summary"
     return 1
   fi
 
   if [[ -n "$output_file" ]]; then
+    _log_step "Writing summary to: $output_file"
     print -r -- "$summary" > "$output_file"
   else
     print -r -- "$summary"

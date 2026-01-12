@@ -51,7 +51,9 @@ EOF
     mkdir -p "$RESOURCES_DIR"
 
     # Helpers
-    _log() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] $1" >&2; }
+    _log_info() { echo "[$FUNCTION_NAME] INFO: $1" >&2; }
+    _log_step() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] STEP: $1" >&2; }
+    _log_debug() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] DEBUG: $1" >&2; }
     _error() { echo "[$FUNCTION_NAME] ERROR: $1" >&2; }
     
     _slugify() {
@@ -71,7 +73,7 @@ EOF
     }
 
     # Fetch bookmarks
-    _log "Fetching bookmarks..."
+    _log_step "Fetching bookmarks..."
     local search_query='#SUMMARIZE'
     local encoded_query
     encoded_query="$(echo -n "$search_query" | jq -sRr @uri)"
@@ -86,7 +88,7 @@ EOF
     bookmarks="$(echo "$json_response" | tr -d '\000-\037' | jq -r '.bookmarks[]? | @base64')"
     
     if [[ -z "$bookmarks" ]]; then
-        _log "No bookmarks found."
+        _log_info "No bookmarks found."
         return 0
     fi
 
@@ -123,7 +125,11 @@ EOF
         local slug="$(_slugify "$title")"
         local output_file="$RESOURCES_DIR/$(date +%Y%m%d)-${slug}-${id}.md"
 
-        _log "Processing: $title ($url)"
+        _log_info "Processing: $title"
+        _log_step "URL: $url"
+        _log_step "Output: $output_file"
+
+        _log_step "Writing markdown header"
 
         # Prepare file header
         {
@@ -137,13 +143,16 @@ EOF
         local summary_result=""
 
         if [[ "$url" =~ (youtube\.com|youtu\.be) ]]; then
-            # REUSE: summarize-youtube
+            # YouTube summary via summarize-youtube
+            _log_step "Summarizing YouTube video"
             # Note: We append to output_file
             local -a yt_args
             yt_args=()
+            [[ "$verbose" == true ]] && yt_args+=(--verbose)
             [[ -n "$model" ]] && yt_args+=(--model "$model")
             yt_args+=("$url")
 
+            _log_debug "Running: summarize-youtube ${yt_args[*]}"
             if summarize-youtube "${yt_args[@]}" >> "$output_file"; then
                 summary_result=0
             else
@@ -151,9 +160,12 @@ EOF
             fi
         else
             # Web content summary
+            _log_step "Fetching page content"
             local content
             content="$(curl -sS -L --max-time 30 "$url")"
             if [[ -n "$content" ]]; then
+                _log_step "Summarizing page content with aichat"
+                _log_debug "Running: aichat ${model:+-m "$model"} 'Summarize this web content...'"
                 printf '%s' "$content" | aichat ${model:+-m "$model"} \
                     "Summarize this web content. Concise, high-signal, markdown format." \
                     >> "$output_file"
@@ -164,7 +176,8 @@ EOF
         fi
 
         if [[ "$summary_result" -eq 0 ]]; then
-            echo "Saved: $output_file"
+            _log_info "Saved: $output_file"
+            _log_step "Detaching tag SUMMARIZE from bookmark $id"
             _detach_tag "$id"
             ((success++))
         else
