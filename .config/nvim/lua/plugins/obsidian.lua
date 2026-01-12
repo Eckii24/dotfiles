@@ -73,6 +73,7 @@ return {
       { "<leader>tt", "<cmd>TWToggle<cr>", desc = "TaskWarrior Toggle" },
       { "<leader>ti", "<cmd>TWView<cr>", desc = "TaskWarrior View" },
       { "<leader>tq", "<cmd>TWQueryTasks<cr>", desc = "TaskWarrior Query Tasks" },
+      { "<leader>tQ", "<cmd>TWBufQueryTasks<cr>", desc = "TaskWarrior Buffer Query Tasks" },
       { "<leader>tu", "<cmd>TWUpdateCurrent<cr>", desc = "TaskWarrior Update Current" },
       { "<leader>ts", "<cmd>TWSyncTasks<cr>", desc = "TaskWarrior Sync Tasks" },
     },
