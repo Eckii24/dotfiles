@@ -53,5 +53,8 @@
     "mcphub_ado__wit_my_work_items": true,
     "mcphub_ado__wit_update_work_item": true,
     "mcphub_ado__wit_work_items_link": true
-  }
+  },
+  "plugin": [
+    "oh-my-opencode"
+  ]
 }
