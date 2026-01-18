@@ -156,6 +156,21 @@ keybinds clear-defaults=true {
         bind "Ctrl l" { MoveFocusOrTab "Right"; }
         bind "Ctrl j" { MoveFocus "Down"; }
         bind "Ctrl k" { MoveFocus "Up"; }
+
+        bind "Ctrl 1" { GoToTab 1; SwitchToMode "locked"; }
+        bind "Ctrl 2" { GoToTab 2; SwitchToMode "locked"; }
+        bind "Ctrl 3" { GoToTab 3; SwitchToMode "locked"; }
+        bind "Ctrl 4" { GoToTab 4; SwitchToMode "locked"; }
+        bind "Ctrl 5" { GoToTab 5; SwitchToMode "locked"; }
+        bind "Ctrl 6" { GoToTab 6; SwitchToMode "locked"; }
+        bind "Ctrl 7" { GoToTab 7; SwitchToMode "locked"; }
+        bind "Ctrl 8" { GoToTab 8; SwitchToMode "locked"; }
+        bind "Ctrl 9" { GoToTab 9; SwitchToMode "locked"; }
+        bind "tab" { ToggleTab; }
+        bind "Ctrl s" { NewPane "down"; SwitchToMode "locked"; }
+        bind "Ctrl v" { NewPane; SwitchToMode "locked"; }
+        bind "Ctrl n" { NewTab; SwitchToMode "locked"; }
+        bind "Ctrl r" { SwitchToMode "renametab"; TabNameInput 0; }
     }
     shared_except "locked" "entersearch" {
         bind "enter" { SwitchToMode "locked"; }
