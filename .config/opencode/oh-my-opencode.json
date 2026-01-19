@@ -22,5 +22,11 @@
     "multimodal-looker": {
       "model": "github-copilot/gemini-3-flash-preview"
     }
+  },
+  "disabled_skills": [
+    "playwright"
+  ],
+  "sisyphus_agent": {
+    "default_builder_enabled": true
   }
 }
