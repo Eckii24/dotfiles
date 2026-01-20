@@ -1,6 +1,6 @@
 # see https://github.com/sigoden/aichat/blob/main/config.example.yaml
 
-model: copilot:gpt-4.1
+model: copilot:gpt-5-mini
 clients:
 - type: azure-openai
   name: azure
