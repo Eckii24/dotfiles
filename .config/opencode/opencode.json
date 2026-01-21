@@ -3,6 +3,14 @@
   "autoupdate": true,
   "share": "disabled",
   "theme": "catppuccin",
+  "agent": {
+    "build": {
+      "model": "github-copilot/claude-sonnet-4.5",
+    },
+    "plan": {
+      "model": "github-copilot/claude-opus-4.5",
+    }
+  },
   "permission": {
     "bash": {
       "dotnet build": "allow",
