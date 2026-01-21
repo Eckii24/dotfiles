@@ -5,36 +5,28 @@ clients:
 - type: azure-openai
   name: azure
   models:
-  - name: gpt-4.1
-  - name: gpt-4.1-mini
-  - name: gpt-4o
-  - name: gpt-4o-mini
   - name: gpt-5
-  - name: gpt-5-mini
-  - name: o1
-  - name: o1-mini
-  - name: o3
-  - name: o3-mini
-  - name: o4-mini
+  - name: gpt-5.1-codex
+  - name: text-embedding-3-small
+    type: embedding
 - type: openai-compatible
   name: copilot
   api_base: https://api.githubcopilot.com
   models:
-  - name: gpt-4o
-  - name: gpt-4.1
-  - name: gpt-5
   - name: gpt-5-mini
-  - name: o3-mini
-  - name: o4-mini
-  - name: gemini-2.0-flash-001
-  - name: gemini-2.5-pro
-  - name: claude-3.5-sonnet
-  - name: claude-3.7-sonnet
-  - name: claude-3.7-sonnet-thought
-  - name: claude-sonnet-4
+  - name: gpt-5.1-codex-max
+  - name: gpt-5.1-codex-mini
+  - name: gpt-5.2
+  - name: gpt-5.2-codex
+  - name: gemini-3-pro-preview
+  - name: gemini-3-flash-preview
+  - name: claude-haiku-4.5
+  - name: claude-sonnet-4.5
+  - name: claude-opus-4.5
   patch:
     chat_completions:
       '.*':
         headers:
           Copilot-Integration-Id: vscode-chat
           Editor-Version: aichat/0.1.0
+rag_embedding_model: azure:text-embedding-3-small
