@@ -24,3 +24,17 @@ alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 
 # dotnet specific
 alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
+
+# General alias
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# Global alias
+alias -g G='| grep'
+alias -g L='| less'
+alias -g S='| sort -h'
+alias -g J='| jq'
+alias -g W='| wc -l'
+alias -g NE='2>/dev/null'
+alias -g DN='>/dev/null'
+alias -g NUL='>/dev/null 2>&1'
