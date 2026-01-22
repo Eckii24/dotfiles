@@ -26,6 +26,7 @@ alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
 
 # General alias
+alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 
