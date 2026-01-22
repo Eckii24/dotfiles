@@ -28,6 +28,9 @@ add_brew_to_path() {
   fi
 }
 
+# Ensure Homebrew is in PATH if it is already installed
+add_brew_to_path
+
 # Install Homebrew if not already installed
 if ! command -v brew &>/dev/null; then
   install_brew_dependencies_on_linux
@@ -49,4 +52,3 @@ if [[ -f "$HOME/.config/yadm/Brewfile" ]]; then
 else
   echo "No Brewfile found. Skipping dependency installation."
 fi
-
