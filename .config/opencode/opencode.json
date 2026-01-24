@@ -5,10 +5,10 @@
   "theme": "catppuccin",
   "agent": {
     "build": {
-      "model": "github-copilot/claude-sonnet-4.5",
+      "model": "github-copilot/claude-sonnet-4.5"
     },
     "plan": {
-      "model": "github-copilot/claude-opus-4.5",
+      "model": "github-copilot/claude-opus-4.5"
     }
   },
   "permission": {
@@ -62,7 +62,5 @@
     "mcphub_ado__wit_update_work_item": true,
     "mcphub_ado__wit_work_items_link": true
   },
-  "plugin": [
-    "oh-my-opencode"
-  ]
+  "plugin": []
 }
