@@ -16,6 +16,9 @@ echo "Init SQL server in docker and sqlcmd"
 sudo docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=Test_1234' -p 1433:1433 --name mssql_server -d mcr.microsoft.com/mssql/server:2022-latest
 uv tool install sqlit-tui -w mssql-python --force
 
+echo "Install bugwarrior"
+uv tool install bugwarrior -w setuptools --force
+
 echo "Install mockoon-cli"
 sudo npm install -g @mockoon/cli
 
