@@ -80,18 +80,30 @@ EOF
   outtmpl="$tmp_dir/subtitle"
 
   _log_step "Downloading English auto-subs (yt-dlp)"
-  _log_debug "Running: yt-dlp --write-auto-subs --sub-langs en.* --sub-format vtt --skip-download -o $outtmpl <url>"
+  _log_debug "Running: yt-dlp --write-auto-subs --sub-langs en --sub-format vtt --skip-download -o $outtmpl <url>"
   yt-dlp --quiet --no-warnings \
-    --write-auto-subs --sub-langs "en.*" --sub-format "vtt" \
+    --write-auto-subs --sub-langs "en" --sub-format "vtt" \
     --skip-download -o "$outtmpl" \
-    "$youtube_url" 2>/dev/null || { _error "yt-dlp failed"; return 1; }
+    "$youtube_url" 2>/dev/null
 
   local transcript_file
   transcript_file="$(find "$tmp_dir" -maxdepth 1 -type f -name "*.vtt" -print -quit 2>/dev/null)"
+  
   if [[ -z "$transcript_file" ]]; then
-    _error "No English transcript found (expected .vtt)."
-    return 1
+    _log_step "No English transcript found, trying German (de)"
+    _log_debug "Running: yt-dlp --write-auto-subs --sub-langs de --sub-format vtt --skip-download -o $outtmpl <url>"
+    yt-dlp --quiet --no-warnings \
+      --write-auto-subs --sub-langs "de" --sub-format "vtt" \
+      --skip-download -o "$outtmpl" \
+      "$youtube_url" 2>/dev/null || { _error "yt-dlp failed"; return 1; }
+    
+    transcript_file="$(find "$tmp_dir" -maxdepth 1 -type f -name "*.vtt" -print -quit 2>/dev/null)"
+    if [[ -z "$transcript_file" ]]; then
+      _error "No transcript found (tried en, de)."
+      return 1
+    fi
   fi
+  
   _log_step "Transcript file: $transcript_file"
 
   _log_step "Summarizing transcript with aichat"
