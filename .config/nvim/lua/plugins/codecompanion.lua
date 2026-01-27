@@ -30,7 +30,7 @@ return {
         adapters = {
           http = {
             azure_openai = function()
-              return require("codecompanion.adapters").extend("azure_openai", {
+              return require("codecompanion.adapters.http").extend("azure_openai", {
                 env = {
                   api_key = "AZURE_API_KEY",
                   endpoint = "AZURE_API_BASE",
@@ -52,6 +52,20 @@ return {
                       ["o3-mini"] = { opts = { can_reason = true } },
                       ["o4-mini"] = { opts = { can_reason = true } },
                     },
+                  },
+                },
+              })
+            end,
+          },
+          acp = {
+            copilot_cli = function()
+              return require("codecompanion.adapters.acp").extend("opencode", {
+                name = "copilot_cli",
+                formatted_name = "Copilot CLI",
+                commands = {
+                  default = {
+                    "copilot",
+                    "--acp",
                   },
                 },
               })
