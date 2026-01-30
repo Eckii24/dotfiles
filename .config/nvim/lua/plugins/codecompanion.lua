@@ -22,10 +22,30 @@ return {
       "ravitemer/codecompanion-history.nvim",
       "lalitmee/codecompanion-spinners.nvim",
       "folke/snacks.nvim",
+      "dyamon/codecompanion-copilot-enterprise.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
       local layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical"
+
+      -- hacky solution to override the GitHub Copilot API base URL
+      -- this is needed because CodeCompanion currently hard override the url
+      do
+        local http = require("codecompanion.http")
+
+        -- keep original function CC captured
+        local orig_post = http.static.methods.post.default
+
+        http.static.methods.post.default = function(opts)
+          if opts and opts.url == "https://api.githubcopilot.com/chat/completions" and vim.env.COPILOT_API_BASE then
+            opts = vim.tbl_deep_extend("force", opts, {
+              url = vim.env.COPILOT_API_BASE .. "/chat/completions",
+            })
+          end
+          return orig_post(opts)
+        end
+      end
+
       return {
         adapters = {
           http = {
@@ -55,6 +75,17 @@ return {
                   },
                 },
               })
+            end,
+            copilot = function()
+              if vim.env.COPILOT_BASE and vim.env.COPILOT_BASE ~= "githubcopilot.com" then
+                return require("codecompanion.adapters.http").extend("copilot_enterprise", {
+                  opts = {
+                    provider_url = vim.env.COPILOT_BASE,
+                  },
+                })
+              end
+
+              return require("codecompanion.adapters.http.copilot")
             end,
           },
           acp = {

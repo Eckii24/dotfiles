@@ -11,6 +11,7 @@ export EDITOR="nvim"
 
 export VIDEO_FOLDER="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Downloads/Videos"
 
+export COPILOT_BASE="githubcopilot.com"
 export COPILOT_API_BASE="https://api.githubcopilot.com"
 
 PATH="$PATH:$HOME/.dotnet/tools"
