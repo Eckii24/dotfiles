@@ -21,6 +21,14 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- Set preview height for dbui filetype to see more content
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "dbui",
+  callback = function()
+    vim.opt.previewheight = 30
+  end,
+})
+
 -- Automatically generate doc comments when typing '///' in C# files
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)

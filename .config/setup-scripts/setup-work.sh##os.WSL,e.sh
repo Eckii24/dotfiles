@@ -32,7 +32,6 @@ if ! command -v sqlcmd &>/dev/null; then
   chmod +x "$HOME/.local/bin/sqlcmd"
   rm /tmp/sqlcmd.tar.bz2
 fi
-uv tool install sqlit-tui -w mssql-python --force
 
 echo "Install redis-cli"
 sudo apt-get install -y redis-tools

@@ -14,6 +14,7 @@ alias wikisync='gitsync $WIKI_HOME'
 # AI related stuff
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
 alias mcp='nvim +"MCPHub"'
+alias db='nvim -c "set previewheight=25" +"DBUI"'
 alias update-copilot-instructions='cp /home/vimateck/Development/Repos/Notes/p0-rules.instructions.md /mnt/c/Users/vimateck/AppData/Roaming/Code/User/prompts/'
 
 # debian specific
