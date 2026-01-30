@@ -2,8 +2,8 @@
 # Sets or refreshes the COPILOT_API_KEY environment variable
 set-copilot-api-key() {
     local -r APPS_JSON_PATH="$HOME/.config/github-copilot/apps.json"
-    local -r GITHUB_API_URL="https://api.github.com/copilot_internal/v2/token"
     local -r FUNCTION_NAME="set-copilot-api-key"
+    local github_domain=""
     
     local verbose=false
     local very_verbose=false
@@ -126,7 +126,8 @@ EOF
         return 0
     }
     
-    # Get OAuth token from GitHub Copilot config
+    # Get OAuth token and domain from GitHub Copilot config
+    # Outputs: "<domain> <oauth_token>"
     _get_oauth_token() {
         if [[ ! -f "$APPS_JSON_PATH" ]]; then
             _error "GitHub Copilot config file not found: $APPS_JSON_PATH"
@@ -134,9 +135,20 @@ EOF
             return 1
         fi
 
-        local oauth_token
-        # Always use cat, and only take the first oauth_token found
-        oauth_token=$(cat "$APPS_JSON_PATH" | jq -r 'to_entries | .[] | select(.key | startswith("github.com:")) | .value.oauth_token' 2>/dev/null | head -n 1)
+        local first_key oauth_token domain
+        # Get the first key from apps.json
+        first_key=$(jq -r 'keys[0]' "$APPS_JSON_PATH" 2>/dev/null)
+        
+        if [[ -z "$first_key" || "$first_key" == "null" ]]; then
+            _error "No entries found in $APPS_JSON_PATH"
+            return 1
+        fi
+        
+        # Extract domain from key (format: "<domain>:<some-id>")
+        domain="${first_key%%:*}"
+        
+        # Get oauth_token for this key
+        oauth_token=$(jq -r --arg key "$first_key" '.[$key].oauth_token' "$APPS_JSON_PATH" 2>/dev/null)
 
         if [[ -z "$oauth_token" || "$oauth_token" == "null" ]]; then
             _error "Failed to extract OAuth token from $APPS_JSON_PATH"
@@ -144,26 +156,32 @@ EOF
             return 1
         fi
         
-        echo "$oauth_token"
+        echo "$domain $oauth_token"
         return 0
     }
     
     # Refresh COPILOT_API_KEY from GitHub API
     _refresh_api_key() {
-        local oauth_token curl_response api_key
+        local oauth_result oauth_token curl_response api_key
 
         _log "Refreshing COPILOT_API_KEY"
 
-        if ! oauth_token=$(_get_oauth_token); then
+        if ! oauth_result=$(_get_oauth_token); then
             return 1
         fi
+        
+        github_domain="${oauth_result%% *}"
+        oauth_token="${oauth_result#* }"
+        _log "Using GitHub domain: $github_domain"
+        _log "OAuth token obtained, requesting new API key"
 
-        _log "OAuth token obtained ($oauth_token), requesting new API key"
+        local github_api_url="https://api.${github_domain}/copilot_internal/v2/token"
+        _log "GitHub API URL: $github_api_url"
 
         curl_response=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer $oauth_token" \
             -H "Accept: application/vnd.github+json" \
-            "$GITHUB_API_URL" 2>/dev/null)
+            "$github_api_url" 2>/dev/null)
 
         local http_code="${curl_response##*$'\n'}"
         local response_body="${curl_response%$'\n'*}"
