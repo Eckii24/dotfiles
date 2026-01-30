@@ -15,6 +15,7 @@ return {
       footer = {
         enabled = false,
       },
+      legacy_commands = false,
       templates = {
         folder = "templates",
       },
