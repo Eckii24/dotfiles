@@ -32,6 +32,9 @@
     ".github/copilot-instructions.md",
     ".github/instructions/*.md"
   ],
+  "skills": {
+    "paths": [".github/skills"]
+  },
   "mcp": {
     "mcphub": {
       "type": "remote",
