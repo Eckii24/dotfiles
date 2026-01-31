@@ -1,10 +1,26 @@
 gitsync() {
-  if [ -z "$1" ]; then
-    echo "Usage: gitsync /path/to/repo"
+  local REPO_PATH
+  local CUSTOM_MSG
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --message|-m)
+        CUSTOM_MSG="$2"
+        shift 2
+        ;;
+      *)
+        REPO_PATH="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$REPO_PATH" ]; then
+    echo "Usage: gitsync /path/to/repo [-m|--message \"commit message\"]"
     return 1
   fi
 
-  local REPO_PATH="$1"
   local COMMIT_MSG
   local DIFF_OUTPUT
   
@@ -42,22 +58,30 @@ Files Changed:
         return 0
     fi
     
-    echo "3. Generating commit message with aichat..."
+    # Use custom message if provided, otherwise generate with aichat
+    if [ -n "$CUSTOM_MSG" ]; then
+      COMMIT_MSG="$CUSTOM_MSG"
+      echo "3. Using custom commit message..."
+      echo "   -> Message:"
+      echo -e "$COMMIT_MSG"
+    else
+      echo "3. Generating commit message with aichat..."
 
-    # Combine the template and the dynamic file list for the final prompt
-    local FINAL_PROMPT="${AI_PROMPT_TEMPLATE}${DIFF_OUTPUT}"
+      # Combine the template and the dynamic file list for the final prompt
+      local FINAL_PROMPT="${AI_PROMPT_TEMPLATE}${DIFF_OUTPUT}"
 
-    # *** CALL TO AI CHAT TOOL ***
-    COMMIT_MSG=$(aichat "$FINAL_PROMPT" 2>/dev/null)
+      # *** CALL TO AI CHAT TOOL ***
+      COMMIT_MSG=$(aichat "$FINAL_PROMPT" 2>/dev/null)
 
-    if [ -z "$COMMIT_MSG" ]; then
-      echo "Error: aichat failed or returned an empty message. Aborting commit."
-      return 1
+      if [ -z "$COMMIT_MSG" ]; then
+        echo "Error: aichat failed or returned an empty message. Aborting commit."
+        return 1
+      fi
+      
+      echo "   -> Generated message:"
+      # Use echo -e to interpret newlines for a clean printout
+      echo -e "$COMMIT_MSG"
     fi
-    
-    echo "   -> Generated message:"
-    # Use echo -e to interpret newlines for a clean printout
-    echo -e "$COMMIT_MSG"
 
     echo "4. Committing changes..."
     # The message is quoted to handle the multi-line structure correctly

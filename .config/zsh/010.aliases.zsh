@@ -10,6 +10,8 @@ alias rm='trash-put'
 alias wiki='nvim $WIKI_HOME/index.md'
 alias daily='nvim +Obsidian\ today'
 alias wikisync='gitsync $WIKI_HOME'
+alias tasksync='gitsync $TASKDATA'
+alias allsync='wikisync && tasksync'
 
 # AI related stuff
 alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
