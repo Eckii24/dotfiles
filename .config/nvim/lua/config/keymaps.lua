@@ -13,7 +13,7 @@ vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" }
 vim.keymap.set("v", "p", '"_dP', { desc = "Paste without yanking" })
 
 -- LSP Restart
-vim.keymap.set("n", "<leader>cL", "<cmd>LspRestart<CR>", { desc = "Restart LSP" })
+vim.keymap.set("n", "<leader>cL", "<cmd>lsp restart<CR>", { desc = "Restart LSP" })
 
 -- Diffs
 vim.keymap.set("n", "<leader>fd", "", { desc = "+diff" })
