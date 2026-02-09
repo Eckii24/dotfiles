@@ -39,3 +39,9 @@
   ; This setting enables the automatic resolution of conflicts 
   ; using the recorded resolution of the same conflict.
   enabled = true
+
+[filter "gitsqlite"]
+  clean = gitsqlite clean
+  smudge = gitsqlite smudge
+[diff "gitsqlite"]
+  textconv = gitsqlite diff
