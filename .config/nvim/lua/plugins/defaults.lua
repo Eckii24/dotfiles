@@ -112,6 +112,9 @@ return {
                 end)
               end,
             },
+            layout = {
+              preview = "main",
+            },
           },
         },
         actions = {
