@@ -28,6 +28,9 @@ return {
           path = vim.fn.expand(vim.env.WIKI_HOME),
         },
       },
+      checkbox = {
+        order = { " ", "x", "~", "!", ">" },
+      },
     },
     keys = {
       { "<leader>W", desc = "Obsidian" },
@@ -36,6 +39,7 @@ return {
       { "<leader>WI", string.format("<cmd>e %s/index.md<cr>", vim.fn.expand(vim.env.WIKI_HOME)), desc = "Index" },
       { "<leader>WD", "<cmd>Obsidian today<cr>", desc = "New Daily Note (Today)" },
       { "<leader>Wt", "<cmd>Obsidian tags<cr>", desc = "Tags" },
+      { "<leader>WT", "<cmd>Obsidian template<cr>", desc = "Template" },
 
       { "<leader>Wd", desc = "Diary" },
       { "<leader>Wdi", "<cmd>Obsidian dailies -7 3<cr>", desc = "Index" },
