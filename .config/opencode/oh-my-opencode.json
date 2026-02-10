@@ -2,7 +2,16 @@
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json",
   "agents": {
     "sisyphus": {
-      "model": "github-copilot/claude-sonnet-4.5"
+      "model": "github-copilot/claude-opus-4.6",
+      "variant": "max"
+    },
+    "hephaestus": {
+      "model": "github-copilot/gpt-5.3-codex",
+      "variant": "medium"
+    },
+    "oracle": {
+      "model": "github-copilot/gpt-5.2",
+      "variant": "high"
     },
     "librarian": {
       "model": "github-copilot/claude-sonnet-4.5"
@@ -10,25 +19,15 @@
     "explore": {
       "model": "github-copilot/gpt-5-mini"
     },
-    "oracle": {
-      "model": "github-copilot/gpt-5.2",
-      "variant": "high"
-    },
-    "frontend-ui-ux-engineer": {
-      "model": "github-copilot/gemini-3-pro-preview"
-    },
-    "document-writer": {
-      "model": "github-copilot/gemini-3-pro-preview"
-    },
     "multimodal-looker": {
-      "model": "github-copilot/gemini-3-flash"
+      "model": "github-copilot/gemini-3-flash-preview"
     },
     "prometheus": {
-      "model": "github-copilot/claude-opus-4.5",
+      "model": "github-copilot/claude-opus-4.6",
       "variant": "max"
     },
     "metis": {
-      "model": "github-copilot/claude-opus-4.5",
+      "model": "github-copilot/claude-opus-4.6",
       "variant": "max"
     },
     "momus": {
@@ -39,20 +38,21 @@
       "model": "github-copilot/claude-sonnet-4.5"
     }
   },
-  "disabled_skills": [
-    "playwright"
-  ],
   "categories": {
     "visual-engineering": {
-      "model": "github-copilot/gemini-3-pro"
+      "model": "github-copilot/gemini-3-pro-preview"
     },
     "ultrabrain": {
-      "model": "github-copilot/gpt-5.2-codex",
+      "model": "github-copilot/gpt-5.3-codex",
       "variant": "xhigh"
     },
+    "deep": {
+      "model": "github-copilot/gpt-5.3-codex",
+      "variant": "medium"
+    },
     "artistry": {
-      "model": "github-copilot/gemini-3-pro",
-      "variant": "max"
+      "model": "github-copilot/gemini-3-pro-preview",
+      "variant": "high"
     },
     "quick": {
       "model": "github-copilot/claude-haiku-4.5"
@@ -64,7 +64,7 @@
       "model": "github-copilot/claude-sonnet-4.5"
     },
     "writing": {
-      "model": "github-copilot/gemini-3-flash"
+      "model": "github-copilot/gemini-3-flash-preview"
     }
   },
   "backgroundTask": {
