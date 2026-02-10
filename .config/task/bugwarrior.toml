@@ -1,4 +1,5 @@
 [general]
+taskrc = "~/.config/task/taskrc"
 targets = ["ado_issues_omr", "ado_issues_rxp", "ado_issues_infra", "ado_issues_other"]
 static_fields = ["project", "priority"]
 annotation_comments = false
@@ -44,3 +45,7 @@ wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [Sys
 project_template = ""
 add_tags = ["ado"]
 
+[notifications]
+notifications = true
+backend = "applescript"
+only_on_new_tasks = true

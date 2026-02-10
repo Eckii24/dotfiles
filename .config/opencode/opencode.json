@@ -20,7 +20,8 @@
   "formatter": {
     "csharpier": {
       "command": [
-        "csharpier"
+        "csharpier",
+        "format"
       ],
       "extensions": [
         ".cs",
@@ -33,7 +34,9 @@
     ".github/instructions/*.md"
   ],
   "skills": {
-    "paths": [".github/skills"]
+    "paths": [
+      ".github/skills"
+    ]
   },
   "mcp": {
     "mcphub": {
