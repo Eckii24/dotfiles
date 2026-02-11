@@ -1,0 +1,78 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json",
+  "agents": {
+    "sisyphus": {
+      "model": "github-copilot-enterprise/claude-opus-4.5",
+      "variant": "max"
+    },
+    "hephaestus": {
+      "model": "github-copilot-enterprise/gpt-5.2-codex",
+      "variant": "medium"
+    },
+    "oracle": {
+      "model": "github-copilot-enterprise/gpt-5.2",
+      "variant": "high"
+    },
+    "librarian": {
+      "model": "github-copilot-enterprise/claude-sonnet-4.5"
+    },
+    "explore": {
+      "model": "github-copilot-enterprise/gpt-5-mini"
+    },
+    "multimodal-looker": {
+      "model": "github-copilot-enterprise/gemini-3-flash-preview"
+    },
+    "prometheus": {
+      "model": "github-copilot-enterprise/claude-opus-4.5",
+      "variant": "max"
+    },
+    "metis": {
+      "model": "github-copilot-enterprise/claude-opus-4.5",
+      "variant": "max"
+    },
+    "momus": {
+      "model": "github-copilot-enterprise/gpt-5.2",
+      "variant": "medium"
+    },
+    "atlas": {
+      "model": "github-copilot-enterprise/claude-sonnet-4.5"
+    }
+  },
+  "categories": {
+    "visual-engineering": {
+      "model": "github-copilot-enterprise/gemini-3-pro-preview"
+    },
+    "ultrabrain": {
+      "model": "github-copilot-enterprise/gpt-5.2-codex",
+      "variant": "xhigh"
+    },
+    "deep": {
+      "model": "github-copilot-enterprise/gpt-5.2-codex",
+      "variant": "medium"
+    },
+    "artistry": {
+      "model": "github-copilot-enterprise/gemini-3-pro-preview",
+      "variant": "high"
+    },
+    "quick": {
+      "model": "github-copilot-enterprise/claude-haiku-4.5"
+    },
+    "unspecified-low": {
+      "model": "github-copilot-enterprise/claude-sonnet-4.5"
+    },
+    "unspecified-high": {
+      "model": "github-copilot-enterprise/claude-sonnet-4.5"
+    },
+    "writing": {
+      "model": "github-copilot-enterprise/gemini-3-flash-preview"
+    }
+  },
+  "backgroundTask": {
+    "defaultConcurrency": 3,
+    "maxRetries": 2,
+    "retryBackoffMs": 5000
+  },
+  "sisyphus_agent": {
+    "default_builder_enabled": true
+  }
+}
