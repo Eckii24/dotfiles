@@ -11,6 +11,7 @@ return {
       test_runner = {
         viewmode = "vsplit",
         vsplit_width = 80,
+        noBuild = false,
         mappings = {
           run_test_from_buffer = { lhs = "<leader>tr", desc = "Run Test from Buffer" },
           peek_stack_trace_from_buffer = { lhs = "<leader>tp", desc = "peek stack trace from buffer" },
@@ -215,7 +216,7 @@ return {
       {
         "<leader>NB",
         function()
-          require("easy-dotnet").build_solution()
+          require("easy-dotnet").build_solution_quickfix()
         end,
         desc = "Build Solution",
       },
