@@ -48,3 +48,9 @@ color.error=rgb555 on rgb500
 color.overdue=rgb400
 color.scheduled=rgb530
 color.tagged=
+color.blocked=
+color.blocking=
+
+# CONTEXTS
+context.haus.read=proj:Wohnen.Haus
+context.haus.write=proj:Wohnen.Haus

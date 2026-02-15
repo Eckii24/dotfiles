@@ -41,6 +41,8 @@ color.error=rgb555 on rgb500
 color.overdue=rgb400
 color.scheduled=rgb530
 color.tagged=
+color.blocked=
+color.blocking=
 
 # ----------------------------------------------------------------------
 # Azure Devops Integration
