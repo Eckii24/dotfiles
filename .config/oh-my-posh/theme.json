@@ -95,6 +95,22 @@
       "alignment": "right",
       "segments": [
         {
+          "background": "#fee898",
+          "foreground": "#111111",
+          "type": "copilot",
+          "invert_powerline": true,
+          "style": "powerline",
+          "powerline_symbol": "\ue0b2",
+          "template": "  {{ .Premium.Used }}/{{ .Premium.Limit }} ",
+          "cache": {
+            "duration": "5m",
+            "strategy": "device"
+          },
+          "options": {
+            "http_timeout": 1000
+          }
+        },
+        {
           "background": "#e4e4e4",
           "foreground": "#585858",
           "properties": {
