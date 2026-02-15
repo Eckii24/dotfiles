@@ -2,26 +2,26 @@
 #  🎙️  MEETING ASSISTANT (Zscaler Safe & M4 optimized)
 # ==============================================================================
 
-MEETING_MODELS_DIR="${MEETING_MODELS_DIR:-$HOME/.meeting-assistant/models}"
-MEETING_MODEL_NAME="${MEETING_MODEL_NAME:-medium}"
-MEETING_RECORDINGS_DIR="${MEETING_RECORDINGS_DIR:-$HOME/Meetings}" 
-
 function meeting() {
     local cmd="$1"
     shift 
     case "$cmd" in
-        install)    _meeting_install ;;
+        install)    _meeting_install "$@" ;;
         start)      _meeting_start "$@" ;;
         record)     _meeting_record "$@" ;;
         transcribe) _meeting_transcribe "$@" ;;
         devices)    _meeting_list_devices ;;
         help|*)
-            echo "Usage: meeting <command>"
-            echo "  install            : Check dependencies & model"
-            echo "  start [mic_id]     : Record & Transcribe"
-            echo "  record [mic_id]    : Record only"
-            echo "  transcribe <file>  : Transcribe file"
-            echo "  devices            : List inputs"
+            echo "Usage: meeting <command> [options]"
+            echo ""
+            echo "Commands:"
+            echo "  install                          : Check dependencies & model"
+            echo "  start                            : Record & Transcribe"
+            echo "  record                           : Record only"
+            echo "  transcribe <file>                : Transcribe file"
+            echo "  devices                          : List audio inputs"
+            echo ""
+            echo "Run 'meeting <command> --help' for command-specific options"
             ;;
     esac
 }
@@ -36,12 +36,39 @@ function _meeting_list_devices() {
 }
 
 function _meeting_install() {
-    mkdir -p "$MEETING_MODELS_DIR"
+    local model_name="medium"
+    local model_dir="$HOME/.meeting-assistant/models"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: meeting install [options]"
+                echo ""
+                echo "Options:"
+                echo "  -m, --model <name>               : Model name (default: $model_name)"
+                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
+                return 0
+                ;;
+            -m|--model)
+                model_name="$2"
+                shift 2
+                ;;
+            --model-dir)
+                model_dir="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    mkdir -p "$model_dir"
     echo "📦 Checking environment..."
     brew install ffmpeg blackhole-2ch whisper-cpp
 
-    local model_path="$MEETING_MODELS_DIR/ggml-${MEETING_MODEL_NAME}.bin"
-    local download_url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${MEETING_MODEL_NAME}.bin"
+    local model_path="$model_dir/ggml-${model_name}.bin"
+    local download_url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${model_name}.bin"
     
     if [ -f "$model_path" ]; then
         local filesize=$(stat -f%z "$model_path")
@@ -58,7 +85,7 @@ function _meeting_install() {
         echo "3. Move it to: $model_path"
         echo ""
         echo "Command to move (after download):"
-        echo "mv ~/Downloads/ggml-${MEETING_MODEL_NAME}.bin $model_path"
+        echo "mv ~/Downloads/ggml-${model_name}.bin $model_path"
         return 1
     fi
     echo "✅ Model exists and seems valid."
@@ -66,21 +93,83 @@ function _meeting_install() {
 
 function _meeting_start() {
     _meeting_check_deps || return 1
-    local mic_id="$1"
-    local date_dir="$MEETING_RECORDINGS_DIR/$(date +%Y-%m-%d)"
-    mkdir -p "$date_dir"
+    
+    local model_name="medium"
+    local model_dir="$HOME/.meeting-assistant/models"
+    local output_dir="$HOME/Meetings"
+    local clipboard=false
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: meeting start [options]"
+                echo ""
+                echo "Record and transcribe a meeting"
+                echo ""
+                echo "Options:"
+                echo "  -m, --model <name>               : Model name (default: $model_name)"
+                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
+                echo "  --output-dir <path>              : Output directory (default: $output_dir)"
+                echo "  -c, --clipboard                  : Copy transcript to clipboard"
+                return 0
+                ;;
+            -m|--model)
+                model_name="$2"
+                shift 2
+                ;;
+            --model-dir)
+                model_dir="$2"
+                shift 2
+                ;;
+            --output-dir)
+                output_dir="$2"
+                shift 2
+                ;;
+            -c|--clipboard)
+                clipboard=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    _meeting_record --output-dir "$output_dir" || return 1
+    local date_dir="$output_dir/$(date +%Y-%m-%d)"
     local target="$date_dir/meeting_$(date +%H-%M-%S).mkv"
-
-    _meeting_record "$mic_id" "$target"
-    [ -f "$target" ] && _meeting_transcribe "$target"
+    [ -f "$target" ] && _meeting_transcribe "$target" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
 }
 
 function _meeting_record() {
-    local mic_id="$1" # Wird jetzt ignoriert, wenn wir das Combined Device nutzen
-    local output_file="${2:-$MEETING_RECORDINGS_DIR/$(date +%Y-%m-%d)/meeting_$(date +%H-%M-%S).mkv}"
-    mkdir -p "$(dirname "$output_file")"
+    local output_dir="$HOME/Meetings"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: meeting record [options]"
+                echo ""
+                echo "Record audio from the MeetingCombined device"
+                echo ""
+                echo "Options:"
+                echo "  --output-dir <path>              : Output directory (default: $output_dir)"
+                echo "                                     Subdirectory YYYY-MM-DD and filename will be created automatically"
+                return 0
+                ;;
+            --output-dir)
+                output_dir="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    local date_dir="$output_dir/$(date +%Y-%m-%d)"
+    mkdir -p "$date_dir"
+    local output_file="$date_dir/meeting_$(date +%H-%M-%S).mkv"
 
-    # Wir suchen direkt nach unserem neuen Hauptgerät
     local combined_id=$(ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "MeetingCombined" | sed -E 's/.*\[([0-9]+)\].*/\1/' | head -1)
     
     if [ -z "$combined_id" ]; then
@@ -91,8 +180,6 @@ function _meeting_record() {
     echo "🔴 Recording from MeetingCombined (ID: $combined_id)..."
     echo "   Quality: 48kHz -> 16kHz Mono Downmix"
     
-    # -probesize und -analyzeduration helfen gegen Sync-Probleme
-    # Wir nehmen Kanal 0 (dein Mic) und Kanal 1 (Teams) und mischen sie sauber
     ffmpeg -f avfoundation -probesize 10M -analyzeduration 10M -i ":$combined_id" \
            -filter_complex "[0:a]pan=1c|c0=0.5*c0+0.5*c1[out]" \
            -map "[out]" \
@@ -101,26 +188,67 @@ function _meeting_record() {
 
 function _meeting_transcribe() {
     _meeting_check_deps || return 1
+    
     local input="$1"
+    local model_name="medium"
+    local model_dir="$HOME/.meeting-assistant/models"
+    local clipboard=false
+    shift
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: meeting transcribe <file> [options]"
+                echo ""
+                echo "Transcribe an audio file using Whisper"
+                echo ""
+                echo "Options:"
+                echo "  -m, --model <name>               : Model name (default: $model_name)"
+                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
+                echo "  -c, --clipboard                  : Copy transcript to clipboard instead of saving to file"
+                return 0
+                ;;
+            -m|--model)
+                model_name="$2"
+                shift 2
+                ;;
+            --model-dir)
+                model_dir="$2"
+                shift 2
+                ;;
+            -c|--clipboard)
+                clipboard=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
     [ ! -f "$input" ] && { echo "❌ File not found"; return 1; }
 
     local base="${input%.*}"
     local wav_temp="${base}_temp.wav"
-    local model="$MEETING_MODELS_DIR/ggml-${MEETING_MODEL_NAME}.bin"
+    local model="$model_dir/ggml-${model_name}.bin"
 
     echo "🔄 Converting..."
     ffmpeg -i "$input" -ar 16000 -ac 1 -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
 
     echo "🧠 Whisper Inferenz (M4 Max Metal)..."
-    # Wir nutzen -otxt, beachten aber dass whisper-cli ".txt" an den Input-Namen hängt
     whisper-cli -m "$model" -f "$wav_temp" -l de -otxt > /dev/null
 
-    # Die Datei heißt nun temp.wav.txt -> wir benennen sie sauber um
     if [ -f "${wav_temp}.txt" ]; then
-        mv "${wav_temp}.txt" "${base}.txt"
-        rm "$wav_temp"
-        echo "✅ Success: ${base}.txt"
-        # open "$(dirname "$input")"
+        local txt_file="${base}.txt"
+        if [ "$clipboard" = true ]; then
+            cat "${wav_temp}.txt" | pbcopy
+            rm "${wav_temp}.txt" "$wav_temp"
+            echo "✅ Transcript copied to clipboard"
+        else
+            mv "${wav_temp}.txt" "$txt_file"
+            rm "$wav_temp"
+            echo "✅ Success: ${txt_file}"
+        fi
     else
         echo "❌ Transcription failed (Output file not found)."
         return 1
