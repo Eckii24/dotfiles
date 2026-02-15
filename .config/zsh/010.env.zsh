@@ -14,8 +14,8 @@ export VIDEO_FOLDER="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Download
 export COPILOT_BASE="githubcopilot.com"
 export COPILOT_API_BASE="https://api.githubcopilot.com"
 
+PATH="$HOME/.local/bin:$PATH"
 PATH="$PATH:$HOME/.dotnet/tools"
-PATH="$PATH:$HOME/.local/bin"
 PATH="$PATH:$HOME/.local/share/bob/nvim-bin"
 PATH="$PATH:$HOME/.local/share/nvim/mason/bin"
 export PATH
