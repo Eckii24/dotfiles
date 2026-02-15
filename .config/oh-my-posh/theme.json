@@ -8,26 +8,9 @@
         {
           "background": "#d75f00",
           "foreground": "#f2f3f8",
-          "properties": {
-            "alpine": "\uf300",
-            "arch": "\uf303",
-            "centos": "\uf304",
-            "debian": "\uf306",
-            "elementary": "\uf309",
-            "fedora": "\uf30a",
-            "gentoo": "\uf30d",
-            "linux": "\ue712",
-            "macos": "\ue711",
-            "manjaro": "\uf312",
-            "mint": "\uf30f",
-            "opensuse": "\uf314",
-            "raspbian": "\uf315",
-            "ubuntu": "\uf31c",
-            "windows": "\ue70f"
-          },
           "style": "diamond",
           "leading_diamond": "\u256d\u2500\ue0b2",
-          "template": " {{ .Icon }} ",
+          "template": " {{ if .WSL }}WSL at {{ end }}{{ .Icon }} ",
           "type": "os"
         },
         {
@@ -41,7 +24,7 @@
         {
           "background": "#0087af",
           "foreground": "#f2f3f8",
-          "properties": {
+          "options": {
             "style": "agnoster_short",
             "max_depth": 3,
             "folder_icon": "\u2026",
@@ -61,9 +44,7 @@
             "{{ if gt .Ahead 0 }}#744d89{{ end }}",
             "{{ if gt .Behind 0 }}#744d89{{ end }}"
           ],
-          "properties": {
-            "branch_max_length": 25,
-            "fetch_stash_count": true,
+          "options": {
             "fetch_status": true,
             "branch_icon": "\uf418 ",
             "branch_identical_icon": "\uf444",
@@ -74,19 +55,6 @@
           "template": " {{ .HEAD }}{{if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} <transparent>\ue0b1</> <#121318>\uf044 {{ .Working.String }}</>{{ end }}{{ if .Staging.Changed }} <transparent>\ue0b1</> <#121318>\uf046 {{ .Staging.String }}</>{{ end }}{{ if gt .StashCount 0 }} <transparent>\ue0b1</> <#121318>\ueb4b {{ .StashCount }}</>{{ end }} ",
           "trailing_diamond": "\ue0b0",
           "type": "git"
-        },
-        {
-          "background": "#8b5cf6",
-          "foreground": "#f2f3f8",
-          "style": "diamond",
-          "leading_diamond": "<transparent,background>\ue0b0</>",
-          "trailing_diamond": "\ue0b0",
-          "template": "{{ if .Output }}{{ if gt (.Output | trim | int) 0 }} \uf0ae {{ .Output }} {{ end }}{{ end }}",
-          "type": "command",
-          "properties": {
-            "command": "task status:pending '(scheduled.before:tomorrow or due.before:tomorrow)' count",
-            "shell": "bash"
-          }
         }
       ],
       "type": "prompt"
@@ -113,7 +81,7 @@
         {
           "background": "#e4e4e4",
           "foreground": "#585858",
-          "properties": {
+          "options": {
             "style": "austin",
             "always_enabled": true
           },
@@ -126,7 +94,7 @@
         {
           "background": "#d75f00",
           "foreground": "#f2f3f8",
-          "properties": {
+          "options": {
             "time_format": "15:04:05"
           },
           "invert_powerline": true,
