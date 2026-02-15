@@ -2,9 +2,9 @@
 #  🎙️  MEETING ASSISTANT (Zscaler Safe & M4 optimized)
 # ==============================================================================
 
-export MEETING_ROOT="$HOME/.meeting-assistant"
-export MEETING_MODELS_DIR="$MEETING_ROOT/models"
-export MEETING_MODEL_NAME="medium" 
+MEETING_MODELS_DIR="${MEETING_MODELS_DIR:-$HOME/.meeting-assistant/models}"
+MEETING_MODEL_NAME="${MEETING_MODEL_NAME:-medium}"
+MEETING_RECORDINGS_DIR="${MEETING_RECORDINGS_DIR:-$HOME/Meetings}" 
 
 function meeting() {
     local cmd="$1"
@@ -67,7 +67,7 @@ function _meeting_install() {
 function _meeting_start() {
     _meeting_check_deps || return 1
     local mic_id="$1"
-    local date_dir="$HOME/Meetings/$(date +%Y-%m-%d)"
+    local date_dir="$MEETING_RECORDINGS_DIR/$(date +%Y-%m-%d)"
     mkdir -p "$date_dir"
     local target="$date_dir/meeting_$(date +%H-%M-%S).mkv"
 
@@ -77,7 +77,7 @@ function _meeting_start() {
 
 function _meeting_record() {
     local mic_id="$1" # Wird jetzt ignoriert, wenn wir das Combined Device nutzen
-    local output_file="${2:-$HOME/Meetings/$(date +%Y-%m-%d)/meeting_$(date +%H-%M-%S).mkv}"
+    local output_file="${2:-$MEETING_RECORDINGS_DIR/$(date +%Y-%m-%d)/meeting_$(date +%H-%M-%S).mkv}"
     mkdir -p "$(dirname "$output_file")"
 
     # Wir suchen direkt nach unserem neuen Hauptgerät
