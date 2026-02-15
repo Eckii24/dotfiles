@@ -53,7 +53,8 @@ customCommands:
         title: "AI Generated Commit Messages"
         key: CommitMsg
         command: |
-          zsh -i -c "
+          zsh -c "
+          source ~/.zshrc
           # Check for staged changes
           diff=\$(git diff --cached | head -n 10)
           if [ -z \"\$diff\" ]; then
