@@ -62,7 +62,10 @@
           "powerline_symbol": "\uE0B0",
           "foreground": "#f2f3f8",
           "background": "#a37ff5",
-          "template": "{{ if .Context }} \uf0ae {{.Context}} {{ end }}{{ if gt .Due 0 }} \uf06a {{.Due}} {{ end }}{{ if gt .Scheduled 0 }} \uf133 {{.Scheduled}} {{ end }}"
+          "template": "{{ if .Context }} \uf0ae {{.Context}} {{ end }}{{ if gt .Due 0 }} \uf06a {{.Due}} {{ end }}{{ if gt .Scheduled 0 }} \uf133 {{.Scheduled}} {{ end }}",
+          "options": {
+            "due_command": "+PENDING and (due.before:tomorrow or +next) count"
+          }
         }
       ],
       "type": "prompt"
