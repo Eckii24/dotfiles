@@ -11,7 +11,8 @@ function audio() {
         record)     _meeting_record "$@" ;;
         transcribe) _meeting_transcribe "$@" ;;
         devices)    _meeting_list_devices ;;
-        help|*)
+        help)       _audio_help ;;
+        *)
             echo "Usage: audio <command> [options]"
             echo ""
             echo "Commands:"
@@ -20,10 +21,129 @@ function audio() {
             echo "  record                           : Record only"
             echo "  transcribe <file>                : Transcribe file"
             echo "  devices                          : List audio inputs"
+            echo "  help                             : Show detailed setup guide"
             echo ""
             echo "Run 'audio <command> --help' for command-specific options"
             ;;
     esac
+}
+
+function _audio_help() {
+    cat <<'EOF'
+# ==============================================================================
+#  🎙️  AUDIO ASSISTANT - Complete Setup & Usage Guide
+# ==============================================================================
+
+## OVERVIEW
+Audio Assistant helps you record and transcribe audio (meetings, calls, lectures)
+using local AI processing (Whisper) optimized for M4 Macs. All processing happens
+on your machine - no cloud services required.
+
+## WHAT YOU CAN DO
+  • Record system audio + microphone simultaneously
+  • Transcribe audio files to text using Whisper AI
+  • Record and transcribe in one command
+  • List and select audio input devices
+  • Copy transcripts directly to clipboard
+
+## COMMANDS
+  audio install              : Install dependencies and download Whisper model
+  audio start                : Record and transcribe in one go
+  audio record               : Record audio only
+  audio transcribe <file>    : Transcribe an existing audio file
+  audio devices              : List all available audio input devices
+  audio help                 : Show this help guide
+
+## SETUP INSTRUCTIONS
+
+### Step 1: Install Dependencies
+Run:
+  audio install
+
+This installs: ffmpeg, BlackHole 2ch, and whisper-cpp via Homebrew.
+It will also download the Whisper model (may require manual download if behind Zscaler).
+
+### Step 2: Configure Audio MIDI Setup (CRITICAL!)
+To capture both system audio AND your microphone, you need an Aggregate Device:
+
+1. Open "Audio MIDI Setup" (in /Applications/Utilities/ or via Spotlight)
+
+2. Click the "+" button at bottom left → Select "Create Aggregate Device"
+
+3. Name it something like "Recording Device" or "Headphone IN"
+
+4. In the device list, CHECK these boxes (in this order):
+   ☑ BlackHole 2ch          ← Check this FIRST (will be clock source)
+   ☑ Your Microphone        ← Check this SECOND (e.g., "MacBook Pro Microphone")
+
+5. IMPORTANT: For your Microphone entry:
+   • Check "Drift Correction" checkbox
+   • This syncs microphone with BlackHole's timing
+
+6. Click the "Use" dropdown next to "BlackHole 2ch" and ensure it shows "Clock Source"
+
+7. Close Audio MIDI Setup - your aggregate device is ready!
+
+### Step 3: Set BlackHole as System Output
+1. Go to System Settings → Sound → Output
+2. Select "BlackHole 2ch" as output device
+3. System audio will now route through BlackHole (you won't hear it unless monitoring)
+
+### Step 4: Start Recording
+Run:
+  audio start --device-name "Recording Device"
+
+Replace "Recording Device" with whatever you named your aggregate device.
+
+Or use interactive mode to select from a list:
+  audio start -i
+
+## EXAMPLE WORKFLOWS
+
+### Record and transcribe a meeting:
+  audio start --device-name "Headphone IN"
+
+### Record only (no transcription):
+  audio record --device-name "Headphone IN"
+
+### Transcribe an existing file:
+  audio transcribe ~/Meetings/2024-01-15/meeting_14-30-00.mkv
+
+### Copy transcript to clipboard instead of file:
+  audio transcribe ~/path/to/audio.mkv -c
+
+### List available audio devices:
+  audio devices
+
+## TROUBLESHOOTING
+
+• "Device not found" error:
+  Run 'audio devices' to see exact device names, then use the correct name
+
+• No system audio in recording:
+  Ensure BlackHole 2ch is set as system output in System Settings → Sound
+
+• Microphone not captured:
+  Check that microphone is enabled in aggregate device and has drift correction on
+
+• Zscaler blocks model download:
+  Follow the manual download instructions shown by 'audio install'
+
+• Audio quality issues:
+  Ensure BlackHole is the clock source in your aggregate device
+
+## FILES & LOCATIONS
+  Models:        ~/.meeting-assistant/models/
+  Recordings:    ~/Meetings/YYYY-MM-DD/meeting_HH-MM-SS.mkv
+  Transcripts:   ~/Meetings/YYYY-MM-DD/meeting_HH-MM-SS.txt
+
+## MORE INFO
+Run any command with --help for detailed options:
+  audio start --help
+  audio record --help
+  audio transcribe --help
+
+EOF
 }
 
 function _meeting_check_deps() {
