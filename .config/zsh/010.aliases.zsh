@@ -27,6 +27,7 @@ alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 
 # dotnet specific
 alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
+alias outdated-update='dotnet outdated -exc Roslynator -exc CSharpier -inc P0. -u && dotnet outdated -exc Roslynator -exc CSharpier -u -vl Major'
 
 # General alias
 alias ..='cd ..'
