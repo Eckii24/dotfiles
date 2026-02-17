@@ -1,8 +1,8 @@
 # ==============================================================================
-#  🎙️  MEETING ASSISTANT (Zscaler Safe & M4 optimized)
+#  🎙️  AUDIO ASSISTANT (Zscaler Safe & M4 optimized)
 # ==============================================================================
 
-function meeting() {
+function audio() {
     local cmd="$1"
     shift 
     case "$cmd" in
@@ -12,7 +12,7 @@ function meeting() {
         transcribe) _meeting_transcribe "$@" ;;
         devices)    _meeting_list_devices ;;
         help|*)
-            echo "Usage: meeting <command> [options]"
+            echo "Usage: audio <command> [options]"
             echo ""
             echo "Commands:"
             echo "  install                          : Check dependencies & model"
@@ -21,7 +21,7 @@ function meeting() {
             echo "  transcribe <file>                : Transcribe file"
             echo "  devices                          : List audio inputs"
             echo ""
-            echo "Run 'meeting <command> --help' for command-specific options"
+            echo "Run 'audio <command> --help' for command-specific options"
             ;;
     esac
 }
@@ -42,7 +42,7 @@ function _meeting_install() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: meeting install [options]"
+                echo "Usage: audio install [options]"
                 echo ""
                 echo "Options:"
                 echo "  -m, --model <name>               : Model name (default: $model_name)"
@@ -98,25 +98,25 @@ function _meeting_start() {
     local model_dir="$HOME/.meeting-assistant/models"
     local output_dir="$HOME/Meetings"
     local clipboard=false
-    local mic=""
-    local mic_name="MeetingCombined"
+    local device=""
+    local device_name="Headphone IN"
     local interactive=false
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: meeting start [options]"
+                echo "Usage: audio start [options]"
                 echo ""
-                echo "Record and transcribe a meeting"
+                echo "Record and transcribe audio"
                 echo ""
                 echo "Options:"
                 echo "  -m, --model <name>               : Model name (default: $model_name)"
                 echo "  --model-dir <path>               : Model directory (default: $model_dir)"
                 echo "  --output-dir <path>              : Output directory (default: $output_dir)"
                 echo "  -c, --clipboard                  : Copy transcript to clipboard"
-                echo "  --mic <id>                       : Microphone ID (takes priority over --mic-name)"
-                echo "  --mic-name <name>                : Microphone name (default: $mic_name)"
-                echo "  -i, --interactive                : Interactive mode - list devices and select mic"
+                echo "  --device <id>                    : Audio device ID (priority over --device-name)"
+                echo "  --device-name <name>             : Audio device name (default: $device_name)"
+                echo "  -i, --interactive                : Interactive mode - list devices and select"
                 return 0
                 ;;
             -m|--model)
@@ -135,12 +135,12 @@ function _meeting_start() {
                 clipboard=true
                 shift
                 ;;
-            --mic)
-                mic="$2"
+            --device)
+                device="$2"
                 shift 2
                 ;;
-            --mic-name)
-                mic_name="$2"
+            --device-name)
+                device_name="$2"
                 shift 2
                 ;;
             -i|--interactive)
@@ -153,83 +153,94 @@ function _meeting_start() {
         esac
     done
     
-    local date_dir="$output_dir/$(date +%Y-%m-%d)"
-    local target="$date_dir/meeting_$(date +%H-%M-%S).mkv"
-
-    _meeting_record --output-dir "$output_dir" --mic "$mic" --mic-name "$mic_name" $([ "$interactive" = true ] && echo "-i") || return 1
-
-    [ -f "$target" ] && _meeting_transcribe "$target" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
+    # Call recording and capture the output filename
+    local recorded_file=$(_meeting_record --output-dir "$output_dir" --device "$device" --device-name "$device_name" $([ "$interactive" = true ] && echo "-i"))
+    local record_result=$?
+    
+    # Only proceed with transcription if recording succeeded
+    if [ $record_result -eq 0 ] && [ -n "$recorded_file" ] && [ -f "$recorded_file" ]; then
+        _meeting_transcribe "$recorded_file" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
+    elif [ $record_result -ne 0 ]; then
+        echo "❌ Recording failed"
+        return 1
+    else
+        echo "⚠️  Recording file not found: $recorded_file"
+        return 1
+    fi
 }
 
 function _meeting_record() {
     local output_dir="$HOME/Meetings"
-    local mic_id=""
-    local mic_name="MeetingCombined"
+    local device_id=""
+    local device_name="Headphone IN"
     local interactive=false
     
+    # --- 1. Argument Parsing ---
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: meeting record [options]"
+                echo "Usage: audio record [options]"
                 echo ""
-                echo "Record audio from a specified device"
+                echo "Record audio from an aggregate device (BlackHole + Microphone)"
                 echo ""
                 echo "Options:"
-                echo "  --output-dir <path>              : Output directory (default: $output_dir)"
-                echo "                                     Subdirectory YYYY-MM-DD and filename will be created automatically"
-                echo "  --mic <id>                       : Microphone ID (takes priority over --mic-name)"
-                echo "  --mic-name <name>                : Microphone name (default: $mic_name)"
-                echo "  -i, --interactive                : Interactive mode - list devices and select mic"
+                echo "  --output-dir <path>     : Output directory (default: $output_dir)"
+                echo "  --device <id>           : Audio device ID (priority over --device-name)"
+                echo "  --device-name <name>    : Audio device name (default: $device_name)"
+                echo "  -i, --interactive       : Interactive mode - list and select device"
+                echo ""
+                echo "Setup: Create an Aggregate Device in Audio MIDI Setup that combines"
+                echo "       BlackHole 2ch (as clock source) and your microphone (with drift correction)."
                 return 0
                 ;;
-            --output-dir)
-                output_dir="$2"
-                shift 2
-                ;;
-            --mic)
-                mic_id="$2"
-                shift 2
-                ;;
-            --mic-name)
-                mic_name="$2"
-                shift 2
-                ;;
-            -i|--interactive)
-                interactive=true
-                shift
-                ;;
-            *)
-                shift
-                ;;
+            --output-dir) output_dir="$2"; shift 2 ;;
+            --device) device_id="$2"; shift 2 ;;
+            --device-name) device_name="$2"; shift 2 ;;
+            -i|--interactive) interactive=true; shift ;;
+            *) shift ;;
         esac
     done
-    
-    local date_dir="$output_dir/$(date +%Y-%m-%d)"
-    local output_file="$date_dir/meeting_$(date +%H-%M-%S).mkv"
-    local mic_id=""
-    
+
+    # --- 2. Device Selection ---
     if [ "$interactive" = true ]; then
         _meeting_list_devices
-        echo "Enter microphone ID: "
-        read mic_id
-    elif [ -n "$mic_name" ]; then
-        mic_id=$(ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "$mic_name" | sed -E 's/.*\[([0-9]+)\].*/\1/' | head -1)
+        echo -n "Enter device ID: "
+        read device_id
+    elif [ -z "$device_id" ]; then
+        device_id=$(ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "$device_name" | sed -E 's/.*\[([0-9]+)\].*/\1/' | head -1)
     fi
     
-    if [ -z "$mic_id" ]; then
-        echo "❌ Microphone not found (ID or name: ${mic_id:-$mic_name})"
+    if [ -z "$device_id" ]; then
+        echo "❌ Device not found: ${device_name}"
+        echo "   Run 'audio devices' to list available devices"
         return 1
     fi
-    
+
+    # --- 3. File Setup ---
+    local date_dir="$output_dir/$(date +%Y-%m-%d)"
+    local output_file="$date_dir/meeting_$(date +%H-%M-%S).mkv"
     mkdir -p "$date_dir"
 
-    echo "🔴 Recording from device ID $mic_id..."
-    echo "   Quality: 48kHz -> 16kHz Mono Downmix"
+    echo "🔴 Recording from device $device_id ($device_name)..."
+    echo "   Output: $output_file"
+    echo "   Press Ctrl+C to stop recording"
     
-    ffmpeg -f avfoundation -probesize 10M -analyzeduration 10M -i ":$mic_id" \
-           -filter_complex "[0:a]pan=1c|c0=0.5*c0+0.5*c1[out]" \
-           -map "[out]" \
-           -c:a pcm_s16le -ar 16000 -f matroska -y "$output_file"
+    # --- 4. Simple Recording ---
+    # The aggregate device handles mixing and sample rate drift correction
+    # We just record directly and convert to 16kHz mono for transcription
+    ffmpeg -f avfoundation \
+           -i ":$device_id" \
+           -c:a pcm_s16le -ar 16000 -ac 1 \
+           -f matroska -y "$output_file"
+    
+    local ffmpeg_result=$?
+    
+    if [ $ffmpeg_result -eq 0 ]; then
+        echo "$output_file"
+        return 0
+    else
+        return $ffmpeg_result
+    fi
 }
 
 function _meeting_transcribe() {
@@ -244,7 +255,7 @@ function _meeting_transcribe() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: meeting transcribe <file> [options]"
+                echo "Usage: audio transcribe <file> [options]"
                 echo ""
                 echo "Transcribe an audio file using Whisper"
                 echo ""
