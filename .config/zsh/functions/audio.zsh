@@ -152,7 +152,10 @@ function _meeting_check_deps() {
 }
 
 function _meeting_list_devices() {
-    ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "AVFoundation audio devices:" -A 20
+    echo "📋 Available Audio Devices:" >&2
+    echo "" >&2
+    ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "AVFoundation audio devices:" -A 20 | grep "^\[AVFoundation.*\] \[[0-9]" | sed 's/.*\[\([0-9]\)/  [\1/' >&2
+    echo "" >&2
 }
 
 function _meeting_install() {
@@ -274,7 +277,11 @@ function _meeting_start() {
     done
     
     # Call recording and capture the output filename
-    local recorded_file=$(_meeting_record --output-dir "$output_dir" --device "$device" --device-name "$device_name" $([ "$interactive" = true ] && echo "-i"))
+    local record_args=("--output-dir" "$output_dir" "--device" "$device" "--device-name" "$device_name")
+    if [ "$interactive" = true ]; then
+        record_args+=("--interactive")
+    fi
+    local recorded_file=$(_meeting_record "${record_args[@]}")
     local record_result=$?
     
     # Only proceed with transcription if recording succeeded
@@ -324,8 +331,11 @@ function _meeting_record() {
     # --- 2. Device Selection ---
     if [ "$interactive" = true ]; then
         _meeting_list_devices
-        echo -n "Enter device ID: "
-        read device_id
+        echo -n "Enter device ID: " >&2
+        if ! read device_id < /dev/tty 2>/dev/null; then
+            echo "❌ Interactive mode failed. Ensure you're running in an interactive terminal." >&2
+            return 1
+        fi
     elif [ -z "$device_id" ]; then
         device_id=$(ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "$device_name" | sed -E 's/.*\[([0-9]+)\].*/\1/' | head -1)
     fi
