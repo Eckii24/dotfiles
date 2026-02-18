@@ -341,9 +341,10 @@ function _meeting_record() {
     local output_file="$date_dir/meeting_$(date +%H-%M-%S).mkv"
     mkdir -p "$date_dir"
 
-    echo "🔴 Recording from device $device_id ($device_name)..."
-    echo "   Output: $output_file"
-    echo "   Press Ctrl+C to stop recording"
+    echo "🔴 Recording from device $device_id ($device_name)..." >&2
+    echo "   Output: $output_file" >&2
+    echo "   Press Ctrl+C to stop recording" >&2
+    echo "   Tip: Make sure BlackHole 2ch is set as output in System Settings to hear your voice" >&2
     
     # --- 4. Simple Recording ---
     # The aggregate device handles mixing and sample rate drift correction
@@ -355,11 +356,15 @@ function _meeting_record() {
     
     local ffmpeg_result=$?
     
-    if [ $ffmpeg_result -eq 0 ]; then
+    # Only output filename if the file actually exists and has content
+    if [ $ffmpeg_result -eq 0 ] && [ -f "$output_file" ] && [ -s "$output_file" ]; then
         echo "$output_file"
         return 0
     else
-        return $ffmpeg_result
+        # Clean up incomplete file if it exists
+        [ -f "$output_file" ] && rm -f "$output_file"
+        echo "⚠️  Recording was interrupted or failed" >&2
+        return 1
     fi
 }
 
