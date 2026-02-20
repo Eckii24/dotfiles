@@ -350,7 +350,7 @@ function _meeting_record() {
     # Explicitly mix c0+c1+c2 to mono so the microphone channel is not dropped.
     ffmpeg -f avfoundation \
            -i ":$device_id" \
-           -af "pan=mono|c0<c0+c1+c2" -c:a pcm_s16le -ar 16000 -ac 1 \
+           -af "pan=mono|c0=0.34*c0+0.33*c1+0.33*c2" -c:a pcm_s16le -ar 16000 -ac 1 \
            -f matroska -y "$output_file"
     
     local ffmpeg_result=$?
