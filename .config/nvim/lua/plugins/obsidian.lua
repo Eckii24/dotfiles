@@ -83,7 +83,7 @@ return {
       { "<leader>ts", "<cmd>TWSyncTasks<cr>", desc = "TaskWarrior Sync Tasks" },
     },
     init = function()
-      vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
+      vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePre" }, {
         group = vim.api.nvim_create_augroup("TWTask", { clear = true }),
         pattern = { "*.md", "*.markdown" },
         callback = function()
