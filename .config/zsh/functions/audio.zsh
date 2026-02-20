@@ -236,7 +236,7 @@ function _meeting_start() {
                 echo "  -m, --model <name>               : Model name (default: $model_name)"
                 echo "  --model-dir <path>               : Model directory (default: $model_dir)"
                 echo "  --output-dir <path>              : Output directory (default: $output_dir)"
-                echo "  -c, --clipboard                  : Copy transcript to clipboard"
+                echo "  -c, --clipboard                  : Also copy transcript to clipboard"
                 echo "  --device <id>                    : Audio device ID (priority over --device-name)"
                 echo "  --device-name <name>             : Audio device name (default: $device_name)"
                 echo "  -i, --interactive                : Interactive mode - list devices and select"
@@ -288,10 +288,10 @@ function _meeting_start() {
     if [ $record_result -eq 0 ] && [ -n "$recorded_file" ] && [ -f "$recorded_file" ]; then
         _meeting_transcribe "$recorded_file" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
     elif [ $record_result -ne 0 ]; then
-        echo "❌ Recording failed"
+        echo "❌ Recording failed" >&2
         return 1
     else
-        echo "⚠️  Recording file not found: $recorded_file"
+        echo "⚠️  Recording file not found: $recorded_file" >&2
         return 1
     fi
 }
@@ -397,7 +397,7 @@ function _meeting_transcribe() {
                 echo "Options:"
                 echo "  -m, --model <name>               : Model name (default: $model_name)"
                 echo "  --model-dir <path>               : Model directory (default: $model_dir)"
-                echo "  -c, --clipboard                  : Copy transcript to clipboard instead of saving to file"
+                echo "  -c, --clipboard                  : Also copy transcript to clipboard"
                 return 0
                 ;;
             -m|--model)
@@ -418,31 +418,36 @@ function _meeting_transcribe() {
         esac
     done
     
-    [ ! -f "$input" ] && { echo "❌ File not found"; return 1; }
+    [ ! -f "$input" ] && { echo "❌ File not found" >&2; return 1; }
 
     local base="${input%.*}"
     local wav_temp="${base}_temp.wav"
     local model="$model_dir/ggml-${model_name}.bin"
 
-    echo "🔄 Converting..."
+    echo "🔄 Converting..." >&2
     ffmpeg -i "$input" -ar 16000 -ac 1 -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
 
-    echo "🧠 Whisper Inferenz (M4 Max Metal)..."
+    echo "🧠 Whisper Inferenz (M4 Max Metal)..." >&2
     whisper-cli -m "$model" -f "$wav_temp" -l de -otxt > /dev/null
 
     if [ -f "${wav_temp}.txt" ]; then
         local txt_file="${base}.txt"
+        # Always save to file
+        mv "${wav_temp}.txt" "$txt_file"
+        rm "$wav_temp"
+        
+        # Always output to stdout for piping
+        cat "$txt_file"
+        
+        # Optionally copy to clipboard
         if [ "$clipboard" = true ]; then
-            cat "${wav_temp}.txt" | pbcopy
-            rm "${wav_temp}.txt" "$wav_temp"
-            echo "✅ Transcript copied to clipboard"
+            cat "$txt_file" | pbcopy
+            echo "✅ Transcript saved and piped (also copied to clipboard)" >&2
         else
-            mv "${wav_temp}.txt" "$txt_file"
-            rm "$wav_temp"
-            echo "✅ Success: ${txt_file}"
+            echo "✅ Transcript saved and piped (${txt_file})" >&2
         fi
     else
-        echo "❌ Transcription failed (Output file not found)."
+        echo "❌ Transcription failed (Output file not found)." >&2
         return 1
     fi
 }
