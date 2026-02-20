@@ -159,7 +159,7 @@ function _meeting_list_devices() {
 }
 
 function _meeting_install() {
-    local model_name="medium"
+    local model_name="large-v3"
     local model_dir="$HOME/.meeting-assistant/models"
     
     while [[ $# -gt 0 ]]; do
@@ -217,7 +217,7 @@ function _meeting_install() {
 function _meeting_start() {
     _meeting_check_deps || return 1
     
-    local model_name="medium"
+    local model_name="large-v3"
     local model_dir="$HOME/.meeting-assistant/models"
     local output_dir="$HOME/Meetings"
     local clipboard=false
@@ -382,7 +382,7 @@ function _meeting_transcribe() {
     _meeting_check_deps || return 1
     
     local input="$1"
-    local model_name="medium"
+    local model_name="large-v3"
     local model_dir="$HOME/.meeting-assistant/models"
     local clipboard=false
     shift
