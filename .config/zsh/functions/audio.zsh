@@ -345,12 +345,12 @@ function _meeting_record() {
     echo "   Output: $output_file"
     echo "   Press Ctrl+C to stop recording"
     
-    # --- 4. Simple Recording ---
-    # The aggregate device handles mixing and sample rate drift correction
-    # We just record directly and convert to 16kHz mono for transcription
+    # --- 4. Recording with explicit channel mix ---
+    # Aggregate devices can expose 3 channels (BlackHole L/R + mic on ch2).
+    # Explicitly mix c0+c1+c2 to mono so the microphone channel is not dropped.
     ffmpeg -f avfoundation \
            -i ":$device_id" \
-           -c:a pcm_s16le -ar 16000 -ac 1 \
+           -af "pan=mono|c0<c0+c1+c2" -c:a pcm_s16le -ar 16000 -ac 1 \
            -f matroska -y "$output_file"
     
     local ffmpeg_result=$?
