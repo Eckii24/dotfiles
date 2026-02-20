@@ -159,7 +159,7 @@ function _meeting_list_devices() {
 }
 
 function _meeting_install() {
-    local model_name="large-v3"
+    local model_name="large-v3-turbo"
     local model_dir="$HOME/.meeting-assistant/models"
     
     while [[ $# -gt 0 ]]; do
@@ -217,7 +217,7 @@ function _meeting_install() {
 function _meeting_start() {
     _meeting_check_deps || return 1
     
-    local model_name="large-v3"
+    local model_name="large-v3-turbo"
     local model_dir="$HOME/.meeting-assistant/models"
     local output_dir="$HOME/Meetings"
     local clipboard=false
@@ -382,7 +382,7 @@ function _meeting_transcribe() {
     _meeting_check_deps || return 1
     
     local input="$1"
-    local model_name="large-v3"
+    local model_name="large-v3-turbo"
     local model_dir="$HOME/.meeting-assistant/models"
     local clipboard=false
     shift
@@ -425,15 +425,15 @@ function _meeting_transcribe() {
     local model="$model_dir/ggml-${model_name}.bin"
 
     echo "🔄 Converting..." >&2
-    ffmpeg -i "$input" -ar 16000 -ac 1 -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
+    ffmpeg -i "$input" -ar 16000 -ac 1 -af silenceremove=stop_periods=-1:stop_duration=1:stop_threshold=-30dB -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
 
     echo "🧠 Whisper Inferenz (M4 Max Metal)..." >&2
-    whisper-cli -m "$model" -f "$wav_temp" -l de -otxt > /dev/null
+    whisper-cli -m "$model" -f "$wav_temp" -l auto -pp -t 10 -et 2.4 --prompt "Use correct spellings: dapr, OMR, OCT, GSS, TST, P0, Wendelin, Raphael" -ovtt
 
-    if [ -f "${wav_temp}.txt" ]; then
-        local txt_file="${base}.txt"
+    if [ -f "${wav_temp}.vtt" ]; then
+        local txt_file="${base}.vtt"
         # Always save to file
-        mv "${wav_temp}.txt" "$txt_file"
+        mv "${wav_temp}.vtt" "$txt_file"
         rm "$wav_temp"
         
         # Always output to stdout for piping
