@@ -17,6 +17,7 @@ return {
       { "<leader>gVi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
       { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "HEAD to Last Commit" },
       { "<leader>gVm", "<cmd>DiffviewOpen origin/master<cr>", desc = "HEAD to Origin/master" },
+      { "<leader>gVM", "<cmd>DiffviewOpen origin/main<cr>", desc = "HEAD to Origin/main" },
       { "<leader>gVf", "<cmd>DiffviewFileHistory %<cr>", desc = "Current File History" },
       { "<leader>gVf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
       { "<leader>gVq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
