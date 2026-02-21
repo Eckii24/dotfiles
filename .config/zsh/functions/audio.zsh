@@ -11,6 +11,7 @@ function audio() {
         record)     _meeting_record "$@" ;;
         transcribe) _meeting_transcribe "$@" ;;
         devices)    _meeting_list_devices ;;
+        cleanup)    _meeting_cleanup "$@" ;;
         help)       _audio_help ;;
         *)
             echo "Usage: audio <command> [options]"
@@ -21,6 +22,7 @@ function audio() {
             echo "  record                           : Record only"
             echo "  transcribe <file>                : Transcribe file"
             echo "  devices                          : List audio inputs"
+            echo "  cleanup                          : Remove old recordings"
             echo "  help                             : Show detailed setup guide"
             echo ""
             echo "Run 'audio <command> --help' for command-specific options"
@@ -449,5 +451,121 @@ function _meeting_transcribe() {
     else
         echo "❌ Transcription failed (Output file not found)." >&2
         return 1
+    fi
+}
+
+function _meeting_cleanup() {
+    local days=30
+    local audio_only=false
+    local dry_run=false
+    local output_dir="$HOME/Meetings"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: audio cleanup [options]"
+                echo ""
+                echo "Remove old recordings and transcripts"
+                echo ""
+                echo "Options:"
+                echo "  -d, --days <n>         : Remove recordings older than n days (default: 30)"
+                echo "  --audio-only           : Remove only audio files, keep transcripts"
+                echo "  --dry-run              : Show what would be deleted without deleting"
+                echo "  --output-dir <path>    : Output directory (default: $output_dir)"
+                return 0
+                ;;
+            -d|--days)
+                days="$2"
+                shift 2
+                ;;
+            --audio-only)
+                audio_only=true
+                shift
+                ;;
+            --dry-run)
+                dry_run=true
+                shift
+                ;;
+            --output-dir)
+                output_dir="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if [ ! -d "$output_dir" ]; then
+        echo "❌ Directory not found: $output_dir" >&2
+        return 1
+    fi
+    
+    echo "🧹 Cleanup Configuration:" >&2
+    echo "   Directory: $output_dir" >&2
+    echo "   Remove files older than: $days days" >&2
+    echo "   Mode: $([ "$audio_only" = true ] && echo "Audio files only" || echo "Audio and transcripts")" >&2
+    echo "   Dry run: $([ "$dry_run" = true ] && echo "Yes (no files will be deleted)" || echo "No")" >&2
+    echo "" >&2
+    
+    local audio_count=0
+    local transcript_count=0
+    local audio_size=0
+    local transcript_size=0
+    
+    # Find and process audio files
+    while IFS= read -r -d '' file; do
+        ((audio_count++))
+        local size=$(stat -f%z "$file" 2>/dev/null || echo 0)
+        ((audio_size+=size))
+        
+        if [ "$dry_run" = true ]; then
+            echo "Would delete: $file" >&2
+        else
+            rm -f "$file"
+            echo "Deleted: $file" >&2
+        fi
+    done < <(find "$output_dir" -type f -name "*.mkv" -mtime +$days -print0 2>/dev/null)
+    
+    # Find and process transcript files (unless audio-only mode)
+    if [ "$audio_only" = false ]; then
+        while IFS= read -r -d '' file; do
+            ((transcript_count++))
+            local size=$(stat -f%z "$file" 2>/dev/null || echo 0)
+            ((transcript_size+=size))
+            
+            if [ "$dry_run" = true ]; then
+                echo "Would delete: $file" >&2
+            else
+                rm -f "$file"
+                echo "Deleted: $file" >&2
+            fi
+        done < <(find "$output_dir" -type f -name "*.vtt" -mtime +$days -print0 2>/dev/null)
+    fi
+    
+    # Remove empty directories
+    if [ "$dry_run" = false ]; then
+        find "$output_dir" -type d -empty -delete 2>/dev/null
+    fi
+    
+    # Format sizes for display
+    local audio_size_mb=$((audio_size / 1024 / 1024))
+    local transcript_size_mb=$((transcript_size / 1024 / 1024))
+    local total_size_mb=$((audio_size_mb + transcript_size_mb))
+    
+    echo "" >&2
+    echo "📊 Summary:" >&2
+    echo "   Audio files: $audio_count (${audio_size_mb} MB)" >&2
+    if [ "$audio_only" = false ]; then
+        echo "   Transcripts: $transcript_count (${transcript_size_mb} MB)" >&2
+    fi
+    echo "   Total space: ${total_size_mb} MB" >&2
+    
+    if [ "$dry_run" = true ]; then
+        echo "" >&2
+        echo "💡 This was a dry run. Run without --dry-run to actually delete files." >&2
+    else
+        echo "" >&2
+        echo "✅ Cleanup complete!" >&2
     fi
 }
