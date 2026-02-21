@@ -1,20 +1,28 @@
 # ==============================================================================
-#  🎙️  AUDIO ASSISTANT (Zscaler Safe & M4 optimized)
+#  🎙️  AUDIOBOT (Zscaler Safe & M4 optimized)
 # ==============================================================================
 
-function audio() {
+# ==============================================================================
+#  CONFIGURATION - Centralized defaults with environment variable fallbacks
+# ==============================================================================
+readonly AUDIOBOT_MODEL="${AUDIOBOT_MODEL:-large-v3-turbo}"
+readonly AUDIOBOT_MODEL_DIR="${AUDIOBOT_MODEL_DIR:-$HOME/.audiobot/models}"
+readonly AUDIOBOT_OUTPUT_DIR="${AUDIOBOT_OUTPUT_DIR:-$HOME/Meetings}"
+readonly AUDIOBOT_DEVICE_NAME="${AUDIOBOT_DEVICE_NAME:-Headphone IN}"
+
+function audiobot() {
     local cmd="$1"
     shift 
     case "$cmd" in
-        install)    _meeting_install "$@" ;;
-        start)      _meeting_start "$@" ;;
-        record)     _meeting_record "$@" ;;
-        transcribe) _meeting_transcribe "$@" ;;
-        devices)    _meeting_list_devices ;;
-        cleanup)    _meeting_cleanup "$@" ;;
-        help)       _audio_help ;;
+        install)    _audiobot_install "$@" ;;
+        start)      _audiobot_start "$@" ;;
+        record)     _audiobot_record "$@" ;;
+        transcribe) _audiobot_transcribe "$@" ;;
+        devices)    _audiobot_list_devices ;;
+        cleanup)    _audiobot_cleanup "$@" ;;
+        help)       _audiobot_help ;;
         *)
-            echo "Usage: audio <command> [options]"
+            echo "Usage: audiobot <command> [options]"
             echo ""
             echo "Commands:"
             echo "  install                          : Check dependencies & model"
@@ -25,19 +33,25 @@ function audio() {
             echo "  cleanup                          : Remove old recordings"
             echo "  help                             : Show detailed setup guide"
             echo ""
-            echo "Run 'audio <command> --help' for command-specific options"
+            echo "Run 'audiobot <command> --help' for command-specific options"
+            echo ""
+            echo "Environment Variables:"
+            echo "  AUDIOBOT_MODEL        : Whisper model name (default: large-v3-turbo)"
+            echo "  AUDIOBOT_MODEL_DIR    : Model directory (default: ~/.audiobot/models)"
+            echo "  AUDIOBOT_OUTPUT_DIR   : Output directory (default: ~/Meetings)"
+            echo "  AUDIOBOT_DEVICE_NAME  : Default audio device name (default: Headphone IN)"
             ;;
     esac
 }
 
-function _audio_help() {
+function _audiobot_help() {
     cat <<'EOF'
 # ==============================================================================
-#  🎙️  AUDIO ASSISTANT - Complete Setup & Usage Guide
+#  🎙️  AUDIOBOT - Complete Setup & Usage Guide
 # ==============================================================================
 
 ## OVERVIEW
-Audio Assistant helps you record and transcribe audio (meetings, calls, lectures)
+AudioBot helps you record and transcribe audio (meetings, calls, lectures)
 using local AI processing (Whisper) optimized for M4 Macs. All processing happens
 on your machine - no cloud services required.
 
@@ -47,20 +61,33 @@ on your machine - no cloud services required.
   • Record and transcribe in one command
   • List and select audio input devices
   • Copy transcripts directly to clipboard
+  • Clean up old recordings automatically
 
 ## COMMANDS
-  audio install              : Install dependencies and download Whisper model
-  audio start                : Record and transcribe in one go
-  audio record               : Record audio only
-  audio transcribe <file>    : Transcribe an existing audio file
-  audio devices              : List all available audio input devices
-  audio help                 : Show this help guide
+  audiobot install              : Install dependencies and download Whisper model
+  audiobot start                : Record and transcribe in one go
+  audiobot record               : Record audio only
+  audiobot transcribe <file>    : Transcribe an existing audio file
+  audiobot devices              : List all available audio input devices
+  audiobot cleanup              : Remove old recordings and transcripts
+  audiobot help                 : Show this help guide
+
+## ENVIRONMENT VARIABLES
+You can customize defaults using these environment variables:
+  AUDIOBOT_MODEL        : Whisper model name (default: large-v3-turbo)
+  AUDIOBOT_MODEL_DIR    : Model directory (default: ~/.audiobot/models)
+  AUDIOBOT_OUTPUT_DIR   : Output directory (default: ~/Meetings)
+  AUDIOBOT_DEVICE_NAME  : Default audio device name (default: Headphone IN)
+
+Example:
+  export AUDIOBOT_OUTPUT_DIR="$HOME/Documents/Recordings"
+  export AUDIOBOT_DEVICE_NAME="Recording Device"
 
 ## SETUP INSTRUCTIONS
 
 ### Step 1: Install Dependencies
 Run:
-  audio install
+  audiobot install
 
 This installs: ffmpeg, BlackHole 2ch, and whisper-cpp via Homebrew.
 It will also download the Whisper model (may require manual download if behind Zscaler).
@@ -93,34 +120,37 @@ To capture both system audio AND your microphone, you need an Aggregate Device:
 
 ### Step 4: Start Recording
 Run:
-  audio start --device-name "Recording Device"
+  audiobot start --device-name "Recording Device"
 
 Replace "Recording Device" with whatever you named your aggregate device.
 
 Or use interactive mode to select from a list:
-  audio start -i
+  audiobot start -i
 
 ## EXAMPLE WORKFLOWS
 
 ### Record and transcribe a meeting:
-  audio start --device-name "Headphone IN"
+  audiobot start --device-name "Headphone IN"
 
 ### Record only (no transcription):
-  audio record --device-name "Headphone IN"
+  audiobot record --device-name "Headphone IN"
 
 ### Transcribe an existing file:
-  audio transcribe ~/Meetings/2024-01-15/meeting_14-30-00.mkv
+  audiobot transcribe ~/Meetings/2024-01-15/recording_14-30-00.mkv
 
 ### Copy transcript to clipboard instead of file:
-  audio transcribe ~/path/to/audio.mkv -c
+  audiobot transcribe ~/path/to/audio.mkv -c
 
 ### List available audio devices:
-  audio devices
+  audiobot devices
+
+### Clean up old recordings (older than 30 days):
+  audiobot cleanup --days 30 --dry-run
 
 ## TROUBLESHOOTING
 
 • "Device not found" error:
-  Run 'audio devices' to see exact device names, then use the correct name
+  Run 'audiobot devices' to see exact device names, then use the correct name
 
 • No system audio in recording:
   Ensure BlackHole 2ch is set as system output in System Settings → Sound
@@ -129,49 +159,54 @@ Or use interactive mode to select from a list:
   Check that microphone is enabled in aggregate device and has drift correction on
 
 • Zscaler blocks model download:
-  Follow the manual download instructions shown by 'audio install'
+  Follow the manual download instructions shown by 'audiobot install'
 
 • Audio quality issues:
   Ensure BlackHole is the clock source in your aggregate device
 
 ## FILES & LOCATIONS
-  Models:        ~/.meeting-assistant/models/
-  Recordings:    ~/Meetings/YYYY-MM-DD/meeting_HH-MM-SS.mkv
-  Transcripts:   ~/Meetings/YYYY-MM-DD/meeting_HH-MM-SS.txt
+  Models:        ~/.audiobot/models/
+  Recordings:    ~/Meetings/YYYY-MM-DD/recording_HH-MM-SS.mkv
+  Transcripts:   ~/Meetings/YYYY-MM-DD/recording_HH-MM-SS.vtt
 
 ## MORE INFO
 Run any command with --help for detailed options:
-  audio start --help
-  audio record --help
-  audio transcribe --help
+  audiobot start --help
+  audiobot record --help
+  audiobot transcribe --help
+  audiobot cleanup --help
 
 EOF
 }
 
-function _meeting_check_deps() {
+function _audiobot_check_deps() {
     command -v ffmpeg >/dev/null || { echo "❌ ffmpeg missing."; return 1; }
     command -v whisper-cli >/dev/null || { echo "❌ whisper-cli missing. Run 'brew install whisper-cpp'."; return 1; }
 }
 
-function _meeting_list_devices() {
+function _audiobot_list_devices() {
     echo "📋 Available Audio Devices:" >&2
     echo "" >&2
     ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "AVFoundation audio devices:" -A 20 | grep "^\[AVFoundation.*\] \[[0-9]" | sed 's/.*\[\([0-9]\)/  [\1/' >&2
     echo "" >&2
 }
 
-function _meeting_install() {
-    local model_name="large-v3-turbo"
-    local model_dir="$HOME/.meeting-assistant/models"
+function _audiobot_install() {
+    local model_name="$AUDIOBOT_MODEL"
+    local model_dir="$AUDIOBOT_MODEL_DIR"
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: audio install [options]"
+                echo "Usage: audiobot install [options]"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $model_name)"
-                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
+                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
+                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
+                echo ""
+                echo "Environment Variables:"
+                echo "  AUDIOBOT_MODEL        : Override default model"
+                echo "  AUDIOBOT_MODEL_DIR    : Override default model directory"
                 return 0
                 ;;
             -m|--model)
@@ -216,32 +251,38 @@ function _meeting_install() {
     echo "✅ Model exists and seems valid."
 }
 
-function _meeting_start() {
-    _meeting_check_deps || return 1
+function _audiobot_start() {
+    _audiobot_check_deps || return 1
     
-    local model_name="large-v3-turbo"
-    local model_dir="$HOME/.meeting-assistant/models"
-    local output_dir="$HOME/Meetings"
+    local model_name="$AUDIOBOT_MODEL"
+    local model_dir="$AUDIOBOT_MODEL_DIR"
+    local output_dir="$AUDIOBOT_OUTPUT_DIR"
     local clipboard=false
     local device=""
-    local device_name="Headphone IN"
+    local device_name="$AUDIOBOT_DEVICE_NAME"
     local interactive=false
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: audio start [options]"
+                echo "Usage: audiobot start [options]"
                 echo ""
                 echo "Record and transcribe audio"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $model_name)"
-                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
-                echo "  --output-dir <path>              : Output directory (default: $output_dir)"
+                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
+                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
+                echo "  --output-dir <path>              : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
                 echo "  -c, --clipboard                  : Also copy transcript to clipboard"
                 echo "  --device <id>                    : Audio device ID (priority over --device-name)"
-                echo "  --device-name <name>             : Audio device name (default: $device_name)"
+                echo "  --device-name <name>             : Audio device name (default: $AUDIOBOT_DEVICE_NAME)"
                 echo "  -i, --interactive                : Interactive mode - list devices and select"
+                echo ""
+                echo "Environment Variables:"
+                echo "  AUDIOBOT_MODEL        : Override default model"
+                echo "  AUDIOBOT_MODEL_DIR    : Override default model directory"
+                echo "  AUDIOBOT_OUTPUT_DIR   : Override default output directory"
+                echo "  AUDIOBOT_DEVICE_NAME  : Override default device name"
                 return 0
                 ;;
             -m|--model)
@@ -283,12 +324,12 @@ function _meeting_start() {
     if [ "$interactive" = true ]; then
         record_args+=("--interactive")
     fi
-    local recorded_file=$(_meeting_record "${record_args[@]}")
+    local recorded_file=$(_audiobot_record "${record_args[@]}")
     local record_result=$?
     
     # Only proceed with transcription if recording succeeded
     if [ $record_result -eq 0 ] && [ -n "$recorded_file" ] && [ -f "$recorded_file" ]; then
-        _meeting_transcribe "$recorded_file" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
+        _audiobot_transcribe "$recorded_file" -m "$model_name" --model-dir "$model_dir" $([ "$clipboard" = true ] && echo "-c")
     elif [ $record_result -ne 0 ]; then
         echo "❌ Recording failed" >&2
         return 1
@@ -298,25 +339,29 @@ function _meeting_start() {
     fi
 }
 
-function _meeting_record() {
-    local output_dir="$HOME/Meetings"
+function _audiobot_record() {
+    local output_dir="$AUDIOBOT_OUTPUT_DIR"
     local device_id=""
-    local device_name="Headphone IN"
+    local device_name="$AUDIOBOT_DEVICE_NAME"
     local interactive=false
     
     # --- 1. Argument Parsing ---
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: audio record [options]"
+                echo "Usage: audiobot record [options]"
                 echo ""
                 echo "Record audio from an aggregate device (BlackHole + Microphone)"
                 echo ""
                 echo "Options:"
-                echo "  --output-dir <path>     : Output directory (default: $output_dir)"
+                echo "  --output-dir <path>     : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
                 echo "  --device <id>           : Audio device ID (priority over --device-name)"
-                echo "  --device-name <name>    : Audio device name (default: $device_name)"
+                echo "  --device-name <name>    : Audio device name (default: $AUDIOBOT_DEVICE_NAME)"
                 echo "  -i, --interactive       : Interactive mode - list and select device"
+                echo ""
+                echo "Environment Variables:"
+                echo "  AUDIOBOT_OUTPUT_DIR   : Override default output directory"
+                echo "  AUDIOBOT_DEVICE_NAME  : Override default device name"
                 echo ""
                 echo "Setup: Create an Aggregate Device in Audio MIDI Setup that combines"
                 echo "       BlackHole 2ch (as clock source) and your microphone (with drift correction)."
@@ -332,7 +377,7 @@ function _meeting_record() {
 
     # --- 2. Device Selection ---
     if [ "$interactive" = true ]; then
-        _meeting_list_devices
+        _audiobot_list_devices
         echo -n "Enter device ID: " >&2
         if ! read device_id < /dev/tty 2>/dev/null; then
             echo "❌ Interactive mode failed. Ensure you're running in an interactive terminal." >&2
@@ -344,13 +389,13 @@ function _meeting_record() {
     
     if [ -z "$device_id" ]; then
         echo "❌ Device not found: ${device_name}"
-        echo "   Run 'audio devices' to list available devices"
+        echo "   Run 'audiobot devices' to list available devices"
         return 1
     fi
 
     # --- 3. File Setup ---
     local date_dir="$output_dir/$(date +%Y-%m-%d)"
-    local output_file="$date_dir/meeting_$(date +%H-%M-%S).mkv"
+    local output_file="$date_dir/recording_$(date +%H-%M-%S).mkv"
     mkdir -p "$date_dir"
 
     echo "🔴 Recording from device $device_id ($device_name)..." >&2
@@ -380,26 +425,30 @@ function _meeting_record() {
     fi
 }
 
-function _meeting_transcribe() {
-    _meeting_check_deps || return 1
+function _audiobot_transcribe() {
+    _audiobot_check_deps || return 1
     
     local input="$1"
-    local model_name="large-v3-turbo"
-    local model_dir="$HOME/.meeting-assistant/models"
+    local model_name="$AUDIOBOT_MODEL"
+    local model_dir="$AUDIOBOT_MODEL_DIR"
     local clipboard=false
     shift
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: audio transcribe <file> [options]"
+                echo "Usage: audiobot transcribe <file> [options]"
                 echo ""
                 echo "Transcribe an audio file using Whisper"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $model_name)"
-                echo "  --model-dir <path>               : Model directory (default: $model_dir)"
+                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
+                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
                 echo "  -c, --clipboard                  : Also copy transcript to clipboard"
+                echo ""
+                echo "Environment Variables:"
+                echo "  AUDIOBOT_MODEL        : Override default model"
+                echo "  AUDIOBOT_MODEL_DIR    : Override default model directory"
                 return 0
                 ;;
             -m|--model)
@@ -454,16 +503,16 @@ function _meeting_transcribe() {
     fi
 }
 
-function _meeting_cleanup() {
+function _audiobot_cleanup() {
     local days=30
     local audio_only=false
     local dry_run=false
-    local output_dir="$HOME/Meetings"
+    local output_dir="$AUDIOBOT_OUTPUT_DIR"
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                echo "Usage: audio cleanup [options]"
+                echo "Usage: audiobot cleanup [options]"
                 echo ""
                 echo "Remove old recordings and transcripts"
                 echo ""
@@ -471,7 +520,10 @@ function _meeting_cleanup() {
                 echo "  -d, --days <n>         : Remove recordings older than n days (default: 30)"
                 echo "  --audio-only           : Remove only audio files, keep transcripts"
                 echo "  --dry-run              : Show what would be deleted without deleting"
-                echo "  --output-dir <path>    : Output directory (default: $output_dir)"
+                echo "  --output-dir <path>    : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
+                echo ""
+                echo "Environment Variables:"
+                echo "  AUDIOBOT_OUTPUT_DIR   : Override default output directory"
                 return 0
                 ;;
             -d|--days)
