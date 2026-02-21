@@ -32,7 +32,7 @@ PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
-project_template = "INFRA"
+project_template = "Infra"
 add_tags = ["ado"]
 
 [ado_issues_other]
