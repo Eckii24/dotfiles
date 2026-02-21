@@ -5,10 +5,10 @@
   "theme": "catppuccin",
   "agent": {
     "build": {
-      "model": "github-copilot/claude-sonnet-4.5"
+      "model": "github-copilot/claude-sonnet-4.6"
     },
     "plan": {
-      "model": "github-copilot/claude-opus-4.5"
+      "model": "github-copilot/claude-opus-4.6"
     }
   },
   "permission": {
