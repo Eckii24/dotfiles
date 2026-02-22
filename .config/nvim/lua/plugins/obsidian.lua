@@ -88,6 +88,7 @@ return {
         pattern = { "*.md", "*.markdown" },
         callback = function()
           require("lazy").load({ plugins = { "m_taskwarrior_d.nvim" } })
+          vim.cmd("TWBufQueryTasks")
           vim.cmd("TWSyncTasks")
         end,
       })
