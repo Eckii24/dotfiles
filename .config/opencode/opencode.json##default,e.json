@@ -3,6 +3,9 @@
   "autoupdate": true,
   "share": "disabled",
   "theme": "catppuccin",
+  "enabled_providers": [
+    "github-copilot"
+  ],
   "agent": {
     "build": {
       "model": "github-copilot/claude-sonnet-4.6"
