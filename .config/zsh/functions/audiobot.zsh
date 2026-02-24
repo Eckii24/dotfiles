@@ -294,7 +294,9 @@ function _audiobot_start() {
                 shift 2
                 ;;
             --output-dir)
-                output_dir="$2"
+                if [ -n "$2" ]; then
+                    output_dir="$2"
+                fi
                 shift 2
                 ;;
             -c|--clipboard)
@@ -319,6 +321,11 @@ function _audiobot_start() {
         esac
     done
     
+    # Ensure output_dir is never empty
+    if [ -z "$output_dir" ]; then
+        output_dir="${AUDIOBOT_OUTPUT_DIR}"
+    fi
+    
     # Call recording and capture the output filename
     local record_args=("--output-dir" "$output_dir" "--device" "$device" "--device-name" "$device_name")
     if [ "$interactive" = true ]; then
@@ -340,9 +347,9 @@ function _audiobot_start() {
 }
 
 function _audiobot_record() {
-    local output_dir="$AUDIOBOT_OUTPUT_DIR"
+    local output_dir="${AUDIOBOT_OUTPUT_DIR}"
     local device_id=""
-    local device_name="$AUDIOBOT_DEVICE_NAME"
+    local device_name="${AUDIOBOT_DEVICE_NAME}"
     local interactive=false
     
     # --- 1. Argument Parsing ---
@@ -367,13 +374,23 @@ function _audiobot_record() {
                 echo "       BlackHole 2ch (as clock source) and your microphone (with drift correction)."
                 return 0
                 ;;
-            --output-dir) output_dir="$2"; shift 2 ;;
+            --output-dir) 
+                if [ -n "$2" ]; then
+                    output_dir="$2"
+                fi
+                shift 2 
+                ;;
             --device) device_id="$2"; shift 2 ;;
             --device-name) device_name="$2"; shift 2 ;;
             -i|--interactive) interactive=true; shift ;;
             *) shift ;;
         esac
     done
+    
+    # Ensure output_dir is never empty
+    if [ -z "$output_dir" ]; then
+        output_dir="${AUDIOBOT_OUTPUT_DIR}"
+    fi
 
     # --- 2. Device Selection ---
     if [ "$interactive" = true ]; then
@@ -388,15 +405,20 @@ function _audiobot_record() {
     fi
     
     if [ -z "$device_id" ]; then
-        echo "❌ Device not found: ${device_name}"
-        echo "   Run 'audiobot devices' to list available devices"
+        echo "❌ Device not found: ${device_name}" >&2
+        echo "   Run 'audiobot devices' to list available devices" >&2
         return 1
     fi
 
     # --- 3. File Setup ---
-    local date_dir="$output_dir/$(date +%Y-%m-%d)"
-    local output_file="$date_dir/recording_$(date +%H-%M-%S).mkv"
-    mkdir -p "$date_dir"
+    local date_dir="${output_dir}/$(date +%Y-%m-%d)"
+    local output_file="${date_dir}/recording_$(date +%H-%M-%S).mkv"
+    
+    # Ensure directory exists
+    if ! mkdir -p "$date_dir" 2>&1; then
+        echo "❌ Failed to create output directory: $date_dir" >&2
+        return 1
+    fi
 
     echo "🔴 Recording from device $device_id ($device_name)..." >&2
     echo "   Output: $output_file" >&2
@@ -407,9 +429,9 @@ function _audiobot_record() {
     # Aggregate devices can expose 3 channels (BlackHole L/R + mic on ch2).
     # Explicitly mix c0+c1+c2 to mono so the microphone channel is not dropped.
     ffmpeg -f avfoundation \
-           -i ":$device_id" \
+           -i ":${device_id}" \
            -af "pan=mono|c0=0.3333*c0+0.3333*c1+0.3333*c2" -c:a pcm_s16le -ar 16000 -ac 1 \
-           -f matroska -y "$output_file"
+           -f matroska -y "$output_file" >&2
     
     local ffmpeg_result=$?
     
