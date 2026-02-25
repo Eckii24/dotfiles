@@ -5,7 +5,7 @@ return {
       "nvim-lua/plenary.nvim",
     },
     cmd = "MCPHub",
-    build = "npm install -g mcp-hub@latest",
+    build = "bun install -g mcp-hub@latest",
     keys = {
       { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
     },

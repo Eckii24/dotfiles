@@ -18,4 +18,5 @@ PATH="$HOME/.local/bin:$PATH"
 PATH="$PATH:$HOME/.dotnet/tools"
 PATH="$PATH:$HOME/.local/share/bob/nvim-bin"
 PATH="$PATH:$HOME/.local/share/nvim/mason/bin"
+PATH="$PATH:$HOME/.cache/.bun/bin"
 export PATH
