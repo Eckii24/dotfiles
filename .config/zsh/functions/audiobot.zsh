@@ -5,10 +5,20 @@
 # ==============================================================================
 #  CONFIGURATION - Centralized defaults with environment variable fallbacks
 # ==============================================================================
-readonly AUDIOBOT_MODEL="${AUDIOBOT_MODEL:-large-v3-turbo}"
-readonly AUDIOBOT_MODEL_DIR="${AUDIOBOT_MODEL_DIR:-$HOME/.audiobot/models}"
-readonly AUDIOBOT_OUTPUT_DIR="${AUDIOBOT_OUTPUT_DIR:-$HOME/Meetings}"
-readonly AUDIOBOT_DEVICE_NAME="${AUDIOBOT_DEVICE_NAME:-Headphone IN}"
+# Note: We use functions instead of readonly to ensure values are evaluated
+# at runtime when $HOME and other env vars are properly available
+_audiobot_get_model() { echo "${AUDIOBOT_MODEL:-large-v3-turbo}"; }
+_audiobot_get_model_dir() { _get_config_path "${AUDIOBOT_MODEL_DIR:-$HOME/.audiobot/models}"; }
+_audiobot_get_output_dir() { _get_config_path "${AUDIOBOT_OUTPUT_DIR:-$HOME/Meetings}"; }
+_audiobot_get_device_name() { echo "${AUDIOBOT_DEVICE_NAME:-Headphone IN}"; }
+
+# Helper to safely expand tilde in paths
+_get_config_path() {
+    local value="$1"
+    # Expand tilde if present
+    value="${value/#\~/$HOME}"
+    echo "$value"
+}
 
 function audiobot() {
     local cmd="$1"
@@ -43,6 +53,10 @@ function audiobot() {
             ;;
     esac
 }
+
+# ==============================================================================
+#  HELPER FUNCTIONS
+# ==============================================================================
 
 function _audiobot_help() {
     cat <<'EOF'
@@ -192,8 +206,8 @@ function _audiobot_list_devices() {
 }
 
 function _audiobot_install() {
-    local model_name="$AUDIOBOT_MODEL"
-    local model_dir="$AUDIOBOT_MODEL_DIR"
+    local model_name="$(_audiobot_get_model)"
+    local model_dir="$(_audiobot_get_model_dir)"
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -201,8 +215,8 @@ function _audiobot_install() {
                 echo "Usage: audiobot install [options]"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
-                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
+                echo "  -m, --model <name>               : Model name (default: $(_audiobot_get_model))"
+                echo "  --model-dir <path>               : Model directory (default: $(_audiobot_get_model_dir))"
                 echo ""
                 echo "Environment Variables:"
                 echo "  AUDIOBOT_MODEL        : Override default model"
@@ -214,7 +228,7 @@ function _audiobot_install() {
                 shift 2
                 ;;
             --model-dir)
-                model_dir="$2"
+                model_dir="$(_get_config_path "$2")"
                 shift 2
                 ;;
             *)
@@ -254,12 +268,12 @@ function _audiobot_install() {
 function _audiobot_start() {
     _audiobot_check_deps || return 1
     
-    local model_name="$AUDIOBOT_MODEL"
-    local model_dir="$AUDIOBOT_MODEL_DIR"
-    local output_dir="$AUDIOBOT_OUTPUT_DIR"
+    local model_name="$(_audiobot_get_model)"
+    local model_dir="$(_audiobot_get_model_dir)"
+    local output_dir="$(_audiobot_get_output_dir)"
     local clipboard=false
     local device=""
-    local device_name="$AUDIOBOT_DEVICE_NAME"
+    local device_name="$(_audiobot_get_device_name)"
     local interactive=false
     
     while [[ $# -gt 0 ]]; do
@@ -270,12 +284,12 @@ function _audiobot_start() {
                 echo "Record and transcribe audio"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
-                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
-                echo "  --output-dir <path>              : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
+                echo "  -m, --model <name>               : Model name (default: $(_audiobot_get_model))"
+                echo "  --model-dir <path>               : Model directory (default: $(_audiobot_get_model_dir))"
+                echo "  --output-dir <path>              : Output directory (default: $(_audiobot_get_output_dir))"
                 echo "  -c, --clipboard                  : Also copy transcript to clipboard"
                 echo "  --device <id>                    : Audio device ID (priority over --device-name)"
-                echo "  --device-name <name>             : Audio device name (default: $AUDIOBOT_DEVICE_NAME)"
+                echo "  --device-name <name>             : Audio device name (default: $(_audiobot_get_device_name))"
                 echo "  -i, --interactive                : Interactive mode - list devices and select"
                 echo ""
                 echo "Environment Variables:"
@@ -290,12 +304,12 @@ function _audiobot_start() {
                 shift 2
                 ;;
             --model-dir)
-                model_dir="$2"
+                model_dir="$(_get_config_path "$2")"
                 shift 2
                 ;;
             --output-dir)
                 if [ -n "$2" ]; then
-                    output_dir="$2"
+                    output_dir="$(_get_config_path "$2")"
                 fi
                 shift 2
                 ;;
@@ -321,11 +335,6 @@ function _audiobot_start() {
         esac
     done
     
-    # Ensure output_dir is never empty
-    if [ -z "$output_dir" ]; then
-        output_dir="${AUDIOBOT_OUTPUT_DIR}"
-    fi
-    
     # Call recording and capture the output filename
     local record_args=("--output-dir" "$output_dir" "--device" "$device" "--device-name" "$device_name")
     if [ "$interactive" = true ]; then
@@ -347,9 +356,9 @@ function _audiobot_start() {
 }
 
 function _audiobot_record() {
-    local output_dir="${AUDIOBOT_OUTPUT_DIR}"
+    local output_dir="$(_audiobot_get_output_dir)"
     local device_id=""
-    local device_name="${AUDIOBOT_DEVICE_NAME}"
+    local device_name="$(_audiobot_get_device_name)"
     local interactive=false
     
     # --- 1. Argument Parsing ---
@@ -361,9 +370,9 @@ function _audiobot_record() {
                 echo "Record audio from an aggregate device (BlackHole + Microphone)"
                 echo ""
                 echo "Options:"
-                echo "  --output-dir <path>     : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
+                echo "  --output-dir <path>     : Output directory (default: $(_audiobot_get_output_dir))"
                 echo "  --device <id>           : Audio device ID (priority over --device-name)"
-                echo "  --device-name <name>    : Audio device name (default: $AUDIOBOT_DEVICE_NAME)"
+                echo "  --device-name <name>    : Audio device name (default: $(_audiobot_get_device_name))"
                 echo "  -i, --interactive       : Interactive mode - list and select device"
                 echo ""
                 echo "Environment Variables:"
@@ -376,7 +385,7 @@ function _audiobot_record() {
                 ;;
             --output-dir) 
                 if [ -n "$2" ]; then
-                    output_dir="$2"
+                    output_dir="$(_get_config_path "$2")"
                 fi
                 shift 2 
                 ;;
@@ -386,11 +395,6 @@ function _audiobot_record() {
             *) shift ;;
         esac
     done
-    
-    # Ensure output_dir is never empty
-    if [ -z "$output_dir" ]; then
-        output_dir="${AUDIOBOT_OUTPUT_DIR}"
-    fi
 
     # --- 2. Device Selection ---
     if [ "$interactive" = true ]; then
@@ -451,8 +455,8 @@ function _audiobot_transcribe() {
     _audiobot_check_deps || return 1
     
     local input="$1"
-    local model_name="$AUDIOBOT_MODEL"
-    local model_dir="$AUDIOBOT_MODEL_DIR"
+    local model_name="$(_audiobot_get_model)"
+    local model_dir="$(_audiobot_get_model_dir)"
     local clipboard=false
     shift
     
@@ -464,8 +468,8 @@ function _audiobot_transcribe() {
                 echo "Transcribe an audio file using Whisper"
                 echo ""
                 echo "Options:"
-                echo "  -m, --model <name>               : Model name (default: $AUDIOBOT_MODEL)"
-                echo "  --model-dir <path>               : Model directory (default: $AUDIOBOT_MODEL_DIR)"
+                echo "  -m, --model <name>               : Model name (default: $(_audiobot_get_model))"
+                echo "  --model-dir <path>               : Model directory (default: $(_audiobot_get_model_dir))"
                 echo "  -c, --clipboard                  : Also copy transcript to clipboard"
                 echo ""
                 echo "Environment Variables:"
@@ -478,7 +482,7 @@ function _audiobot_transcribe() {
                 shift 2
                 ;;
             --model-dir)
-                model_dir="$2"
+                model_dir="$(_get_config_path "$2")"
                 shift 2
                 ;;
             -c|--clipboard)
@@ -529,7 +533,7 @@ function _audiobot_cleanup() {
     local days=30
     local audio_only=false
     local dry_run=false
-    local output_dir="$AUDIOBOT_OUTPUT_DIR"
+    local output_dir="$(_audiobot_get_output_dir)"
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -542,7 +546,7 @@ function _audiobot_cleanup() {
                 echo "  -d, --days <n>         : Remove recordings older than n days (default: 30)"
                 echo "  --audio-only           : Remove only audio files, keep transcripts"
                 echo "  --dry-run              : Show what would be deleted without deleting"
-                echo "  --output-dir <path>    : Output directory (default: $AUDIOBOT_OUTPUT_DIR)"
+                echo "  --output-dir <path>    : Output directory (default: $(_audiobot_get_output_dir))"
                 echo ""
                 echo "Environment Variables:"
                 echo "  AUDIOBOT_OUTPUT_DIR   : Override default output directory"
@@ -561,7 +565,7 @@ function _audiobot_cleanup() {
                 shift
                 ;;
             --output-dir)
-                output_dir="$2"
+                output_dir="$(_get_config_path "$2")"
                 shift 2
                 ;;
             *)
