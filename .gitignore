@@ -1,3 +1,7 @@
 *secrets*
 data/
 .config/bin
+
+# Pi Agent
+.pi/agent/sessions/
+.pi/agent/auth.json

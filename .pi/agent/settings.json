@@ -1,0 +1,6 @@
+{
+  "lastChangelogVersion": "0.55.1",
+  "defaultThinkingLevel": "high",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "claude-sonnet-4.6"
+}
