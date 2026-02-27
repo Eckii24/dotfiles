@@ -502,7 +502,7 @@ function _audiobot_transcribe() {
     local model="$model_dir/ggml-${model_name}.bin"
 
     echo "🔄 Converting..." >&2
-    ffmpeg -i "$input" -ar 16000 -ac 1 -af silenceremove=stop_periods=-1:stop_duration=1:stop_threshold=-30dB -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
+    ffmpeg -i "$input" -ar 16000 -ac 1 -c:a pcm_s16le -y "$wav_temp" -hide_banner -loglevel error
 
     echo "🧠 Whisper Inferenz (M4 Max Metal)..." >&2
     whisper-cli -m "$model" -f "$wav_temp" -l auto -pp -t 10 -et 2.4 --prompt "Use correct spellings: dapr, OMR, OCT, GSS, TST, P0, Wendelin, Raphael" -ovtt
