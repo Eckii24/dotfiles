@@ -1,6 +1,7 @@
 ---
 name: meeting
 description: Prompt for analyzing meeting transcripts and creating bullet journal-style notes.
+model: azure:gpt-5.2
 ---
 # IDENTITY and PURPOSE
 

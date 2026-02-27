@@ -6,9 +6,18 @@ clients:
   name: azure
   models:
   - name: gpt-5
-  - name: gpt-5.1-codex
+  - name: gpt-5.2
   - name: text-embedding-3-small
     type: embedding
+- type: openai-compatible
+  name: docker
+  api_base: http://localhost:12434/engines/v1
+  models:
+  - name: ai/qwen3-embedding:latest
+    type: embedding
+  - name: ai/qwen3-coder:latest
+    max_input_tokens: 262144
+    supports_function_calling: true
 - type: openai-compatible
   name: copilot
   models:
@@ -28,4 +37,4 @@ clients:
         headers:
           Copilot-Integration-Id: vscode-chat
           Editor-Version: aichat/0.1.0
-rag_embedding_model: azure:text-embedding-3-small
+rag_embedding_model: docker:ai/qwen3-embedding:latest
