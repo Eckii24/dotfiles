@@ -1,8 +1,12 @@
 /**
  * Copilot Usage Footer Extension
  *
- * Replaces the default token-count footer with GitHub Copilot premium
- * request usage: per-session delta and billing-period total (used/limit).
+ * Footer layout:
+ *   Line 1: ~/current/working/dir [• session name]
+ *   Line 2: LEFT ... padding ... RIGHT
+ *     LEFT:  ↑12k in  ↓8k out  67% ctx  copilot: +3 sess | 123/300 (41%)
+ *     RIGHT: (github-copilot)  claude-sonnet-4-5  think:medium  (main)
+ *   Line 3: extension statuses (if any)
  *
  * Token source:
  *   ~/.pi/agent/auth.json → github-copilot.refresh  (long-lived GitHub OAuth token)
@@ -44,6 +48,32 @@ interface CopilotData {
 	premium: PremiumUsage;
 	resetDate: string;
 	error?: string;
+}
+
+type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Format token count with k/M suffix for compact display. */
+function fmtTokens(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+	if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+	return `${n}`;
+}
+
+/** Map a thinking level string to its theme color key. */
+function thinkingColorKey(level: ThinkingLevel): string {
+	const map: Record<ThinkingLevel, string> = {
+		off: "thinkingOff",
+		minimal: "thinkingMinimal",
+		low: "thinkingLow",
+		medium: "thinkingMedium",
+		high: "thinkingHigh",
+		xhigh: "thinkingXhigh",
+	};
+	return map[level] ?? "thinkingOff";
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +155,6 @@ export default function (pi: ExtensionAPI) {
 			const res = await fetch(url, {
 				headers: {
 					Authorization: `Bearer ${creds.token}`,
-					// Same User-Agent as the oh-my-posh segment and official tooling
 					"User-Agent": "GitHub-Copilot-Usage-Tray",
 					Accept: "application/json",
 					"Content-Type": "application/json",
@@ -190,7 +219,7 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			tuiRef = tui;
 
-			// Re-render whenever the git branch changes (e.g. after a checkout)
+			// Re-render whenever the git branch changes
 			const unsubBranch = footerData.onBranchChange(() => tui.requestRender());
 
 			// Periodic background refresh every 5 minutes
@@ -210,126 +239,148 @@ export default function (pi: ExtensionAPI) {
 				},
 
 				render(width: number): string[] {
-					// Reimplement default footer layout but replace the cost amount with
-					// Copilot request counts. This preserves context usage, tokens, model,
-					// thinking level and provider info while swapping the $... field.
-
-					// --- Gather cumulative usage from session entries ---
+					// ── Gather cumulative session token stats ──────────────────────────────
 					let totalInput = 0;
 					let totalOutput = 0;
-					let totalCacheRead = 0;
-					let totalCacheWrite = 0;
 
 					try {
 						for (const entry of ctx.sessionManager.getEntries()) {
 							if (entry.type === "message" && entry.message.role === "assistant") {
 								totalInput += entry.message.usage.input ?? 0;
 								totalOutput += entry.message.usage.output ?? 0;
-								totalCacheRead += entry.message.usage.cacheRead ?? 0;
-								totalCacheWrite += entry.message.usage.cacheWrite ?? 0;
 							}
 						}
 					} catch {
 						// Defensive: if sessionManager API differs, fall back to zeroes
 					}
 
-					const statsParts: string[] = [];
-					if (totalInput) statsParts.push(`↑${Math.max(0, totalInput)}`);
-					if (totalOutput) statsParts.push(`↓${Math.max(0, totalOutput)}`);
-					if (totalCacheRead) statsParts.push(`R${Math.max(0, totalCacheRead)}`);
-					if (totalCacheWrite) statsParts.push(`W${Math.max(0, totalCacheWrite)}`);
+					// ── LEFT SIDE ─────────────────────────────────────────────────────────
+					const leftParts: string[] = [];
 
-					// Replace cost with Copilot request count
+					// In / Out tokens
+					if (totalInput > 0) {
+						leftParts.push(theme.fg("dim", `↑${fmtTokens(totalInput)} in`));
+					}
+					if (totalOutput > 0) {
+						leftParts.push(theme.fg("dim", `↓${fmtTokens(totalOutput)} out`));
+					}
+
+					// Context window utilization
+					try {
+						const usage = ctx.getContextUsage();
+						if (usage && usage.tokens !== null) {
+							const pct = usage.percent !== null
+								? Math.round(usage.percent)
+								: Math.min(100, Math.round((usage.tokens / usage.contextWindow) * 100));
+							const ctxColor = pct >= 90 ? "error" : pct >= 70 ? "warning" : "dim";
+							leftParts.push(theme.fg(ctxColor, `${pct}% ctx`));
+						}
+					} catch {
+						// getContextUsage may not always be available
+					}
+
+					// Copilot request usage
 					if (!copilotData) {
-						statsParts.push(theme.fg("dim", "copilot: loading…"));
+						leftParts.push(theme.fg("dim", "copilot: …"));
 					} else if (copilotData.error) {
-						statsParts.push(theme.fg("dim", `copilot: ${copilotData.error}`));
+						leftParts.push(theme.fg("dim", `copilot: ${copilotData.error}`));
 					} else {
-						const sessionDelta =
+						const delta =
 							sessionStartUsed !== null
 								? copilotData.premium.used - sessionStartUsed
 								: 0;
 
 						if (copilotData.premium.unlimited) {
-							statsParts.push(theme.fg("dim", `copilot: +${sessionDelta} session | ∞ unlimited`));
+							leftParts.push(
+								theme.fg("dim", `copilot: +${delta} req | ∞ unlimited`),
+							);
 						} else {
 							const { used, limit } = copilotData.premium;
 							const pct = limit > 0 ? Math.round((used / limit) * 100) : 0;
-							const usageStr = pct >= 90 ? theme.fg("error", `${used}/${limit}`) : theme.fg("dim", `${used}/${limit}`);
-							statsParts.push(theme.fg("dim", `copilot: +${sessionDelta} session | `) + usageStr + theme.fg("dim", ` total (${pct}%)`));
+							const usageColor = pct >= 90 ? "error" : "dim";
+							leftParts.push(
+								theme.fg("dim", `copilot: +${delta} req | `) +
+									theme.fg(usageColor, `${used}/${limit} (${pct}%)`),
+							);
 						}
 					}
 
-					let statsLeft = statsParts.join(" ");
+					const left = leftParts.join("  ");
 
-					// --- Build right side: provider/model + git branch + thinking ---
+					// ── RIGHT SIDE ────────────────────────────────────────────────────────
+					const rightParts: string[] = [];
+
+					// Provider (always shown)
+					if (ctx.model?.provider) {
+						rightParts.push(theme.fg("dim", `(${ctx.model.provider})`));
+					}
+
+					// Model
+					if (ctx.model?.id) {
+						rightParts.push(theme.fg("dim", ctx.model.id));
+					}
+
+					// Thinking level
+					try {
+						const level = pi.getThinkingLevel() as ThinkingLevel;
+						const colorKey = thinkingColorKey(level) as Parameters<typeof theme.fg>[0];
+						rightParts.push(theme.fg(colorKey, `think:${level}`));
+					} catch {
+						// getThinkingLevel may throw if not available
+					}
+
+					// Git branch
 					const branch = footerData.getGitBranch();
-					const branchStr = branch ? ` (${branch})` : "";
-					let rightSideWithoutProvider = ctx.model?.id ?? "no-model";
-					if (ctx.model?.reasoning) {
-						const thinkingLevel = pi.getFlag ? (pi.getFlag("thinking") as string | undefined) : undefined;
-						// Fall back to showing the thinking level if available in ctx
-						const level = (ctx as any).thinkingLevel ?? undefined;
-						rightSideWithoutProvider = `${rightSideWithoutProvider}`;
+					if (branch) {
+						rightParts.push(theme.fg("dim", `(${branch})`));
 					}
 
-					let right = theme.fg("dim", `${rightSideWithoutProvider}${branchStr}`);
+					const right = rightParts.join("  ");
 
-					// If there are multiple providers, prepend provider in parentheses (like default)
-					if (footerData.getAvailableProviderCount() > 1 && ctx.model) {
-						const prov = `(${ctx.model.provider}) ` + rightSideWithoutProvider;
-						// Only use provider prefix if it fits
-						if (visibleWidth(statsLeft) + 2 + visibleWidth(prov) <= width) {
-							right = theme.fg("dim", `${prov}${branchStr}`);
-						}
-					}
-
-					// --- Truncate and align ---
-					let statsLeftWidth = visibleWidth(statsLeft);
-					if (statsLeftWidth > width) {
-						const plainStatsLeft = statsLeft.replace(/\x1b\[[0-9;]*m/g, "");
-						statsLeft = `${plainStatsLeft.substring(0, width - 3)}...`;
-						statsLeftWidth = visibleWidth(statsLeft);
-					}
-
-					const minPadding = 2;
-					const rightSideWidth = visibleWidth(right);
-					const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
+					// ── Compose the stats line ────────────────────────────────────────────
+					const leftWidth = visibleWidth(left);
+					const rightWidth = visibleWidth(right);
+					const totalNeeded = leftWidth + 2 + rightWidth;
 
 					let statsLine: string;
 					if (totalNeeded <= width) {
-						const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
-						statsLine = statsLeft + padding + right;
+						const padding = " ".repeat(width - leftWidth - rightWidth);
+						statsLine = left + padding + right;
+					} else if (leftWidth + 2 + 4 <= width) {
+						// Not enough space for full right – truncate it
+						const availForRight = width - leftWidth - 2;
+						const plainRight = right.replace(/\x1b\[[0-9;]*m/g, "");
+						const truncated = plainRight.substring(0, availForRight - 1) + "…";
+						const padding = " ".repeat(width - leftWidth - visibleWidth(truncated));
+						statsLine = left + padding + truncated;
 					} else {
-						const availableForRight = width - statsLeftWidth - minPadding;
-						if (availableForRight > 3) {
-							const plainRight = right.replace(/\x1b\[[0-9;]*m/g, "");
-							const truncatedPlain = plainRight.substring(0, availableForRight);
-							const padding = " ".repeat(width - statsLeftWidth - truncatedPlain.length);
-							statsLine = statsLeft + padding + truncatedPlain;
-						} else {
-							statsLine = statsLeft;
-						}
+						// Very narrow – just show left
+						statsLine = left;
 					}
 
-					const dimStatsLeft = theme.fg("dim", statsLeft);
-					const remainder = statsLine.slice(statsLeft.length); // padding + right
-					const dimRemainder = theme.fg("dim", remainder);
-
-					const lines = [theme.fg("dim", (() => {
+					// ── PWD line ─────────────────────────────────────────────────────────
+					const pwdLine = theme.fg("dim", (() => {
 						let pwd = process.cwd();
 						const home = process.env.HOME || process.env.USERPROFILE;
 						if (home && pwd.startsWith(home)) pwd = `~${pwd.slice(home.length)}`;
 						const sessionName = ctx.sessionManager.getSessionName?.();
 						if (sessionName) pwd = `${pwd} • ${sessionName}`;
 						return pwd;
-					})()), dimStatsLeft + dimRemainder];
+					})());
 
-					// Add extension statuses on a single line, sorted alphabetically
+					const lines = [pwdLine, statsLine];
+
+					// Extension statuses on a single line, sorted alphabetically
 					const extensionStatuses = footerData.getExtensionStatuses();
 					if (extensionStatuses.size > 0) {
-						const sorted = Array.from(extensionStatuses.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, t]) => t.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim());
-						lines.push(truncateToWidth(sorted.join(" "), width, theme.fg("dim", "...")));
+						const sorted = Array.from(extensionStatuses.entries())
+							.sort(([a], [b]) => a.localeCompare(b))
+							.map(([, t]) =>
+								t.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim(),
+							);
+						lines.push(
+							truncateToWidth(sorted.join(" "), width, theme.fg("dim", "…")),
+						);
 					}
 
 					return lines;
@@ -384,6 +435,9 @@ export default function (pi: ExtensionAPI) {
 			await activate(ctx);
 		} else if (!nowCopilot && wasCopilot) {
 			deactivate(ctx);
+		} else if (nowCopilot && wasCopilot) {
+			// Model or thinking level may have changed – just trigger a re-render
+			tuiRef?.requestRender();
 		}
 	});
 
