@@ -149,7 +149,7 @@ return {
                 )
               end,
             },
-            variables = {
+            editor_context = {
               ["ls"] = {
                 callback = function()
                   local handle = io.popen("eza -T --git-ignore")
@@ -187,7 +187,7 @@ return {
             prompts = {
               {
                 role = "user",
-                content = [[You are a @{full_stack_dev} with access to #{buffer}. The current project structure is #{ls}.
+                content = [[You are a @{agent} with access to #{buffer}. The current project structure is #{ls}.
 
 ]],
               },
