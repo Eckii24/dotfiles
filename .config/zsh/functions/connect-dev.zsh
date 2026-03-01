@@ -1,7 +1,7 @@
 function connect-dev() {
 
-  if [[ -n "$ZELLIJ_SESSION_NAME" ]]; then
-    vared -p "Zellij session detected. Start the container inside the current session? (y/n): " -c answer
+  if [[ -n "$ZELLIJ_SESSION_NAME" || -n "$TMUX" ]]; then
+    vared -p "Terminal multiplexer session detected. Start the container inside the current session? (y/n): " -c answer
     if [[ "$answer" != "y" ]]; then
       echo "Aborting connection."
       return 1
