@@ -1,6 +1,11 @@
 {
-  "lastChangelogVersion": "0.55.1",
-  "defaultThinkingLevel": "high",
+  "lastChangelogVersion": "0.55.3",
+  "defaultThinkingLevel": "medium",
   "defaultProvider": "github-copilot",
-  "defaultModel": "claude-sonnet-4.6"
+  "defaultModel": "gpt-5-mini",
+  "packages": [
+    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/questionnaire.ts",
+    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/subagent/",
+    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/subagent/index.ts"
+  ]
 }
