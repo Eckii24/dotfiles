@@ -41,7 +41,6 @@ install_github_packages() {
   "$BIN" install github.com/jesseduffield/lazydocker
   "$BIN" install github.com/jesseduffield/lazygit
   "$BIN" install github.com/ajeetdsouza/zoxide
-  "$BIN" install github.com/zellij-org/zellij
   "$BIN" install github.com/astral-sh/uv
   "$BIN" install github.com/MordechaiHadad/bob
   "$BIN" install github.com/sigoden/aichat
