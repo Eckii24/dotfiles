@@ -18,6 +18,9 @@
     "bash": {
       "dotnet build": "allow",
       "dotnet test": "allow"
+    },
+    "external_directory": {
+      "~/Development/Repos/**": "allow"
     }
   },
   "formatter": {
