@@ -44,7 +44,9 @@ function meeting() {
   # and only the final transcript (stdout) is captured for aichat.
   local temp_output
   temp_output=$(mktemp)
-  trap "rm -f '$temp_output'" RETURN
+  # Ensure temp file is removed on function exit or if interrupted (INT, TERM) or on shell exit (EXIT).
+  trap 'rm -f "$temp_output"' EXIT INT TERM
+
 
   audiobot start "${audiobot_args[@]}" > "$temp_output"
 
@@ -65,6 +67,17 @@ function meeting() {
   local aichat_args=("-r" "$role")
   [[ -n "$model" ]] && aichat_args+=("-m" "$model")
 
-  # Pass glossary + transcript to aichat
-  printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | aichat "${aichat_args[@]}"
+  # Pass glossary + transcript to aichat; capture output so we can both print it and copy to clipboard.
+  local aichat_output
+  aichat_output=$(printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | aichat "${aichat_args[@]}")
+
+  # Print the aichat result to stdout (so it still appears in terminal)
+  printf '%s\n' "$aichat_output"
+
+  # Copy the result to macOS clipboard
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf '%s\n' "$aichat_output" | pbcopy
+  else
+    echo "Warning: pbcopy not found — output not copied to clipboard" >&2
+  fi
 }
