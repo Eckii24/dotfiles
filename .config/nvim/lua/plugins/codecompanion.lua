@@ -27,8 +27,6 @@ return {
     },
     cmd = "CodeCompanionChat",
     opts = function()
-      local layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical"
-
       -- hacky solution to override the GitHub Copilot API base URL
       -- this is needed because CodeCompanion currently hard override the url
       do
@@ -233,7 +231,7 @@ return {
           },
           chat = {
             window = {
-              layout = layout,
+              layout = vim.env.CC_LAYOUT_OVERRIDE or "vertical",
             },
           },
         },
