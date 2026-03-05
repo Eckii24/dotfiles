@@ -23,6 +23,7 @@ return {
       "lalitmee/codecompanion-spinners.nvim",
       "folke/snacks.nvim",
       "dyamon/codecompanion-copilot-enterprise.nvim",
+      "cairijun/codecompanion-agentskills.nvim",
     },
     cmd = "CodeCompanionChat",
     opts = function()
@@ -216,6 +217,13 @@ return {
           spinner = {
             opts = {
               style = "snacks",
+            },
+          },
+          agentskills = {
+            opts = {
+              paths = {
+                "~/.agents/skills",
+              },
             },
           },
         },
