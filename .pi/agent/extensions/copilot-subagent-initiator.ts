@@ -20,28 +20,45 @@
  *
  * ── PARENT SIDE  (PI_SUBAGENT env var NOT set) ────────────────────────────────────
  *
- *   Intercepts the built-in `bash` tool via the `tool_call` event.  Whenever the
- *   command is about to spawn a `pi` subprocess (detected by a conservative regex),
- *   it patches the command string in-place to export `PI_SUBAGENT=1` into the child's
- *   environment before the original command runs.
+ *   Intercepts tool calls via the `tool_call` event.  Two cases are handled:
+ *
+ *   a) `bash` tool — whenever the command is about to spawn a `pi` subprocess
+ *      (detected by a conservative regex), it patches the command string in-place
+ *      to export `PI_SUBAGENT=1` into the child's environment before the command runs.
+ *
+ *   b) `subagent` tool — the built-in subagent extension spawns `pi` via Node's
+ *      `spawn("pi", args, { shell: false })`, bypassing bash entirely.  It passes no
+ *      explicit `env` to spawn(), so child processes inherit `process.env`.  When a
+ *      `subagent` tool call is detected the handler sets `process.env.PI_SUBAGENT=1`
+ *      on the parent process before the tool executes; every `pi` child spawned
+ *      subsequently inherits the flag automatically.  The parent's own `isSubagent`
+ *      flag is evaluated once at extension-load time and is unaffected by this mutation.
  *
  * ── SUBAGENT SIDE  (PI_SUBAGENT=1) ───────────────────────────────────────────────
  *
- *   On startup (`session_start`) the extension:
+ *   At extension load time (factory function), overrides the three built-in API-type
+ *   registry entries used by GitHub Copilot models:
  *
- *   1. Registers three custom API-type names (one for each real API type used by the
- *      github-copilot models: `anthropic-messages`, `openai-completions`,
- *      `openai-responses`).  Each custom type is backed by a thin wrapper that calls
- *      the real provider stream function but appends `X-Initiator: agent` to the
- *      request options headers.  Because options headers are merged *last* inside the
- *      provider, they override the dynamically-inferred value unconditionally.
+ *     • anthropic-messages
+ *     • openai-completions
+ *     • openai-responses
  *
- *   2. Re-registers all `github-copilot` models, replacing the `api` field of each
- *      model with the corresponding custom API-type name.  All other model metadata
- *      (baseUrl, per-model headers, cost, contextWindow, …) is preserved verbatim.
+ *   Each override is a thin wrapper that calls the real provider stream function but
+ *   injects `X-Initiator: agent` into the request options headers — but ONLY when
+ *   `model.provider === "github-copilot"`.  All other providers pass through unchanged.
  *
- *   Using distinct API-type names means the override is scoped to Copilot models only;
- *   no other provider is affected.
+ *   WHY this approach (and not model-remapping):
+ *
+ *     The earlier approach re-registered github-copilot models in the model registry
+ *     with custom api-type names.  The flaw: `ctx.model` (the active model object held
+ *     by the agent session) is resolved from the registry BEFORE `session_start` fires.
+ *     Re-registering models afterwards updates the registry but not the already-resolved
+ *     active model reference.  When `streamSimple(ctx.model, ...)` is called it still
+ *     looks up the ORIGINAL api type and the custom wrapper is never reached.
+ *
+ *     By overriding the api-registry entries directly at factory time, the active model
+ *     keeps its original `api` field (e.g. `"anthropic-messages"`), but that registry
+ *     slot is now our wrapper.  No model reference update is needed.
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -57,24 +74,6 @@ import {
 
 /** Set to "1" in every pi subprocess spawned by the parent agent. */
 const SUBAGENT_ENV = "PI_SUBAGENT";
-
-/**
- * Custom API-type names registered when running as a subagent.
- * These names are unique to this extension so they don't shadow the global
- * api-type registry entries used by other providers.
- */
-const SUBAGENT_API_TYPE = {
-	anthropic: "github-copilot-subagent/anthropic-messages",
-	completions: "github-copilot-subagent/openai-completions",
-	responses: "github-copilot-subagent/openai-responses",
-} as const;
-
-/** Maps each real Copilot API type to our subagent replacement. */
-const API_TYPE_REMAP: Record<string, string> = {
-	"anthropic-messages": SUBAGENT_API_TYPE.anthropic,
-	"openai-completions": SUBAGENT_API_TYPE.completions,
-	"openai-responses": SUBAGENT_API_TYPE.responses,
-};
 
 /** Appended to every LLM request made by a subagent. */
 const AGENT_INITIATOR_HEADER = { "X-Initiator": "agent" } as const;
@@ -108,16 +107,24 @@ function withAgentInitiator(options?: SimpleStreamOptions): SimpleStreamOptions 
 }
 
 // ─── Subagent-side stream wrappers ────────────────────────────────────────────
+//
+// Each wrapper passes through for non-Copilot models and injects the header
+// only when model.provider === "github-copilot".  This is important because
+// we are overriding the SHARED api-registry entries (e.g. "anthropic-messages")
+// which are also used by vanilla Anthropic models.
 
 function subagentStreamAnthropic(model: Model<any>, context: Context, options?: SimpleStreamOptions) {
+	if (model.provider !== "github-copilot") return streamSimpleAnthropic(model, context, options);
 	return streamSimpleAnthropic(model, context, withAgentInitiator(options));
 }
 
 function subagentStreamCompletions(model: Model<any>, context: Context, options?: SimpleStreamOptions) {
+	if (model.provider !== "github-copilot") return streamSimpleOpenAICompletions(model, context, options);
 	return streamSimpleOpenAICompletions(model, context, withAgentInitiator(options));
 }
 
 function subagentStreamResponses(model: Model<any>, context: Context, options?: SimpleStreamOptions) {
+	if (model.provider !== "github-copilot") return streamSimpleOpenAIResponses(model, context, options);
 	return streamSimpleOpenAIResponses(model, context, withAgentInitiator(options));
 }
 
@@ -129,85 +136,39 @@ export default function (pi: ExtensionAPI) {
 	// ── SUBAGENT SIDE ──────────────────────────────────────────────────────────
 	if (isSubagent) {
 		/**
-		 * Step 1: Register our three custom API types.
+		 * Override the three built-in api-registry slots used by GitHub Copilot.
 		 *
-		 * We pass `models: []` (empty array) so that the model-registration branch
-		 * inside registerProvider is skipped.  Only the `streamSimple` registration
-		 * path runs, which does not require baseUrl / apiKey / oauth.
+		 * pi.registerProvider() calls made at factory time are queued and flushed
+		 * once the runner initialises — before session_start fires.  At that point
+		 * our wrappers replace the built-in entries in the global apiProviderRegistry
+		 * Map.  Subsequent calls to streamSimple(copilotModel, ...) look up
+		 * model.api (e.g. "anthropic-messages") in that Map and get our wrapper,
+		 * which injects X-Initiator: agent.
+		 *
+		 * We use the built-in api-type names as the `api` field so the registry
+		 * slots are replaced in-place.  No model objects need to be mutated.
 		 */
 		pi.registerProvider("_copilot-subagent-anthropic", {
-			api: SUBAGENT_API_TYPE.anthropic,
+			api: "anthropic-messages" as any,
 			streamSimple: subagentStreamAnthropic,
-		} as any /* no models, so the baseUrl/apiKey checks don't apply */);
+		} as any);
 
 		pi.registerProvider("_copilot-subagent-completions", {
-			api: SUBAGENT_API_TYPE.completions,
+			api: "openai-completions" as any,
 			streamSimple: subagentStreamCompletions,
 		} as any);
 
 		pi.registerProvider("_copilot-subagent-responses", {
-			api: SUBAGENT_API_TYPE.responses,
+			api: "openai-responses" as any,
 			streamSimple: subagentStreamResponses,
 		} as any);
 
-		/**
-		 * Step 2: Re-register all github-copilot models with the remapped `api` field.
-		 *
-		 * We do this in `session_start` because that's the first point where
-		 * ctx.modelRegistry is available and the built-in model list is fully loaded.
-		 *
-		 * IMPORTANT: We must call `ctx.modelRegistry.registerProvider()` directly here,
-		 * NOT `pi.registerProvider()`.  The `pi.registerProvider()` method (ExtensionAPI)
-		 * only queues registrations into `runtime.pendingProviderRegistrations`, which is
-		 * flushed exactly once during startup in `bindCore()`.  Any call made from an
-		 * event handler like `session_start` would be silently ignored.
-		 * `ctx.modelRegistry.registerProvider()` writes directly to the live registry.
-		 */
 		pi.on("session_start", async (_event, ctx) => {
-			const allModels: Model<any>[] = ctx.modelRegistry.getAll();
-			const copilotModels = allModels.filter((m) => m.provider === "github-copilot");
+			const hasCopilot = ctx.modelRegistry.getAll().some((m) => m.provider === "github-copilot");
+			if (!hasCopilot) return;
 
-			if (copilotModels.length === 0) {
-				// Copilot is not configured in this environment — nothing to do.
-				return;
-			}
-
-			// Build replacement model definitions with remapped api types.
-			// Every field except `api` is copied verbatim from the original.
-			const remappedModels = copilotModels.map((m) => ({
-				id: m.id,
-				name: m.name,
-				// Use our custom subagent API type, or fall back to the original if
-				// it's an unexpected type (forwards-compatibility).
-				api: (API_TYPE_REMAP[m.api] ?? m.api) as any,
-				reasoning: m.reasoning,
-				input: m.input as ("text" | "image")[],
-				cost: m.cost,
-				contextWindow: m.contextWindow,
-				maxTokens: m.maxTokens,
-				// Per-model headers (User-Agent, Editor-Version, …) must be preserved.
-				// We pass them here; registerProvider merges provider-level headers with
-				// model-level headers, so we pass them at the model level to be safe.
-				headers: (m as any).headers,
-				compat: (m as any).compat,
-			}));
-
-			// Re-register github-copilot with the remapped model list.
-			// The real OAuth token lives in auth.json; we pass a placeholder apiKey so
-			// the validation check passes.  Auth resolution always prefers auth.json over
-			// the custom provider key fallback, so the placeholder is never used.
-			// NOTE: call ctx.modelRegistry.registerProvider() directly — NOT pi.registerProvider()
-			// which only queues and never flushes from an event handler.
-			const copilotBaseUrl = copilotModels[0].baseUrl;
-			ctx.modelRegistry.registerProvider("github-copilot", {
-				baseUrl: copilotBaseUrl,
-				apiKey: "_placeholder_oauth_in_auth_json",
-				models: remappedModels,
-			});
-
-			const afterModels = ctx.modelRegistry.getAll().filter((m) => m.provider === "github-copilot");
 			process.stderr.write(
-				`[copilot-subagent-initiator] Remapped ${afterModels.length} github-copilot models → X-Initiator:agent (e.g. ${afterModels[0]?.id} now uses api=${afterModels[0]?.api})\n`,
+				"[copilot-subagent-initiator] Running as subagent — X-Initiator:agent injected for all Copilot LLM calls\n",
 			);
 			ctx.ui.notify("[copilot-subagent-initiator] X-Initiator forced to 'agent' for all LLM calls", "info");
 		});
@@ -217,19 +178,40 @@ export default function (pi: ExtensionAPI) {
 
 	// ── PARENT SIDE ─────────────────────────────────────────────────────────────
 	//
-	// Intercept `bash` tool calls that spawn a pi subprocess and inject
-	// PI_SUBAGENT=1 into the child process environment.
+	// Intercept tool calls that spawn a pi subprocess and inject PI_SUBAGENT=1
+	// into the child process environment.  There are two paths to handle:
+	//
+	//   1. `bash` tool calls — pi is spawned via a shell command string, so we
+	//      prepend `export PI_SUBAGENT=1` to the command.
+	//
+	//   2. The built-in `subagent` tool — it calls Node's `spawn("pi", args,
+	//      { shell: false })` directly, completely bypassing bash.  No explicit
+	//      `env` is passed to spawn(), so the child inherits `process.env`.
+	//      Setting PI_SUBAGENT=1 on the parent's process.env here (before the
+	//      tool executes) is enough: every pi child spawned by the subagent tool
+	//      will inherit it automatically.
+	//
+	//      NOTE: `isSubagent` is evaluated once at extension-load time (before
+	//      any tool calls), so mutating process.env here does NOT flip the
+	//      parent into "subagent mode".
 
 	pi.on("tool_call", async (event, _ctx) => {
-		if (!isToolCallEventType("bash", event)) return;
+		// Path 1: bash commands that spawn pi
+		if (isToolCallEventType("bash", event)) {
+			const cmd: string = event.input.command ?? "";
+			if (!commandSpawnsPi(cmd)) return;
 
-		const cmd: string = event.input.command ?? "";
-		if (!commandSpawnsPi(cmd)) return;
+			// Prepend an `export` statement so the env var is visible to the
+			// spawned pi process and any nested subshells it may create.
+			event.input.command = `export ${SUBAGENT_ENV}=1\n${cmd}`;
+			return; // modifying in-place, not blocking
+		}
 
-		// Prepend an `export` statement so the env var is visible to the spawned
-		// pi process and any nested subshells it may create.
-		event.input.command = `export ${SUBAGENT_ENV}=1\n${cmd}`;
-
-		// Return undefined — we're modifying the command in-place, not blocking it.
+		// Path 2: the built-in subagent tool spawns pi via spawn() directly.
+		// Set PI_SUBAGENT=1 on the parent process so all child pi processes
+		// inherit it through the default env inheritance of spawn().
+		if (event.toolName === "subagent") {
+			process.env[SUBAGENT_ENV] = "1";
+		}
 	});
 }
