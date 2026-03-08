@@ -1,10 +1,12 @@
 {
-  "lastChangelogVersion": "0.56.2",
+  "lastChangelogVersion": "0.57.1",
   "defaultThinkingLevel": "medium",
   "defaultProvider": "github-copilot",
   "defaultModel": "claude-sonnet-4.6",
   "packages": [
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/questionnaire.ts",
-    "npm:pi-subagents"
+    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/dirty-repo-guard.ts",
+    "npm:pi-subagents",
+    "npm:@aliou/pi-guardrails"
   ]
 }
