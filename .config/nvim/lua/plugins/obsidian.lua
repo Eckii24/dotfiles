@@ -4,7 +4,10 @@ return {
     ft = "markdown",
     cmd = { "Obsidian" },
     opts = {
-      wiki_link_func = "use_alias_only",
+      link = {
+        style = "wiki",
+        format = "shortest",
+      },
       daily_notes = {
         folder = "diary",
         template = "daily.md",
@@ -30,6 +33,9 @@ return {
       },
       checkbox = {
         order = { " ", "x", "~", "!", ">" },
+      },
+      attachments = {
+        folder = "./",
       },
     },
     keys = {
