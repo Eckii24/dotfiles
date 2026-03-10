@@ -1,24 +1,9 @@
 return {
   {
-    "ravitemer/mcphub.nvim",
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-    },
-    cmd = "MCPHub",
-    build = "bun install -g mcp-hub@latest",
-    keys = {
-      { "<leader>am", "<cmd>MCPHub<cr>", mode = "n", desc = "MCPHub" },
-    },
-    opts = {
-      shutdown_delay = 24 * 60 * 60 * 1000, -- 24 hours in milliseconds
-    },
-  },
-  {
     "olimorris/codecompanion.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
-      "ravitemer/mcphub.nvim",
       "ravitemer/codecompanion-history.nvim",
       "lalitmee/codecompanion-spinners.nvim",
       "folke/snacks.nvim",
@@ -194,14 +179,6 @@ return {
           },
         },
         extensions = {
-          mcphub = {
-            callback = "mcphub.extensions.codecompanion",
-            opts = {
-              make_vars = true,
-              make_slash_commands = true,
-              -- show_result_in_chat = true,
-            },
-          },
           history = {
             enabled = true,
             opts = {
