@@ -175,7 +175,10 @@ EOF
     # Build a markdown section for a single video entry
     _video_section() {
         local vtitle="$1" vurl="$2" vsummary="$3"
-        printf '## %s\n**URL:** %s\n\n%s\n\n---\n\n' "$vtitle" "$vurl" "$vsummary"
+        # Note: trailing newlines are intentionally omitted here because
+        # command substitution $(...) always strips them; the caller appends
+        # the required blank line explicitly via $'\n\n'.
+        printf '## %s\n**URL:** %s\n\n%s\n\n---' "$vtitle" "$vurl" "$vsummary"
     }
 
     # ------------------------------------------------------------------ #
@@ -205,7 +208,11 @@ EOF
         local id url title created_at
         id="$(printf '%s' "$_decoded" | jq -r '.id')"
         url="$(printf '%s' "$_decoded" | jq -r '.content.url')"
-        title="$(printf '%s' "$_decoded" | jq -r '.title // "Untitled"')"
+        # Decode HTML entities (e.g. &quot; &amp; &lt; &gt; &#39;) that
+        # Karakeep may return in bookmark titles.
+        title="$(printf '%s' "$_decoded" \
+            | jq -r '.title // "Untitled"' \
+            | python3 -c 'import sys,html; print(html.unescape(sys.stdin.read()),end="")')"
         # Use modifiedAt first (most recent activity), fall back to createdAt.
         # Note: Karakeep's API does not expose an archivedAt field.
         created_at="$(printf '%s' "$_decoded" | jq -r '.modifiedAt // .createdAt // empty')"
@@ -242,10 +249,10 @@ EOF
         local summary
         if summary="$(_summarize_video "$url")"; then
             _log_step "Summary ready for: $title"
-            combined_output+="$(_video_section "$title" "$url" "$summary")"
+            combined_output+="$(_video_section "$title" "$url" "$summary")"$'\n\n'
             (( success++ ))
         else
-            combined_output+="$(_video_section "$title" "$url" "_Summary unavailable._")"
+            combined_output+="$(_video_section "$title" "$url" "_Summary unavailable._")"$'\n\n'
             (( failed++ ))
         fi
     done <<< "$bookmarks"
@@ -257,14 +264,16 @@ EOF
 
     # Build final document
     local header
-    header="$(printf '# Archived YouTube Videos – Summary\n\n_Showing videos from the last **%s day(s)** · generated %s_\n\n' \
+    header="$(printf '# Archived YouTube Videos – Summary\n\n_Showing videos from the last **%s day(s)** · generated %s_' \
         "$days" "$(date '+%Y-%m-%d')")"
 
     local footer
-    footer="$(printf '\n_Processed: %s video(s) · Success: %s · Failed: %s · Skipped (outside date range): %s_\n' \
+    footer="$(printf '_Processed: %s video(s) · Success: %s · Failed: %s · Skipped (outside date range): %s_' \
         "$total" "$success" "$failed" "$skipped")"
 
-    local final_output="${header}${combined_output}${footer}"
+    # header and footer lose trailing/leading newlines via $() substitution,
+    # so we join the pieces explicitly with the required blank lines.
+    local final_output="${header}"$'\n\n'"${combined_output}"$'\n'"${footer}"$'\n'
 
     if [[ -n "$output_file" ]]; then
         _log_step "Writing summary to: $output_file"
