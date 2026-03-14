@@ -124,7 +124,7 @@ EOF
         local url="$1"
 
         local prompt
-        prompt='You are summarizing a YouTube video transcript. Give a very rough summary using exactly 3 to 5 bullet point checkpoints. Each checkpoint must be a single concise sentence capturing a key moment or topic covered in the video. Output only the bullet points, nothing else.'
+        prompt='You are summarizing a YouTube video transcript. Provide a structured summary using exactly 3 to 5 bullet point checkpoints. Each checkpoint must focus on one of the following: an important concept to understand, a risk or pitfall to be aware of, or a concrete action to take. Be direct and actionable — avoid vague observations. Output only the bullet points, nothing else.'
 
         local tmp_dir
         tmp_dir="$(mktemp -d)" || { _error "Failed to create temp dir"; return 1; }
@@ -206,8 +206,9 @@ EOF
         id="$(printf '%s' "$_decoded" | jq -r '.id')"
         url="$(printf '%s' "$_decoded" | jq -r '.content.url')"
         title="$(printf '%s' "$_decoded" | jq -r '.title // "Untitled"')"
-        # Try createdAt first, then archivedAt as fallback
-        created_at="$(printf '%s' "$_decoded" | jq -r '.createdAt // .archivedAt // empty')"
+        # Use modifiedAt first (most recent activity), fall back to createdAt.
+        # Note: Karakeep's API does not expose an archivedAt field.
+        created_at="$(printf '%s' "$_decoded" | jq -r '.modifiedAt // .createdAt // empty')"
 
         if [[ -z "$url" || "$url" == "null" ]]; then
             _log_debug "Skipping bookmark '$title': no URL"
