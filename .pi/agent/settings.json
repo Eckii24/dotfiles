@@ -1,8 +1,8 @@
 {
-  "lastChangelogVersion": "0.57.1",
-  "defaultThinkingLevel": "medium",
+  "lastChangelogVersion": "0.58.1",
+  "defaultThinkingLevel": "high",
   "defaultProvider": "github-copilot",
-  "defaultModel": "claude-sonnet-4.6",
+  "defaultModel": "gpt-5.4",
   "packages": [
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/questionnaire.ts",
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/dirty-repo-guard.ts",
