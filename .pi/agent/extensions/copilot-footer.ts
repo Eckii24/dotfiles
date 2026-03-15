@@ -23,8 +23,8 @@
  * API response: quota_snapshots.premium_interactions.{ entitlement, remaining, unlimited }
  *
  * Refreshes:
- *   - Once at session start (sets the session baseline)
- *   - After every agent turn  (agent_end)
+ *   - Once at session start, in the background (sets the session baseline)
+ *   - After every agent turn (agent_end), in the background
  *   - Every 5 minutes via a timer
  */
 
@@ -95,6 +95,9 @@ export default function (pi: ExtensionAPI) {
 
 	/** Whether the custom footer is currently installed. */
 	let footerActive = false;
+
+	/** Share one in-flight refresh across all triggers. */
+	let usageRefreshPromise: Promise<void> | null = null;
 
 	// -------------------------------------------------------------------------
 	// Credentials from pi's auth.json
@@ -211,6 +214,26 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function refreshUsageInBackground(): void {
+		if (usageRefreshPromise) return;
+
+		usageRefreshPromise = fetchUsage()
+			.catch((e: unknown) => {
+				const msg = e instanceof Error ? e.message : "fetch error";
+				copilotData = {
+					premium: { used: 0, limit: 0, unlimited: false },
+					resetDate: "",
+					error: msg,
+				};
+			})
+			.finally(() => {
+				usageRefreshPromise = null;
+				if (footerActive) {
+					tuiRef?.requestRender();
+				}
+			});
+	}
+
 	// -------------------------------------------------------------------------
 	// Footer rendering
 	// -------------------------------------------------------------------------
@@ -223,9 +246,8 @@ export default function (pi: ExtensionAPI) {
 			const unsubBranch = footerData.onBranchChange(() => tui.requestRender());
 
 			// Periodic background refresh every 5 minutes
-			const refreshTimer = setInterval(async () => {
-				await fetchUsage();
-				tui.requestRender();
+			const refreshTimer = setInterval(() => {
+				refreshUsageInBackground();
 			}, 5 * 60 * 1000);
 
 			return {
@@ -397,12 +419,13 @@ export default function (pi: ExtensionAPI) {
 		return ctx.model?.provider === "github-copilot";
 	}
 
-	async function activate(ctx: ExtensionContext): Promise<void> {
+	function activate(ctx: ExtensionContext): void {
 		if (footerActive) return;
 		footerActive = true;
 		sessionStartUsed = null; // baseline resets whenever we (re-)activate
-		await fetchUsage();
+		copilotData = null; // show loading state until the first async refresh completes
 		installFooter(ctx);
+		refreshUsageInBackground();
 	}
 
 	function deactivate(ctx: ExtensionContext): void {
@@ -416,23 +439,22 @@ export default function (pi: ExtensionAPI) {
 	// Lifecycle events
 	// -------------------------------------------------------------------------
 
-	pi.on("session_start", async (_event, ctx) => {
-		if (isCopilotProvider(ctx)) await activate(ctx);
+	pi.on("session_start", (_event, ctx) => {
+		if (isCopilotProvider(ctx)) activate(ctx);
 	});
 
-	pi.on("session_switch", async (_event, ctx) => {
+	pi.on("session_switch", (_event, ctx) => {
 		// Treat every session switch as a clean slate regardless of direction
-		footerActive = false;
-		tuiRef = null;
-		if (isCopilotProvider(ctx)) await activate(ctx);
+		deactivate(ctx);
+		if (isCopilotProvider(ctx)) activate(ctx);
 	});
 
-	pi.on("model_select", async (event, ctx) => {
+	pi.on("model_select", (event, ctx) => {
 		const nowCopilot = event.model.provider === "github-copilot";
 		const wasCopilot = event.previousModel?.provider === "github-copilot";
 
 		if (nowCopilot && !wasCopilot) {
-			await activate(ctx);
+			activate(ctx);
 		} else if (!nowCopilot && wasCopilot) {
 			deactivate(ctx);
 		} else if (nowCopilot && wasCopilot) {
@@ -441,10 +463,9 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("agent_end", async () => {
+	pi.on("agent_end", () => {
 		if (!footerActive) return;
 		// Refresh after each turn; Copilot usage may have changed in the editor too
-		await fetchUsage();
-		tuiRef?.requestRender();
+		refreshUsageInBackground();
 	});
 }
