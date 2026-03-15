@@ -15,8 +15,8 @@
  * - Prompt execution is still handled by this extension via the input hook, because
  *   Copilot prompt files support richer ${input:name:prompt} placeholders than pi's
  *   native prompt templates.
- * - Copilot instruction files are shown persistently in a widget instead of a single
- *   startup notification, so the loaded bridge state is visible in the UI.
+ * - Copilot instruction files are surfaced once at startup instead of living in a
+ *   persistent widget, so the bridge behaves more like pi's native resource listing.
  * - Startup work is memoized per workspace root so we do not rescan the same trees
  *   multiple times during one startup sequence.
  */
@@ -25,8 +25,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent";
 
 interface RepoWideInstruction {
 	path: string;
@@ -66,7 +65,6 @@ interface DiscoveryState {
 	instructionsBlock?: string;
 }
 
-const WIDGET_ID = "github-copilot-bridge";
 const STUB_DIR_NAME = "pi-github-copilot-bridge";
 
 function fileExists(filePath: string): boolean {
@@ -500,46 +498,26 @@ function parseSlashCommand(text: string): { commandName: string; args: string } 
 	};
 }
 
-function summarizeItems(items: string[], maxItems = 6): string {
-	if (items.length <= maxItems) return items.join(", ");
-	const shown = items.slice(0, maxItems).join(", ");
-	return `${shown}, +${items.length - maxItems} more`;
-}
+function buildStartupContextMessage(state: DiscoveryState, theme: Theme): string | undefined {
+	const lines: string[] = [];
 
-function describeInstructionSummary(state: DiscoveryState): string | undefined {
-	const entries: string[] = [];
+	if (!state.repoWideInstruction && state.pathInstructions.length === 0) {
+		return undefined;
+	}
+
+	lines.push(theme.fg("mdHeading", "[GitHub Copilot Bridge]"), theme.fg("dim", "Context"));
 
 	if (state.repoWideInstruction) {
-		entries.push(state.repoWideInstruction.relativePath);
+		lines.push(theme.fg("dim", `  ${state.repoWideInstruction.relativePath}`));
 	}
 
 	for (const instruction of state.pathInstructions) {
 		const applyTo = instruction.applyTo.length > 0 ? instruction.applyTo.join(", ") : "all files";
-		entries.push(`${instruction.relativePath} → ${applyTo}`);
+		const excludeAgent = instruction.excludeAgent ? ` (excludeAgent: ${instruction.excludeAgent})` : "";
+		lines.push(theme.fg("dim", `  ${instruction.relativePath} → ${applyTo}${excludeAgent}`));
 	}
 
-	if (entries.length === 0) return undefined;
-	return summarizeItems(entries, 4);
-}
-
-function buildWidgetText(state: DiscoveryState, theme: ExtensionContext["ui"]["theme"]): string | undefined {
-	const hasInstructions = Boolean(state.repoWideInstruction) || state.pathInstructions.length > 0;
-	const hasPrompts = state.promptFiles.size > 0;
-	if (!hasInstructions && !hasPrompts) return undefined;
-
-	const lines: string[] = [theme.fg("mdHeading", "[GitHub Copilot Bridge]")];
-	const instructionSummary = describeInstructionSummary(state);
-	if (instructionSummary) {
-		lines.push(theme.fg("dim", `Context: ${instructionSummary}`));
-	}
-	if (hasPrompts) {
-		const promptNames = Array.from(state.promptFiles.keys()).map((name) => `/${name}`);
-		lines.push(theme.fg("dim", `Prompts: ${summarizeItems(promptNames, 8)}`));
-	}
-	if (state.duplicates.length > 0) {
-		lines.push(theme.fg("warning", `${state.duplicates.length} duplicate Copilot prompt name(s) were ignored`));
-	}
-
+	lines.push("");
 	return lines.join("\n");
 }
 
@@ -556,32 +534,6 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 			stateCache.set(root, discover(root));
 		}
 		return stateCache.get(root)!;
-	}
-
-	function setBridgeWidget(ctx: ExtensionContext, currentState: DiscoveryState) {
-		if (!ctx.hasUI) return;
-
-		const widgetText = buildWidgetText(currentState, ctx.ui.theme);
-		if (!widgetText) {
-			ctx.ui.setWidget(WIDGET_ID, undefined);
-			return;
-		}
-
-		ctx.ui.setWidget(WIDGET_ID, (_tui, theme) => {
-			const text = new Text("", 0, 0);
-			const rebuild = () => {
-				text.setText(buildWidgetText(currentState, theme) ?? "");
-			};
-
-			rebuild();
-			return {
-				render: (width: number) => text.render(width),
-				invalidate: () => {
-					text.invalidate();
-					rebuild();
-				},
-			};
-		});
 	}
 
 	function isCopilotPromptActive(commandName: string, currentState: DiscoveryState): boolean {
@@ -603,16 +555,14 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const currentState = ensureState(ctx.cwd);
-		setBridgeWidget(ctx, currentState);
+		const startupContextMessage = buildStartupContextMessage(currentState, ctx.ui.theme);
+		if (startupContextMessage) {
+			ctx.ui.notify(startupContextMessage, "info");
+		}
 
 		for (const duplicate of currentState.duplicates) {
 			ctx.ui.notify(duplicate, "warning");
 		}
-	});
-
-	pi.on("session_switch", async (_event, ctx) => {
-		const currentState = ensureState(ctx.cwd);
-		setBridgeWidget(ctx, currentState);
 	});
 
 	pi.on("input", async (event, ctx) => {
