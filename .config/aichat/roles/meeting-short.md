@@ -1,7 +1,7 @@
 ---
 name: meeting-short
 description: Prompt for creating concise meeting summaries in bullet journal style.
-model: azure:gpt-5.2
+model: azure:gpt-5.4
 ---
 # IDENTITY and PURPOSE
 
