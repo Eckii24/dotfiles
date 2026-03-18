@@ -8,7 +8,7 @@
   "codecompanion-copilot-enterprise.nvim": { "branch": "main", "commit": "2e5edc4fd32775dfff578c283624ed97334a9372" },
   "codecompanion-history.nvim": { "branch": "main", "commit": "bc1b4fe06eaaf0aa2399be742e843c22f7f1652a" },
   "codecompanion-spinners.nvim": { "branch": "main", "commit": "86926cbf7554d69d40d2a5c3cf576063814a42d5" },
-  "codecompanion.nvim": { "branch": "main", "commit": "dddd8ba0562733fa6cd4041e20b9073041dc4f4f" },
+  "codecompanion.nvim": { "branch": "main", "commit": "1a6d94b50a8bca7d9f7f22e77f416b7f347d942d" },
   "conform.nvim": { "branch": "master", "commit": "086a40dc7ed8242c03be9f47fbcee68699cc2395" },
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },
   "easy-dotnet.nvim": { "branch": "main", "commit": "e1d6f89ba4ffef640282c7fbf66ef6c01f861589" },

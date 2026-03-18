@@ -274,20 +274,7 @@ return {
   {
     "folke/sidekick.nvim",
     keys = {
-      {
-        "<leader>ag",
-        function()
-          require("sidekick.cli").toggle({ name = "copilot", focus = true })
-        end,
-        desc = "Sidekick Toggle Copilot",
-      },
-      {
-        "<leader>ao",
-        function()
-          require("sidekick.cli").toggle({ name = "opencode", focus = true })
-        end,
-        desc = "Sidekick Toggle Opencode",
-      },
+      { "<leader>ap", false },
       { "<leader>aa", false },
       { "<leader>ac", false },
     },

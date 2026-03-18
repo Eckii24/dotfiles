@@ -152,6 +152,29 @@ return {
               },
             },
           },
+          cli = {
+            agent = "pi",
+            agents = {
+              pi = {
+                cmd = "pi",
+                args = {},
+                description = "pi Agent",
+                provider = "terminal",
+              },
+              opencode = {
+                cmd = "opencode",
+                args = {},
+                description = "OpenCode Agent",
+                provider = "terminal",
+              },
+              copilot = {
+                cmd = "copilot",
+                args = {},
+                description = "GitHub Copilot Agent",
+                provider = "terminal",
+              },
+            },
+          },
           inline = {
             adapter = {
               name = "copilot",
@@ -171,7 +194,7 @@ return {
             prompts = {
               {
                 role = "user",
-                content = [[You are a @{agent} with access to #{buffer}. The current project structure is #{ls}.
+                content = [[You are an @{agent} with access to #{context}. The current project structure is #{ls}.
 
 ]],
               },
@@ -242,6 +265,19 @@ return {
       },
       { "<leader>ay", "<cmd>CodeCompanionChat Add<cr>", mode = "v", desc = "CodeCompanion add to chat" },
       { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "CodeCompanion inline" },
+      { "<leader>ap", "<cmd>CodeCompanionCLI agent=pi<cr>", mode = { "n", "v" }, desc = "CodeCompanionCLI with pi" },
+      {
+        "<leader>ag",
+        "<cmd>CodeCompanionCLI agent=copilot<cr>",
+        mode = { "n", "v" },
+        desc = "CodeCompanionCLI with Copilot",
+      },
+      {
+        "<leader>ao",
+        "<cmd>CodeCompanionCLI agent=opencode<cr>",
+        mode = { "n", "v" },
+        desc = "CodeCompanionCLI with OpenCode",
+      },
     },
   },
 }
