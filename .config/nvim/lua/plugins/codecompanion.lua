@@ -221,6 +221,7 @@ return {
             opts = {
               paths = {
                 "~/.agents/skills",
+                ".github/skills",
               },
             },
           },
