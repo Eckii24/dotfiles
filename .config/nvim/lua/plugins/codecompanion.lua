@@ -154,24 +154,34 @@ return {
           },
           cli = {
             agent = "pi",
+            providers = {
+              tmux = {
+                path = "interactions.cli.providers.tmux",
+                description = "Tmux-backed CLI provider",
+                opts = {
+                  bin = "tmux",
+                  session_prefix = "codecompanion",
+                },
+              },
+            },
             agents = {
               pi = {
                 cmd = "pi",
                 args = {},
                 description = "pi Agent",
-                provider = "terminal",
+                provider = "tmux",
               },
               opencode = {
                 cmd = "opencode",
                 args = {},
                 description = "OpenCode Agent",
-                provider = "terminal",
+                provider = "tmux",
               },
               copilot = {
                 cmd = "copilot",
                 args = {},
                 description = "GitHub Copilot Agent",
-                provider = "terminal",
+                provider = "tmux",
               },
             },
           },
