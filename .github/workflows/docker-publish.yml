@@ -63,6 +63,15 @@ jobs:
         docker push eckii24/dev-php:${{ env.TAG }}
         docker push eckii24/dev-php:latest
 
+    # Build and push dev-pi
+    - name: Build Pi Docker image
+      run: |
+        docker build -t eckii24/dev-pi:${{ env.TAG }} -t eckii24/dev-pi:latest -f ./.config/setup-scripts/pi.Dockerfile .
+    - name: Push Pi Docker image
+      run: |
+        docker push eckii24/dev-pi:${{ env.TAG }}
+        docker push eckii24/dev-pi:latest
+
     # Build and push dev-work
     - name: Build Work Docker image
       run: |
