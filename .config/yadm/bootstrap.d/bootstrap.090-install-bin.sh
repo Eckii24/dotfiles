@@ -33,7 +33,21 @@ trap 'rm -f "$BIN_TMP"' EXIT
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
-# Asset pattern includes version, e.g., bin_0.24.2_darwin_arm64
+
+case "$ARCH" in
+	x86_64)
+		ARCH="amd64"
+		;;
+	aarch64 | arm64)
+		ARCH="arm64"
+		;;
+	*)
+		echo "Unsupported architecture: $ARCH"
+		exit 1
+		;;
+esac
+
+# Asset pattern includes version, e.g., bin_0.24.3_linux_amd64
 ASSET_PATTERN="bin_.*_${OS}_${ARCH}"
 
 echo "Querying GitHub API for latest release asset matching ${ASSET_PATTERN}..."
