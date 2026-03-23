@@ -1,0 +1,23 @@
+{
+  "skill_name": "roast-me",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Roast this Python API handler and be brutal, but useful. I inherited it from a rushed internal tool and I need to decide whether to refactor it or burn it down. Focus on maintainability, correctness, and what future-me is going to hate about it. After the roast, tell me what to fix first.",
+      "expected_output": "A sharp, structured critique that identifies the most serious code quality and maintainability problems, asks a few high-leverage questions if context is missing, and prioritizes remediation steps.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Tear this architecture proposal apart. We're thinking about replacing our Rails monolith with 12 microservices because leadership thinks it will help us scale. Roast the plan, question the assumptions, and tell me what risks or fake sophistication you see.",
+      "expected_output": "A domain-aware roast of the architecture proposal that challenges scaling assumptions, operational complexity, unclear service boundaries, and tradeoff blindness, with prioritized recommendations.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Please roast this onboarding flow and landing page copy. Assume the audience is small-business owners who are not technical. I want the harsh version: what's confusing, what feels generic, what kills trust, and what questions this design is not answering.",
+      "expected_output": "A structured critique of UI/copy quality that surfaces clarity, hierarchy, trust, and conversion problems, asks hard audience-fit questions, and suggests the highest-leverage improvements.",
+      "files": []
+    }
+  ]
+}
