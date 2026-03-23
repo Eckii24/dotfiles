@@ -1,0 +1,23 @@
+{
+  "skill_name": "markitdown",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a file at ~/Downloads/Q4-board-deck.pptx and I want it converted to markdown so I can feed it into an LLM. Please use markitdown, save the output next to the deck, and tell me exactly what you ran.",
+      "expected_output": "Checks whether the skill chooses the MarkItDown CLI flow for a single PowerPoint file, uses a sensible output path, and reports the exact command used.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Can you show me the smallest setup for using markitdown in a Python script to batch-convert every .docx file in ./contracts/ into .md files? Please prefer a reusable script over shell one-liners.",
+      "expected_output": "Checks whether the skill chooses the Python API for batch work and produces a concise, reusable script that writes .md files alongside each .docx input.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I am piping a PDF into stdin from another command and markitdown is not detecting the file type correctly. Show me the right command, and only install the PDF-related dependencies rather than everything.",
+      "expected_output": "Checks whether the skill explains targeted installation with the pdf extra, uses stdin correctly, and includes the extension hint for reliable conversion.",
+      "files": []
+    }
+  ]
+}
