@@ -5,3 +5,6 @@ data/
 # Pi Agent
 .pi/agent/sessions/
 .pi/agent/auth.json
+
+# Agent skills
+.deps
