@@ -82,18 +82,20 @@ A Presenterm deck is a single Markdown file. Slides are separated with:
 <!-- end_slide -->
 ```
 
-Minimal example:
+Preferred house-style example used by this skill:
 
-```markdown
+````markdown
 ---
 title: Demo Deck
+sub_title: Short subtitle
 author: Matthias
-theme:
-  name: dark
 ---
 
+<!-- alignment: center -->
 Intro
-=====
+---
+
+<!-- jump_to_middle -->
 
 - Goal
 - Scope
@@ -101,16 +103,19 @@ Intro
 
 <!-- end_slide -->
 
+<!-- alignment: center -->
 Deep Dive
-=========
+---
+
+<!-- jump_to_middle -->
 
 - Point 1
 - Point 2
-```
+````
 
 ## Important syntax
 
-### Intro slide via front matter
+### Front matter
 
 ```yaml
 ---
@@ -120,15 +125,29 @@ author: Myself
 ---
 ```
 
-Use front matter only when you actually want an introduction slide.
+This skill's default style is to always include `title`, `sub_title`, and `author`.
 
 ### Slide titles
 
-Setext headers are treated like slide titles:
+Setext headers are treated like slide titles. Prefer the compact style:
 
 ```markdown
 Agenda
-======
+---
+```
+
+### Alignment
+
+```html
+<!-- alignment: left -->
+<!-- alignment: center -->
+<!-- alignment: right -->
+```
+
+### Vertical placement
+
+```html
+<!-- jump_to_middle -->
 ```
 
 ### Pauses
@@ -211,7 +230,7 @@ flowchart LR
 Notes:
 - Requires `mermaid-cli`
 - Rendering can be slower because it spins up a browser internally
-- Prefer adjusting Mermaid scale in configuration before overusing per-diagram width changes
+- Prefer simple diagrams that remain readable in a terminal
 
 ## Themes
 
@@ -270,6 +289,9 @@ presenterm --list-comment-commands
 - Keep one main idea per slide.
 - Prefer short bullets over paragraphs.
 - Use `<!-- end_slide -->` explicitly for clarity.
+- Prefer front matter with `title`, `sub_title`, and `author`.
+- Prefer slide titles written with `---`.
+- Default to `<!-- alignment: center -->` and `<!-- jump_to_middle -->` unless the user asks otherwise.
 - Prefer local assets with stable relative paths.
 - Use Presenterm column/layout commands instead of HTML layout hacks.
 - Use authoring mode with hot reload while drafting.
@@ -277,6 +299,7 @@ presenterm --list-comment-commands
 - Use HTML export as the default share format unless PDF is specifically required.
 - Mention optional dependencies when using PDF export, Mermaid, or executable snippets.
 - Keep diagrams and code blocks simple enough to remain readable in a terminal.
+- When a slide starts feeling busy, split it.
 
 ## Advanced features to use carefully
 
