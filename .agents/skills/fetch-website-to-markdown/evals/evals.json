@@ -1,0 +1,23 @@
+{
+  "skill_name": "fetch-website-to-markdown",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Download https://martinfowler.com/articles/gen-ai-patterns/ and save it as markdown in ./outputs/. Keep the article title as the H1 and include the source URL near the top.",
+      "expected_output": "One markdown file in ./outputs/ containing the article converted into readable markdown with a title, source URL, retrieval date, and preserved headings/links.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Fetch this blog post and save it as oil-water-moment.md: https://www.infoq.com/articles/oil-water-moment-ai-architecture/. I want proper markdown with headers, lists, and links kept intact.",
+      "expected_output": "A file named oil-water-moment.md with article metadata at the top and clean markdown content below it.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Convert these two URLs into markdown files inside ./articles/: https://huyenchip.com/2024/07/25/genai-platform.html and https://labs.lamatic.ai/p/gen-ai-architecture. Save one .md file per URL and keep the source URL inside each file.",
+      "expected_output": "Two markdown files in ./articles/, one per URL, each including title, source URL, retrieval date, and converted body content.",
+      "files": []
+    }
+  ]
+}
