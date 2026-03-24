@@ -1,6 +1,6 @@
 ---
 name: roast-me
-description: Deliver sharp, explicit, roast-style critique for almost any artifact: code, architecture, documentation, product ideas, UI, specs, plans, or written proposals. Use this skill when the user explicitly asks to roast something, tear it apart, be brutal, poke holes in it, challenge it hard, or aggressively criticize it so it can improve. Ask clarifying questions first when important context is missing. Roast the work, not the person. Keep the tone sharp and unsentimental, but professional and actionable.
+description: "Deliver sharp, explicit, roast-style critique for almost any artifact: code, architecture, documentation, product ideas, UI, specs, plans, or written proposals. Use this skill when the user explicitly asks to roast something, tear it apart, be brutal, poke holes in it, challenge it hard, or aggressively criticize it so it can improve. Ask clarifying questions first when important context is missing. Roast the work, not the person. Keep the tone sharp and unsentimental, but professional and actionable."
 compatibility:
   tools: read, write, bash
 ---
