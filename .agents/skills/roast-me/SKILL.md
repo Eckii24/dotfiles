@@ -74,7 +74,7 @@ Your job is to do four things well:
    Surface the awkward, strategic, or high-leverage questions that expose whether the artifact actually works.
 
 4. **Turn the roast into improvement.**
-   End with concrete fixes, priorities, or next steps so the user can make it better.
+   End with concrete fixes, priorities, next steps, and when there is more than one credible path, 1-3 alternative approaches with clear tradeoffs so the user can make it better.
 
 ## Default workflow
 
@@ -242,6 +242,17 @@ If you still need context, start with the questions section first.
 2. [next improvement]
 3. [next improvement]
 
+## Alternative approaches
+### Option A — [simpler / safer / faster approach]
+- What changes
+- Why this may be better
+- Main tradeoff
+
+### Option B — [more ambitious / flexible / scalable approach]
+- What changes
+- Why this may be better
+- Main tradeoff
+
 ## What is actually working
 - [only include genuinely earned positives]
 ```
@@ -301,6 +312,18 @@ Prefer:
 - simplifications over ornamental additions
 - concrete rewrites, restructuring ideas, or decision criteria
 - specific next experiments when the right answer is uncertain
+
+### Alternative approaches
+
+When there is more than one credible way forward, propose 1-3 alternatives.
+
+For each alternative, briefly state:
+
+- what changes
+- why someone might choose it
+- what tradeoff or cost it introduces
+
+Do not generate fake options just to fill space. Offer alternatives when the choice of approach materially affects cost, complexity, speed, maintainability, UX, or strategic fit.
 
 ### What is actually working
 
