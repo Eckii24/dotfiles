@@ -6,7 +6,7 @@
   "packages": [
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/questionnaire.ts",
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/dirty-repo-guard.ts",
-    "npm:pi-subagents",
     "npm:@aliou/pi-guardrails"
+    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/subagent/index.ts"
   ]
 }
