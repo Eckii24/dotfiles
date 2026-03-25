@@ -8,10 +8,13 @@
   ],
   "agent": {
     "build": {
-      "model": "github-copilot-enterprise/claude-sonnet-4.6"
+      "model": "github-copilot-enterprise/gpt-5.4"
     },
     "plan": {
       "model": "github-copilot-enterprise/claude-opus-4.6"
+    },
+    "compaction": {
+      "model": "github-copilot-enterprise/gpt-5.4"
     }
   },
   "permission": {
