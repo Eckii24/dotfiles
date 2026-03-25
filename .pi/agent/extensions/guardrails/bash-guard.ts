@@ -1,31 +1,54 @@
 /**
  * Guardrails Extension — Bash Command Guard
  *
- * Parses bash commands to extract individual commands and check them against
- * the deny list. Also detects file write operations and file read operations
- * within bash commands.
+ * Checks bash commands against guardrails configuration using a hybrid approach:
  *
- * Parsing approach:
- * 1. Normalize line continuations
- * 2. Split on command separators (&&, ||, ;, |, newlines) respecting quotes
- * 3. Recursively parse subshells (...) and command substitutions $(...)
- * 4. Recursively parse bash -c "...", sh -c "...", eval "..."
- * 5. Extract command name from each segment (skip env vars, prefixes)
- * 6. Track effective cwd across segments (cd DIR updates cwd)
- * 7. Detect file write operations (>, >>, cp, mv, tee, install, ln)
- * 8. Detect file read operations (cat, less, head, tail, etc.)
+ * 1. AST-based analysis (via shfmt -tojson) — preferred
+ *    - Accurate command extraction from proper shell parse tree
+ *    - No false positives on quoted strings (echo "rm -rf" won't flag rm)
+ *    - Handles control flow (if/for/while/case), functions, subshells
+ *    - Correct redirect target extraction from AST nodes
  *
- * Limitations (documented, best-effort):
- * - Cannot parse all possible bash syntax (heredocs, process substitution, etc.)
- * - Variable expansion is not resolved ($FILE, ${DIR}/path)
- * - Aliases and functions are not resolved
- * - Complex quoting edge cases may be missed
- * - cd tracking is best-effort (only handles literal cd arguments)
+ * 2. String-based fallback — when shfmt is not available or parsing fails
+ *    - Splits on command separators (&&, ||, ;, |, newlines)
+ *    - Handles subshells, command substitution, wrapper commands
+ *    - Best-effort but may produce false positives on quoted content
+ *
+ * Both paths apply the same guardrails checks:
+ * - Command name deny list
+ * - File write detection (redirections, cp, mv, tee, etc.)
+ * - File read detection (cat, head, tail, grep, etc.)
+ * - Wrapper/prefix command unwrapping (sudo, bash -c, eval, etc.)
+ * - CWD tracking across cd commands
  */
 
 import type { GuardrailsConfig, BashCheckResult, BashViolation, ExtractedCommand } from "./types.js";
 import { matchesDenyWrite, matchesDenyRead, checkAllowWrite } from "./path-guard.js";
 import { resolve } from "node:path";
+import {
+  parseShellAST,
+  isShfmtAvailable,
+  walkShellCommands,
+  wordToString as astWordToString,
+  type ASTCommand,
+  type ShellFile,
+} from "./shell-ast.js";
+
+// ─── Shared constants ───
+
+/** Commands that write to files (the last or specific arg is a destination) */
+const FILE_WRITE_COMMANDS = new Set([
+  "cp", "mv", "install", "ln", "rsync", "scp",
+  "tee", "dd",
+]);
+
+/** Commands that read files (arguments are file paths) */
+const FILE_READ_COMMANDS = new Set([
+  "cat", "less", "more", "head", "tail", "nl", "wc", "grep", "egrep", "fgrep",
+  "awk", "sed", "sort", "uniq", "cut", "paste", "tr", "strings", "xxd",
+  "hexdump", "od", "file", "stat", "md5sum", "sha256sum", "shasum",
+  "source", ".", "bat", "diff",
+]);
 
 // ─── Prefix command specifications ───
 
@@ -78,25 +101,299 @@ const WRAPPER_SPECS: Record<string, WrapperSpec> = {
   "su":    { type: "flag_c",   flagsWithValue: new Set(["-s", "--shell", "-g", "--group", "-G", "--supp-group"]) },
 };
 
-/** Commands that write to files (the last or specific arg is a destination) */
-const FILE_WRITE_COMMANDS = new Set([
-  "cp", "mv", "install", "ln", "rsync", "scp",
-  "tee", "dd",
-]);
+// ─── File operation detection (shared between AST and fallback) ───
 
-/** Commands that read files (arguments are file paths) */
-const FILE_READ_COMMANDS = new Set([
-  "cat", "less", "more", "head", "tail", "nl", "wc", "grep", "egrep", "fgrep",
-  "awk", "sed", "sort", "uniq", "cut", "paste", "tr", "strings", "xxd",
-  "hexdump", "od", "file", "stat", "md5sum", "sha256sum", "shasum",
-  "source", ".", "bat", "diff",
-]);
+/**
+ * Detect file write target paths from known file-writing commands.
+ */
+function detectFileWriteTargets(name: string, args: string[]): string[] {
+  const targets: string[] = [];
+
+  if (name === "tee") {
+    for (const arg of args) {
+      if (!arg.startsWith("-")) {
+        targets.push(arg);
+      }
+    }
+  } else if (name === "dd") {
+    for (const arg of args) {
+      if (arg.startsWith("of=")) {
+        targets.push(arg.slice(3));
+      }
+    }
+  } else if (["cp", "mv", "install", "ln", "rsync", "scp"].includes(name)) {
+    const nonFlagArgs = args.filter((a) => !a.startsWith("-"));
+    if (nonFlagArgs.length >= 2) {
+      targets.push(nonFlagArgs[nonFlagArgs.length - 1]);
+    }
+  }
+
+  return targets;
+}
+
+/**
+ * Detect file read target paths from known file-reading commands.
+ */
+function detectFileReadTargets(args: string[]): string[] {
+  const targets: string[] = [];
+  for (const arg of args) {
+    if (!arg.startsWith("-") && !arg.includes("=") && arg.length > 0) {
+      targets.push(arg);
+    }
+  }
+  return targets;
+}
+
+/**
+ * Check a single write target against both denyWrite and allowWrite.
+ */
+function checkWriteTarget(
+  target: string,
+  effectiveCwd: string,
+  config: GuardrailsConfig,
+  commandName: string,
+  segment: string,
+  violations: BashViolation[],
+): void {
+  const denyMatch = matchesDenyWrite(target, effectiveCwd, config);
+  if (denyMatch) {
+    violations.push({
+      type: "file_write_detected",
+      command: commandName,
+      segment,
+      details: `Write to '${target}' matches denyWrite pattern: ${denyMatch}`,
+    });
+  }
+
+  const allowBlock = checkAllowWrite(target, effectiveCwd, config);
+  if (allowBlock) {
+    violations.push({
+      type: "file_write_detected",
+      command: commandName,
+      segment,
+      details: `Write to '${target}': ${allowBlock}`,
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AST-BASED ANALYSIS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Unwrap prefix commands in an AST-extracted argument list.
+ * Returns the index of the actual command name.
+ */
+function unwrapPrefixes(args: string[]): number {
+  let idx = 0;
+
+  while (idx < args.length) {
+    const spec = PREFIX_SPECS[args[idx]];
+    if (!spec) break;
+
+    idx++; // skip prefix name
+
+    // Skip flags (and their values)
+    while (idx < args.length && args[idx].startsWith("-")) {
+      const flag = args[idx];
+      idx++;
+      if (spec.flagsWithValue.has(flag) && idx < args.length) {
+        idx++;
+      }
+    }
+
+    // Skip positional args
+    for (let p = 0; p < spec.positionalArgs && idx < args.length; p++) {
+      if (args[idx].startsWith("-")) break;
+      idx++;
+    }
+  }
+
+  return idx;
+}
+
+/**
+ * Process a command from the AST, handling wrappers and prefix commands.
+ * Returns all inner commands that should be checked.
+ */
+function processASTCommand(
+  astCmd: ASTCommand,
+  cwd: string,
+  config: GuardrailsConfig,
+  denySet: Set<string>,
+  violations: BashViolation[],
+  hasDenyRules: boolean,
+  hasDenyWrite: boolean,
+  hasAllowWrite: boolean,
+  hasDenyRead: boolean,
+): void {
+  // Full args including command name for prefix unwrapping
+  const allArgs = [astCmd.name, ...astCmd.args];
+  const realIdx = unwrapPrefixes(allArgs);
+
+  if (realIdx >= allArgs.length) return;
+
+  const cmdName = allArgs[realIdx];
+  const cmdArgs = allArgs.slice(realIdx + 1);
+  const segment = `${cmdName} ${cmdArgs.join(" ")}`.trim();
+
+  // ─── Check command name against deny list ───
+  if (hasDenyRules && denySet.has(cmdName.toLowerCase())) {
+    violations.push({
+      type: "denied_command",
+      command: cmdName,
+      segment,
+      details: `Command '${cmdName}' is in the deny list`,
+    });
+  }
+
+  // ─── Check write redirections (from AST) ───
+  if (hasDenyWrite || hasAllowWrite) {
+    for (const target of astCmd.writeRedirects) {
+      checkWriteTarget(target, cwd, config, cmdName, segment, violations);
+    }
+
+    // Check file write commands
+    if (FILE_WRITE_COMMANDS.has(cmdName)) {
+      const writeTargets = detectFileWriteTargets(cmdName, cmdArgs);
+      for (const target of writeTargets) {
+        checkWriteTarget(target, cwd, config, cmdName, segment, violations);
+      }
+    }
+  }
+
+  // ─── Check file read operations ───
+  if (hasDenyRead && FILE_READ_COMMANDS.has(cmdName)) {
+    const readTargets = detectFileReadTargets(cmdArgs);
+    for (const target of readTargets) {
+      const matched = matchesDenyRead(target, cwd, config);
+      if (matched) {
+        violations.push({
+          type: "file_read_detected",
+          command: cmdName,
+          segment,
+          details: `'${cmdName}' reading '${target}' matches denyRead pattern: ${matched}`,
+        });
+      }
+    }
+  }
+
+  // ─── Handle wrapper commands — recursively parse inner command strings ───
+  const wrapper = WRAPPER_SPECS[cmdName];
+  if (wrapper) {
+    let innerCommand: string | null = null;
+
+    if (wrapper.type === "flag_c") {
+      const flagIdx = cmdArgs.indexOf("-c");
+      if (flagIdx !== -1 && flagIdx + 1 < cmdArgs.length) {
+        innerCommand = cmdArgs[flagIdx + 1];
+      }
+    } else if (wrapper.type === "rest_args") {
+      innerCommand = cmdArgs.join(" ");
+    } else if (wrapper.type === "next_arg") {
+      let argIdx = 0;
+      while (argIdx < cmdArgs.length) {
+        const arg = cmdArgs[argIdx];
+        if (!arg.startsWith("-")) break;
+        argIdx++;
+        if (wrapper.flagsWithValue.has(arg) && argIdx < cmdArgs.length) {
+          argIdx++;
+        }
+      }
+      if (argIdx < cmdArgs.length) {
+        innerCommand = cmdArgs.slice(argIdx).join(" ");
+      }
+    }
+
+    if (innerCommand) {
+      // Try AST parsing the inner command too
+      const innerViolations = checkBashInner(innerCommand, cwd, config, denySet, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+      violations.push(...innerViolations);
+    }
+  }
+}
+
+/**
+ * Inner check function used by both top-level and recursive wrapper parsing.
+ */
+function checkBashInner(
+  command: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  denySet: Set<string>,
+  hasDenyRules: boolean,
+  hasDenyWrite: boolean,
+  hasAllowWrite: boolean,
+  hasDenyRead: boolean,
+): BashViolation[] {
+  const violations: BashViolation[] = [];
+
+  // Try AST parsing
+  const ast = parseShellAST(command);
+  if (ast) {
+    checkBashViaAST(ast, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+  } else {
+    // Fallback to string-based parsing
+    checkBashViaFallback(command, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+  }
+
+  return violations;
+}
+
+/**
+ * AST-based bash analysis.
+ */
+function checkBashViaAST(
+  ast: ShellFile,
+  cwd: string,
+  config: GuardrailsConfig,
+  denySet: Set<string>,
+  violations: BashViolation[],
+  hasDenyRules: boolean,
+  hasDenyWrite: boolean,
+  hasAllowWrite: boolean,
+  hasDenyRead: boolean,
+): void {
+  let effectiveCwd = cwd;
+
+  walkShellCommands(ast, (astCmd) => {
+    // Track cwd changes
+    if (astCmd.name === "cd" && astCmd.args.length > 0) {
+      const target = astCmd.args[0];
+      if (target && !target.startsWith("$") && !target.includes("$(__cmd_subst__)")) {
+        if (target === "-") {
+          // cd - goes to previous dir, we can't track this
+        } else if (target.startsWith("/")) {
+          effectiveCwd = target;
+        } else if (target === "~" || target.startsWith("~/")) {
+          const homedir = process.env.HOME || "/";
+          effectiveCwd = target === "~" ? homedir : resolve(homedir, target.slice(2));
+        } else {
+          effectiveCwd = resolve(effectiveCwd, target);
+        }
+      }
+    }
+
+    processASTCommand(
+      astCmd,
+      effectiveCwd,
+      config,
+      denySet,
+      violations,
+      hasDenyRules,
+      hasDenyWrite,
+      hasAllowWrite,
+      hasDenyRead,
+    );
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STRING-BASED FALLBACK (existing implementation, kept intact)
+// ═══════════════════════════════════════════════════════════════════
 
 // ─── Tokenizer ───
 
-/**
- * Tokenize a command string into words, respecting quotes.
- */
 function tokenize(s: string): string[] {
   const tokens: string[] = [];
   let current = "";
@@ -144,9 +441,6 @@ function tokenize(s: string): string[] {
   return tokens;
 }
 
-/**
- * Strip surrounding quotes from a token.
- */
 function stripQuotes(token: string): string {
   if (
     (token.startsWith('"') && token.endsWith('"') && token.length >= 2) ||
@@ -159,13 +453,6 @@ function stripQuotes(token: string): string {
 
 // ─── Segment splitting ───
 
-/**
- * Split a bash command string into segments by command separators,
- * respecting quoting and nesting.
- *
- * Subshell groups (...) are returned as a single segment with parens intact,
- * to be handled by the caller via recursive parsing.
- */
 function splitCommandSegments(command: string): string[] {
   const segments: string[] = [];
   let current = "";
@@ -174,21 +461,18 @@ function splitCommandSegments(command: string): string[] {
   let inDoubleQuote = false;
   let parenDepth = 0;
 
-  // Normalize line continuations
   const cmd = command.replace(/\\\n/g, " ");
 
   while (i < cmd.length) {
     const ch = cmd[i];
     const next = cmd[i + 1];
 
-    // Handle escape outside single quotes
     if (ch === "\\" && !inSingleQuote) {
       current += ch + (next || "");
       i += 2;
       continue;
     }
 
-    // Single quote toggling (not inside double quotes)
     if (ch === "'" && !inDoubleQuote) {
       inSingleQuote = !inSingleQuote;
       current += ch;
@@ -196,7 +480,6 @@ function splitCommandSegments(command: string): string[] {
       continue;
     }
 
-    // Double quote toggling (not inside single quotes)
     if (ch === '"' && !inSingleQuote) {
       inDoubleQuote = !inDoubleQuote;
       current += ch;
@@ -204,14 +487,12 @@ function splitCommandSegments(command: string): string[] {
       continue;
     }
 
-    // Inside quotes — consume as-is
     if (inSingleQuote || inDoubleQuote) {
       current += ch;
       i++;
       continue;
     }
 
-    // Handle $( — command substitution opening (count as ONE depth increment)
     if (ch === "$" && next === "(") {
       parenDepth++;
       current += "$(";
@@ -219,7 +500,6 @@ function splitCommandSegments(command: string): string[] {
       continue;
     }
 
-    // Handle plain ( — subshell opening
     if (ch === "(") {
       parenDepth++;
       current += ch;
@@ -227,7 +507,6 @@ function splitCommandSegments(command: string): string[] {
       continue;
     }
 
-    // Handle )
     if (ch === ")" && parenDepth > 0) {
       parenDepth--;
       current += ch;
@@ -235,14 +514,12 @@ function splitCommandSegments(command: string): string[] {
       continue;
     }
 
-    // Inside nested group — consume as-is
     if (parenDepth > 0) {
       current += ch;
       i++;
       continue;
     }
 
-    // ─── Top-level command separators ───
     if (ch === ";" || ch === "\n") {
       if (current.trim()) segments.push(current.trim());
       current = "";
@@ -281,14 +558,9 @@ function splitCommandSegments(command: string): string[] {
 
 // ─── Segment parsing ───
 
-/**
- * Parse a single command segment into command name + arguments.
- * Skips env var assignments, prefix commands, and handles path-based commands.
- */
 function parseSegment(segment: string): ExtractedCommand | null {
   let s = segment.trim();
 
-  // Remove leading negation (!)
   if (s.startsWith("! ") || s === "!") {
     s = s.slice(1).trim();
   }
@@ -298,35 +570,29 @@ function parseSegment(segment: string): ExtractedCommand | null {
 
   let idx = 0;
 
-  // Skip environment variable assignments (VAR=value)
   while (idx < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[idx])) {
     idx++;
   }
 
   if (idx >= tokens.length) return null;
 
-  // Skip prefix commands (time, nice, timeout, etc.) with proper arg consumption
   while (idx < tokens.length) {
     const spec = PREFIX_SPECS[stripQuotes(tokens[idx])];
     if (!spec) break;
 
-    idx++; // skip prefix name
+    idx++;
 
-    // Skip flags (and their values)
     while (idx < tokens.length && tokens[idx].startsWith("-")) {
       const flag = tokens[idx];
       idx++;
-      // Check if this flag consumes a value
       if (spec.flagsWithValue.has(flag) && idx < tokens.length) {
         idx++;
       } else if (flag.includes("=")) {
-        // --flag=value form, already consumed
+        // --flag=value form
       }
     }
 
-    // Skip positional args
     for (let p = 0; p < spec.positionalArgs && idx < tokens.length; p++) {
-      // Don't consume something that looks like a command
       if (tokens[idx].startsWith("-")) break;
       idx++;
     }
@@ -335,7 +601,6 @@ function parseSegment(segment: string): ExtractedCommand | null {
   if (idx >= tokens.length) return null;
 
   const name = stripQuotes(tokens[idx]);
-  // Extract basename for path-based commands (e.g., /usr/bin/rm -> rm)
   const baseName = name.includes("/") ? name.split("/").pop()! : name;
   const args = tokens.slice(idx + 1).map(stripQuotes);
 
@@ -346,11 +611,8 @@ function parseSegment(segment: string): ExtractedCommand | null {
   };
 }
 
-// ─── Command extraction ───
+// ─── Command extraction (fallback) ───
 
-/**
- * Extract command substitution contents: $(...) and `...`
- */
 function extractCommandSubstitutions(s: string): string[] {
   const results: string[] = [];
   let i = 0;
@@ -360,12 +622,10 @@ function extractCommandSubstitutions(s: string): string[] {
   while (i < s.length) {
     const ch = s[i];
 
-    // Track quotes to avoid extracting inside string literals
     if (ch === "'" && !inDouble) { inSingle = !inSingle; i++; continue; }
     if (ch === '"' && !inSingle) { inDouble = !inDouble; i++; continue; }
     if (inSingle) { i++; continue; }
 
-    // $(...) — handle nesting
     if (ch === "$" && s[i + 1] === "(") {
       let depth = 1;
       let j = i + 2;
@@ -384,11 +644,10 @@ function extractCommandSubstitutions(s: string): string[] {
       continue;
     }
 
-    // Backtick `...`
     if (ch === "`" && !inDouble) {
       let j = i + 1;
       while (j < s.length && s[j] !== "`") {
-        if (s[j] === "\\") j++; // skip escaped
+        if (s[j] === "\\") j++;
         j++;
       }
       if (j < s.length) {
@@ -406,61 +665,47 @@ function extractCommandSubstitutions(s: string): string[] {
   return results;
 }
 
-/**
- * Recursively extract all commands from a bash command string.
- */
-export function extractCommands(command: string): ExtractedCommand[] {
+function extractCommandsFallback(command: string): ExtractedCommand[] {
   const results: ExtractedCommand[] = [];
   const segments = splitCommandSegments(command);
 
   for (const segment of segments) {
-    // ─── Handle subshells: (cmd1; cmd2) ───
     const trimmed = segment.trim();
     if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
       const inner = trimmed.slice(1, -1);
-      results.push(...extractCommands(inner));
+      results.push(...extractCommandsFallback(inner));
       continue;
     }
 
-    // ─── Extract command substitutions from this segment ───
     const substitutions = extractCommandSubstitutions(segment);
     for (const sub of substitutions) {
-      results.push(...extractCommands(sub));
+      results.push(...extractCommandsFallback(sub));
     }
 
-    // ─── Parse the main command ───
     const parsed = parseSegment(segment);
     if (!parsed) continue;
 
     results.push(parsed);
 
-    // ─── Handle wrapper commands ───
     const wrapper = WRAPPER_SPECS[parsed.name];
     if (wrapper) {
       let innerCommand: string | null = null;
 
       if (wrapper.type === "flag_c") {
-        // bash -c "cmd", sh -c 'cmd'
         const flagIdx = parsed.args.indexOf("-c");
         if (flagIdx !== -1 && flagIdx + 1 < parsed.args.length) {
           innerCommand = parsed.args[flagIdx + 1];
         }
       } else if (wrapper.type === "rest_args") {
-        // eval "cmd1; cmd2"
         innerCommand = parsed.args.join(" ");
       } else if (wrapper.type === "next_arg") {
-        // sudo, exec, xargs — skip known flags, next is the command
         let argIdx = 0;
         while (argIdx < parsed.args.length) {
           const arg = parsed.args[argIdx];
           if (!arg.startsWith("-")) break;
-
           argIdx++;
-          // Check if this flag consumes a value
           if (wrapper.flagsWithValue.has(arg) && argIdx < parsed.args.length) {
             argIdx++;
-          } else if (arg.includes("=")) {
-            // --flag=value, already consumed
           }
         }
         if (argIdx < parsed.args.length) {
@@ -469,7 +714,7 @@ export function extractCommands(command: string): ExtractedCommand[] {
       }
 
       if (innerCommand) {
-        results.push(...extractCommands(innerCommand));
+        results.push(...extractCommandsFallback(innerCommand));
       }
     }
   }
@@ -477,15 +722,10 @@ export function extractCommands(command: string): ExtractedCommand[] {
   return results;
 }
 
-// ─── File operation detection ───
+// ─── Redirection detection (fallback) ───
 
-/**
- * Detect output redirections in a command segment and return target paths.
- */
 function detectRedirections(segment: string): string[] {
   const paths: string[] = [];
-  // Match: >, >>, 1>, 2>, &>, N> followed by a path (not &1, &2, etc.)
-  // Handle quoted paths too
   const redirectRegex = /(?:\d+|&)?>>?\s*(?!&\d)(?:"([^"]+)"|'([^']+)'|([^\s;&|"']+))/g;
   let match: RegExpExecArray | null;
   while ((match = redirectRegex.exec(segment)) !== null) {
@@ -497,53 +737,8 @@ function detectRedirections(segment: string): string[] {
   return paths;
 }
 
-/**
- * Detect file write target paths from known file-writing commands.
- */
-function detectFileWriteTargets(cmd: ExtractedCommand): string[] {
-  const targets: string[] = [];
+// ─── Fallback cwd tracking ───
 
-  if (cmd.name === "tee") {
-    for (const arg of cmd.args) {
-      if (!arg.startsWith("-")) {
-        targets.push(arg);
-      }
-    }
-  } else if (cmd.name === "dd") {
-    for (const arg of cmd.args) {
-      if (arg.startsWith("of=")) {
-        targets.push(arg.slice(3));
-      }
-    }
-  } else if (["cp", "mv", "install", "ln", "rsync", "scp"].includes(cmd.name)) {
-    const nonFlagArgs = cmd.args.filter((a) => !a.startsWith("-"));
-    if (nonFlagArgs.length >= 2) {
-      targets.push(nonFlagArgs[nonFlagArgs.length - 1]);
-    }
-  }
-
-  return targets;
-}
-
-/**
- * Detect file read target paths from known file-reading commands.
- */
-function detectFileReadTargets(cmd: ExtractedCommand): string[] {
-  const targets: string[] = [];
-
-  for (const arg of cmd.args) {
-    if (!arg.startsWith("-") && !arg.includes("=") && arg.length > 0) {
-      targets.push(arg);
-    }
-  }
-
-  return targets;
-}
-
-/**
- * Track effective cwd changes from cd commands in a sequence of segments.
- * Returns a map of segment index → effective cwd for that segment.
- */
 function trackCwdChanges(segments: string[], baseCwd: string): string[] {
   const cwds: string[] = [];
   let currentCwd = baseCwd;
@@ -551,11 +746,9 @@ function trackCwdChanges(segments: string[], baseCwd: string): string[] {
   for (const segment of segments) {
     cwds.push(currentCwd);
 
-    // Check if this segment is a cd command
     const trimmed = segment.trim();
     const tokens = tokenize(trimmed);
 
-    // Find the command (skip env vars)
     let idx = 0;
     while (idx < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[idx])) {
       idx++;
@@ -565,7 +758,6 @@ function trackCwdChanges(segments: string[], baseCwd: string): string[] {
       const cmd = stripQuotes(tokens[idx]);
       if (cmd === "cd" && idx + 1 < tokens.length) {
         const target = stripQuotes(tokens[idx + 1]);
-        // Only handle simple literal cd targets
         if (target && !target.startsWith("$") && !target.includes("`")) {
           if (target === "-") {
             // cd - goes to previous dir, we can't track this
@@ -585,10 +777,80 @@ function trackCwdChanges(segments: string[], baseCwd: string): string[] {
   return cwds;
 }
 
-// ─── Main check ───
+/**
+ * Fallback string-based bash analysis.
+ */
+function checkBashViaFallback(
+  command: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  denySet: Set<string>,
+  violations: BashViolation[],
+  hasDenyRules: boolean,
+  hasDenyWrite: boolean,
+  hasAllowWrite: boolean,
+  hasDenyRead: boolean,
+): void {
+  const topSegments = splitCommandSegments(command);
+  const segmentCwds = trackCwdChanges(topSegments, cwd);
+
+  const allCommands = extractCommandsFallback(command);
+
+  const segmentCwdMap = new Map<string, string>();
+  for (let i = 0; i < topSegments.length; i++) {
+    segmentCwdMap.set(topSegments[i], segmentCwds[i]);
+  }
+
+  for (const cmd of allCommands) {
+    const effectiveCwd = segmentCwdMap.get(cmd.fullSegment) ?? cwd;
+
+    if (hasDenyRules && denySet.has(cmd.name.toLowerCase())) {
+      violations.push({
+        type: "denied_command",
+        command: cmd.name,
+        segment: cmd.fullSegment,
+        details: `Command '${cmd.name}' is in the deny list`,
+      });
+    }
+
+    if (hasDenyWrite || hasAllowWrite) {
+      const redirectTargets = detectRedirections(cmd.fullSegment);
+      for (const target of redirectTargets) {
+        checkWriteTarget(target, effectiveCwd, config, cmd.name, cmd.fullSegment, violations);
+      }
+
+      if (FILE_WRITE_COMMANDS.has(cmd.name)) {
+        const writeTargets = detectFileWriteTargets(cmd.name, cmd.args);
+        for (const target of writeTargets) {
+          checkWriteTarget(target, effectiveCwd, config, cmd.name, cmd.fullSegment, violations);
+        }
+      }
+    }
+
+    if (hasDenyRead && FILE_READ_COMMANDS.has(cmd.name)) {
+      const readTargets = detectFileReadTargets(cmd.args);
+      for (const target of readTargets) {
+        const matched = matchesDenyRead(target, effectiveCwd, config);
+        if (matched) {
+          violations.push({
+            type: "file_read_detected",
+            command: cmd.name,
+            segment: cmd.fullSegment,
+            details: `'${cmd.name}' reading '${target}' matches denyRead pattern: ${matched}`,
+          });
+        }
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════
 
 /**
  * Check a bash command against guardrails configuration.
+ * Uses AST parsing when shfmt is available, falls back to string parsing.
  */
 export function checkBash(command: string, cwd: string, config: GuardrailsConfig): BashCheckResult {
   const violations: BashViolation[] = [];
@@ -604,70 +866,16 @@ export function checkBash(command: string, cwd: string, config: GuardrailsConfig
     return { allowed: true, violations: [] };
   }
 
-  // Split at top level to track cwd changes
-  const topSegments = splitCommandSegments(command);
-  const segmentCwds = trackCwdChanges(topSegments, cwd);
-
-  // Extract all commands (recursively)
-  const allCommands = extractCommands(command);
-
-  // For file-target checking, we need per-segment cwd.
-  // Build a lookup: for each top segment, what's its effective cwd?
-  // Then for each extracted command, find the best matching cwd.
-  const segmentCwdMap = new Map<string, string>();
-  for (let i = 0; i < topSegments.length; i++) {
-    segmentCwdMap.set(topSegments[i], segmentCwds[i]);
+  // Try AST-based analysis first
+  const ast = parseShellAST(command);
+  if (ast) {
+    checkBashViaAST(ast, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+  } else {
+    // Fallback to string-based analysis
+    checkBashViaFallback(command, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   }
 
-  for (const cmd of allCommands) {
-    // Find the effective cwd for this command's segment
-    const effectiveCwd = segmentCwdMap.get(cmd.fullSegment) ?? cwd;
-
-    // ─── Check command name against deny list ───
-    if (hasDenyRules && denySet.has(cmd.name.toLowerCase())) {
-      violations.push({
-        type: "denied_command",
-        command: cmd.name,
-        segment: cmd.fullSegment,
-        details: `Command '${cmd.name}' is in the deny list`,
-      });
-    }
-
-    // ─── Check file write operations against denyWrite + allowWrite ───
-    if (hasDenyWrite || hasAllowWrite) {
-      // Redirections
-      const redirectTargets = detectRedirections(cmd.fullSegment);
-      for (const target of redirectTargets) {
-        checkWriteTarget(target, effectiveCwd, config, cmd, violations);
-      }
-
-      // File write commands
-      if (FILE_WRITE_COMMANDS.has(cmd.name)) {
-        const writeTargets = detectFileWriteTargets(cmd);
-        for (const target of writeTargets) {
-          checkWriteTarget(target, effectiveCwd, config, cmd, violations);
-        }
-      }
-    }
-
-    // ─── Check file read operations against denyRead ───
-    if (hasDenyRead && FILE_READ_COMMANDS.has(cmd.name)) {
-      const readTargets = detectFileReadTargets(cmd);
-      for (const target of readTargets) {
-        const matched = matchesDenyRead(target, effectiveCwd, config);
-        if (matched) {
-          violations.push({
-            type: "file_read_detected",
-            command: cmd.name,
-            segment: cmd.fullSegment,
-            details: `'${cmd.name}' reading '${target}' matches denyRead pattern: ${matched}`,
-          });
-        }
-      }
-    }
-  }
-
-  // Deduplicate violations (same command + same type + same details)
+  // Deduplicate violations
   const seen = new Set<string>();
   const unique: BashViolation[] = [];
   for (const v of violations) {
@@ -685,34 +893,7 @@ export function checkBash(command: string, cwd: string, config: GuardrailsConfig
 }
 
 /**
- * Check a single write target against both denyWrite and allowWrite.
+ * Check if AST-based parsing is available.
+ * Exposed for status display.
  */
-function checkWriteTarget(
-  target: string,
-  effectiveCwd: string,
-  config: GuardrailsConfig,
-  cmd: ExtractedCommand,
-  violations: BashViolation[],
-): void {
-  // Check denyWrite
-  const denyMatch = matchesDenyWrite(target, effectiveCwd, config);
-  if (denyMatch) {
-    violations.push({
-      type: "file_write_detected",
-      command: cmd.name,
-      segment: cmd.fullSegment,
-      details: `Write to '${target}' matches denyWrite pattern: ${denyMatch}`,
-    });
-  }
-
-  // Check allowWrite
-  const allowBlock = checkAllowWrite(target, effectiveCwd, config);
-  if (allowBlock) {
-    violations.push({
-      type: "file_write_detected",
-      command: cmd.name,
-      segment: cmd.fullSegment,
-      details: `Write to '${target}': ${allowBlock}`,
-    });
-  }
-}
+export { isShfmtAvailable };
