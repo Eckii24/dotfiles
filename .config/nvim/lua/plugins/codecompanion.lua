@@ -255,9 +255,9 @@ return {
     keys = {
       { "<leader>a", "", desc = "ai" },
       { "<leader>aa", "<cmd>CodeCompanionActions<cr>", mode = { "n", "v" }, desc = "CodeCompanion actions" },
-      { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", mode = { "n", "v" }, desc = "CodeCompanion chat" },
+      { "<leader>aC", "<cmd>CodeCompanionChat Toggle<cr>", mode = { "n", "v" }, desc = "CodeCompanion chat" },
       {
-        "<leader>aC",
+        "<leader>ac",
         "<cmd>CodeCompanion /agent_mode_current_buffer<cr>",
         mode = { "n" },
         desc = "CodeCompanion chat in agent mode for current buffer",
@@ -277,6 +277,7 @@ return {
         mode = { "n", "v" },
         desc = "CodeCompanionCLI with OpenCode",
       },
+      { "<leader>aA", "<cmd>CodeCompanionCLI Ask<cr>", mode = { "n", "v" }, desc = "CodeCompanionCLI Ask" },
     },
   },
 }

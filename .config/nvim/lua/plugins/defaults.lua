@@ -277,6 +277,10 @@ return {
       { "<leader>ap", false },
       { "<leader>aa", false },
       { "<leader>ac", false },
+      { "<leader>ad", false },
+      { "<leader>af", false },
+      { "<leader>as", false },
+      { "<leader>at", false },
     },
   },
   {
