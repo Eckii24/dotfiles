@@ -118,6 +118,9 @@ return {
                 auto_submit_success = true,
                 wait_timeout = 3600000, -- 1 hour
               },
+              ["create_file"] = { opts = { require_approval_before = false } },
+              ["read_file"] = { opts = { require_approval_before = false } },
+              ["insert_edit_into_file"] = { opts = { require_approval_before = false } },
             },
             roles = {
               llm = function(adapter)
