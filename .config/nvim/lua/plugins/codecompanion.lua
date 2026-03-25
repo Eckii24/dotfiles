@@ -42,19 +42,14 @@ return {
                 },
                 schema = {
                   model = {
-                    default = "o4-mini",
+                    default = "gpt-5.4",
                     choices = {
                       "gpt-5",
                       "gpt-5-mini",
-                      "gpt-4.1",
-                      "gpt-4.1-mini",
-                      "gpt-4o",
-                      "gpt-4o-mini",
-                      ["o1"] = { opts = { can_reason = true } },
-                      ["o1-mini"] = { opts = { can_reason = true } },
-                      ["o3"] = { opts = { can_reason = true } },
-                      ["o3-mini"] = { opts = { can_reason = true } },
-                      ["o4-mini"] = { opts = { can_reason = true } },
+                      "gpt-5.1-codex",
+                      "gpt-5.2",
+                      "gpt-5.2-codex",
+                      "gpt-5.4",
                     },
                   },
                 },
@@ -91,7 +86,7 @@ return {
           chat = {
             adapter = {
               name = "copilot",
-              model = "gpt-5-mini",
+              model = "claude-sonnet-4.6",
             },
             keymaps = {
               close = {
@@ -178,7 +173,7 @@ return {
           inline = {
             adapter = {
               name = "copilot",
-              model = "gpt-5-mini",
+              model = "claude-sonnet-4.6",
             },
           },
         },
