@@ -6,18 +6,66 @@
  * - <cwd>/.pi/guardrails.json (project-local, takes precedence)
  *
  * Validates config shape on load, reports errors, falls back to defaults.
+ *
+ * To make reload behavior robust, configs are cached by file mtimes. Callers can
+ * safely call `loadConfig(cwd)` frequently; the file is only re-read when one of
+ * the config files changes.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type { GuardrailsConfig } from "./types.js";
 
-const DEFAULT_CONFIG: GuardrailsConfig = {
+export const DEFAULT_CONFIG: GuardrailsConfig = {
   timeout: 300000,
   paths: {},
   bash: {},
 };
+
+export interface GuardrailsConfigPaths {
+  globalPath: string;
+  projectPath: string;
+}
+
+export interface GuardrailsConfigSourceInfo extends GuardrailsConfigPaths {
+  hasGlobal: boolean;
+  hasProject: boolean;
+}
+
+interface CachedConfig {
+  globalMtimeMs?: number;
+  projectMtimeMs?: number;
+  config: GuardrailsConfig;
+}
+
+const configCache = new Map<string, CachedConfig>();
+
+export function getConfigPaths(cwd: string): GuardrailsConfigPaths {
+  return {
+    globalPath: join(getAgentDir(), "guardrails.json"),
+    projectPath: join(cwd, ".pi", "guardrails.json"),
+  };
+}
+
+export function getConfigSourceInfo(cwd: string): GuardrailsConfigSourceInfo {
+  const { globalPath, projectPath } = getConfigPaths(cwd);
+  return {
+    globalPath,
+    projectPath,
+    hasGlobal: existsSync(globalPath),
+    hasProject: existsSync(projectPath),
+  };
+}
+
+function getFileMtimeMs(path: string): number | undefined {
+  if (!existsSync(path)) return undefined;
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
 
 function loadJsonFile(path: string): Partial<GuardrailsConfig> {
   if (!existsSync(path)) return {};
@@ -153,9 +201,21 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
 
 // ─── Public ───
 
-export function loadConfig(cwd: string): GuardrailsConfig {
-  const globalPath = join(getAgentDir(), "guardrails.json");
-  const projectPath = join(cwd, ".pi", "guardrails.json");
+export function loadConfig(cwd: string, options: { force?: boolean } = {}): GuardrailsConfig {
+  const { globalPath, projectPath } = getConfigPaths(cwd);
+  const cacheKey = `${globalPath}::${projectPath}`;
+  const globalMtimeMs = getFileMtimeMs(globalPath);
+  const projectMtimeMs = getFileMtimeMs(projectPath);
+  const cached = configCache.get(cacheKey);
+
+  if (
+    !options.force &&
+    cached &&
+    cached.globalMtimeMs === globalMtimeMs &&
+    cached.projectMtimeMs === projectMtimeMs
+  ) {
+    return cached.config;
+  }
 
   const globalRaw = loadJsonFile(globalPath);
   const projectRaw = loadJsonFile(projectPath);
@@ -163,6 +223,7 @@ export function loadConfig(cwd: string): GuardrailsConfig {
   const { config: globalConfig } = validateConfig(globalRaw, globalPath);
   const { config: projectConfig } = validateConfig(projectRaw, projectPath);
 
-  // Merge: default → global → project (project wins)
-  return mergeConfigs(mergeConfigs(DEFAULT_CONFIG, globalConfig), projectConfig);
+  const config = mergeConfigs(mergeConfigs(DEFAULT_CONFIG, globalConfig), projectConfig);
+  configCache.set(cacheKey, { globalMtimeMs, projectMtimeMs, config });
+  return config;
 }

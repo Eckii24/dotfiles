@@ -133,7 +133,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
-import { loadConfig } from "./config.js";
+import { getConfigSourceInfo, loadConfig } from "./config.js";
 import { checkRead, checkWrite } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
@@ -144,6 +144,16 @@ function allowWriteLabel(config: GuardrailsConfig): string {
   if (aw === undefined) return "(unrestricted)";
   if (aw.length === 0) return "(deny all)";
   return aw.join(", ");
+}
+
+function configSourceLabel(cwd: string): string {
+  const info = getConfigSourceInfo(cwd);
+  const activeSources: string[] = [];
+
+  if (info.hasGlobal) activeSources.push(info.globalPath);
+  if (info.hasProject) activeSources.push(info.projectPath);
+
+  return activeSources.length > 0 ? activeSources.join(" + ") : "defaults only";
 }
 
 // ─── Session allow-list ───
@@ -283,9 +293,14 @@ export default function (pi: ExtensionAPI) {
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
 
+  function refreshConfig(cwd: string, force = false): GuardrailsConfig {
+    config = loadConfig(cwd, { force });
+    return config;
+  }
+
   // Load config on session start
   pi.on("session_start", async (_event, ctx) => {
-    config = loadConfig(ctx.cwd);
+    config = refreshConfig(ctx.cwd, true);
     sessionAllow.clear();
 
     const t = ctx.ui.theme;
@@ -307,6 +322,7 @@ export default function (pi: ExtensionAPI) {
     if (config.bash?.deny?.length) {
       lines.push(t.fg("dim", `  Bash Deny:   ${config.bash.deny.join(", ")}`));
     }
+    lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
 
     if (lines.length === 1) {
@@ -318,12 +334,13 @@ export default function (pi: ExtensionAPI) {
 
   // Main tool_call interceptor
   pi.on("tool_call", async (event, ctx) => {
-    const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+    const currentConfig = refreshConfig(ctx.cwd);
+    const timeout = currentConfig.timeout ?? DEFAULT_TIMEOUT;
 
     // ─── Read Guard ───
     if (isToolCallEventType("read", event)) {
       const filePath = event.input.path;
-      const result = checkRead(filePath, ctx.cwd, config);
+      const result = checkRead(filePath, ctx.cwd, currentConfig);
 
       if (!result.allowed && result.requiresConfirmation) {
         if (!ctx.hasUI) {
@@ -348,7 +365,7 @@ export default function (pi: ExtensionAPI) {
     // ─── Write / Edit Guard ───
     if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
       const filePath = event.input.path;
-      const result = checkWrite(filePath, ctx.cwd, config);
+      const result = checkWrite(filePath, ctx.cwd, currentConfig);
 
       if (!result.allowed) {
         if (result.requiresConfirmation) {
@@ -389,7 +406,7 @@ export default function (pi: ExtensionAPI) {
         return undefined;
       }
 
-      const result = checkBash(command, ctx.cwd, config);
+      const result = checkBash(command, ctx.cwd, currentConfig);
 
       if (!result.allowed) {
         // Filter out violations for commands already allowed in session
@@ -457,11 +474,12 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("guardrails", {
     description: "Show current guardrails configuration",
     handler: async (_args, ctx) => {
-      const cfg = loadConfig(ctx.cwd);
+      const cfg = refreshConfig(ctx.cwd, true);
       const astAvailable = isShfmtAvailable();
       const lines = [
         "🛡️ Guardrails Configuration",
         "",
+        `Config source: ${configSourceLabel(ctx.cwd)}`,
         `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
         `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
         `Session allows: ${sessionAllow.size}`,
