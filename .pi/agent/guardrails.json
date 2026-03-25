@@ -1,0 +1,45 @@
+{
+  "timeout": 300000,
+  "paths": {
+    "denyRead": [
+      "**/.env",
+      "**/.env.*",
+      "~/.ssh/**",
+      "~/.gnupg/**",
+      "**/*.pem",
+      "**/*.key",
+      "**/credentials.json",
+      "**/secrets.json",
+      "**/*secrets.zsh"
+    ],
+    "allowWrite": [
+      "./**",
+      "/tmp/**"
+    ],
+    "denyWrite": [
+      "**/.env",
+      "**/.env.*",
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/*.pem",
+      "**/*.key"
+    ]
+  },
+  "bash": {
+    "deny": [
+      "rm",
+      "sudo",
+      "chmod",
+      "chown",
+      "mkfs",
+      "dd",
+      "shutdown",
+      "reboot",
+      "poweroff",
+      "halt",
+      "kill",
+      "killall",
+      "pkill"
+    ]
+  }
+}
