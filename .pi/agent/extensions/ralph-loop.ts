@@ -3,8 +3,8 @@
  *
  * Implements the "Ralph Loop" technique (https://ghuntley.com/ralph/) where
  * a coding agent is put in a while loop, receiving the same prompt each
- * iteration. Each loop, the agent re-reads project state and autonomously
- * picks the most important task to work on.
+ * iteration. By default, every loop iteration starts from a fresh Pi session
+ * so the active chat context resets before the prompt runs again.
  *
  * Named after Ralph Wiggum from The Simpsons — deterministically bad in
  * an undeterministic world.
@@ -12,92 +12,137 @@
  * Core idea: `while :; do cat PROMPT.md | coding-agent ; done`
  *
  * Usage:
- *   /ralph <prompt>   - Run ralph loop with prompt (default 25 iterations)
- *   /ralph            - Open overlay dialog to specify prompt and max iterations
+ *   /ralph <prompt>                  - Run ralph loop with fresh sessions (default 25 iterations)
+ *   /ralph --same-session <prompt>   - Legacy behavior: reuse the same session across iterations
+ *   /ralph                           - Open overlay dialog to configure the loop
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
 import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
 
 const DEFAULT_MAX_LOOPS = 25;
+const SAME_SESSION_FLAG = "--same-session";
+
+type RalphLoopOptions = {
+	prompt: string;
+	maxLoops: number;
+	useAgentFollowUps: boolean;
+	useFreshSessionPerIteration: boolean;
+};
 
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("ralph", {
-		description: "Run a Ralph loop — same prompt, repeated autonomously",
+		description: "Run a Ralph loop — same prompt, repeated autonomously in fresh sessions by default",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
-			let prompt: string;
-			let maxLoops: number;
-			let useAgentFollowUps = false;
+			let options: RalphLoopOptions;
 			const trimmedArgs = args.trim();
 
 			if (trimmedArgs) {
-				prompt = trimmedArgs;
-				maxLoops = DEFAULT_MAX_LOOPS;
+				options = parseRalphArgs(trimmedArgs);
 			} else {
-				const result = await ctx.ui.custom<{ prompt: string; maxLoops: number; useAgentFollowUps: boolean } | null>(
-					(_tui, theme, _kb, done) => new RalphLoopDialog(theme, done),
-					{ overlay: true },
-				);
+				const result = await ctx.ui.custom<RalphLoopOptions | null>((_tui, theme, _kb, done) => new RalphLoopDialog(theme, done), {
+					overlay: true,
+				});
 
 				if (!result) {
 					ctx.ui.notify("Ralph loop cancelled", "info");
 					return;
 				}
 
-				prompt = result.prompt;
-				maxLoops = result.maxLoops;
-				useAgentFollowUps = result.useAgentFollowUps;
+				options = result;
 			}
 
-			if (!prompt.trim()) {
+			if (!options.prompt.trim()) {
 				ctx.ui.notify("No prompt provided", "warning");
 				return;
 			}
 
-			await runRalphLoop(pi, ctx, prompt, maxLoops, useAgentFollowUps);
+			await runRalphLoop(pi, ctx, options);
 		},
 	});
 }
 
+function parseRalphArgs(args: string): RalphLoopOptions {
+	let remaining = args.trim();
+	let useFreshSessionPerIteration = true;
+
+	while (remaining.startsWith(SAME_SESSION_FLAG)) {
+		const suffix = remaining.slice(SAME_SESSION_FLAG.length);
+		if (suffix.length > 0 && !/^\s/.test(suffix)) break;
+		useFreshSessionPerIteration = false;
+		remaining = suffix.trimStart();
+	}
+
+	return {
+		prompt: remaining,
+		maxLoops: DEFAULT_MAX_LOOPS,
+		useAgentFollowUps: false,
+		useFreshSessionPerIteration,
+	};
+}
+
 // --- Ralph Loop Logic ---
 
-async function runRalphLoop(
-	pi: ExtensionAPI,
-	ctx: ExtensionCommandContext,
-	prompt: string,
-	maxLoops: number,
-	useAgentFollowUps: boolean,
-) {
+async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
+	const { prompt, maxLoops, useAgentFollowUps, useFreshSessionPerIteration } = options;
+	const clearStatus = () => ctx.ui.setStatus("ralph-loop", undefined);
 	const updateStatus = (iteration: number, state: string) => {
 		ctx.ui.setStatus("ralph-loop", ctx.ui.theme.fg("accent", `🔁 Ralph [${iteration}/${maxLoops}] ${state}`));
 	};
+	const sessionModeLabel = useFreshSessionPerIteration ? "fresh session per iteration" : "same session (legacy)";
+	const promptModeLabel = useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
 
-	const modeLabel = useAgentFollowUps ? "user first, then agent follow-ups" : "all user messages";
-	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, ${modeLabel})`, "info");
+	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
+		await ctx.waitForIdle();
+	}
+
+	const parentSession = useFreshSessionPerIteration ? ctx.sessionManager.getSessionFile() : undefined;
+	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, ${sessionModeLabel}, ${promptModeLabel})`, "info");
 
 	for (let i = 1; i <= maxLoops; i++) {
-		updateStatus(i, useAgentFollowUps && i > 1 ? "working as agent…" : "working…");
+		if (useFreshSessionPerIteration) {
+			updateStatus(i, "starting fresh session…");
+			const result = await ctx.newSession(parentSession ? { parentSession } : undefined);
+			if (result.cancelled) {
+				clearStatus();
+				ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${i}/${maxLoops}`, "warning");
+				return;
+			}
+		}
 
-		// Default Ralph behavior: every iteration is a user message.
-		// Optional dialog checkbox: after the first iteration, switch to agent-triggered follow-ups.
-		if (useAgentFollowUps && i > 1) {
+		const isAgentFollowUpIteration = useAgentFollowUps && i > 1;
+		const workLabel = isAgentFollowUpIteration ? "working with hidden trigger message…" : "working…";
+		const branchEntryCountBeforeIteration = ctx.sessionManager.getBranch().length;
+		updateStatus(i, useFreshSessionPerIteration ? `fresh session, ${workLabel}` : workLabel);
+
+		// Default Ralph behavior now starts each iteration from a fresh session.
+		// Low-risk legacy mode can still reuse one session, and the optional
+		// hidden trigger-message mode still swaps away from user messages after
+		// the first iteration.
+		if (isAgentFollowUpIteration) {
 			pi.sendMessage(
 				{
 					customType: "ralph-loop",
 					content: prompt,
 					display: false,
-					details: { iteration: i, mode: "agent-followup" },
+					details: {
+						iteration: i,
+						mode: "agent-followup",
+						sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+					},
 				},
 				{ triggerTurn: true },
 			);
 		} else {
 			pi.sendUserMessage(prompt);
 		}
+
 		await ctx.waitForIdle();
 
-		// Check if the user aborted the agent (Ctrl+C) — break the loop
-		if (wasAborted(ctx)) {
-			ctx.ui.setStatus("ralph-loop", undefined);
+		// Stop if the user aborted the active session turn (Ctrl+C).
+		if (wasAbortedSince(ctx, branchEntryCountBeforeIteration)) {
+			clearStatus();
 			ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
 			return;
 		}
@@ -105,20 +150,21 @@ async function runRalphLoop(
 		updateStatus(i, "done ✓");
 	}
 
-	ctx.ui.setStatus("ralph-loop", undefined);
-	ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "success");
+	clearStatus();
+	ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
 }
 
 /**
- * Check if the last agent turn was aborted by the user (Ctrl+C).
- * If so, we should stop the loop rather than blindly continuing.
+ * Check whether the assistant turn started by the current iteration was
+ * aborted by the user (Ctrl+C). Older aborted turns should not stop a later
+ * iteration, especially in legacy same-session mode.
  */
-function wasAborted(ctx: ExtensionCommandContext): boolean {
+function wasAbortedSince(ctx: ExtensionCommandContext, previousEntryCount: number): boolean {
 	const entries = ctx.sessionManager.getBranch();
-	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i]!;
-		if (entry.type === "message" && entry.message.role === "assistant") {
-			return (entry.message as any).stopReason === "aborted";
+	for (let i = entries.length - 1; i >= previousEntryCount; i--) {
+		const entry = entries[i];
+		if (entry?.type === "message" && entry.message.role === "assistant" && entry.message.stopReason === "aborted") {
+			return true;
 		}
 	}
 	return false;
@@ -130,17 +176,15 @@ class RalphLoopDialog implements Focusable {
 	readonly width = 64;
 	focused = false;
 
-	private activeField: "prompt" | "maxLoops" | "agentFollowUps" = "prompt";
+	private activeField: "prompt" | "maxLoops" | "freshSession" | "agentFollowUps" = "prompt";
 	private promptText = "";
 	private promptCursor = 0;
 	private maxLoopsText = String(DEFAULT_MAX_LOOPS);
 	private maxLoopsCursor = String(DEFAULT_MAX_LOOPS).length;
+	private useFreshSessionPerIteration = true;
 	private useAgentFollowUps = false;
 
-	constructor(
-		private theme: Theme,
-		private done: (result: { prompt: string; maxLoops: number; useAgentFollowUps: boolean } | null) => void,
-	) {}
+	constructor(private theme: Theme, private done: (result: RalphLoopOptions | null) => void) {}
 
 	handleInput(data: string): void {
 		if (matchesKey(data, "escape")) {
@@ -153,8 +197,10 @@ class RalphLoopDialog implements Focusable {
 				this.activeField === "prompt"
 					? "maxLoops"
 					: this.activeField === "maxLoops"
-						? "agentFollowUps"
-						: "prompt";
+						? "freshSession"
+						: this.activeField === "freshSession"
+							? "agentFollowUps"
+							: "prompt";
 			return;
 		}
 
@@ -164,8 +210,21 @@ class RalphLoopDialog implements Focusable {
 					? "agentFollowUps"
 					: this.activeField === "maxLoops"
 						? "prompt"
-						: "maxLoops";
+						: this.activeField === "freshSession"
+							? "maxLoops"
+							: "freshSession";
 			return;
+		}
+
+		if (this.activeField === "freshSession") {
+			if (matchesKey(data, "space")) {
+				this.useFreshSessionPerIteration = !this.useFreshSessionPerIteration;
+				return;
+			}
+			if (matchesKey(data, "return")) {
+				this.submit();
+				return;
+			}
 		}
 
 		if (this.activeField === "agentFollowUps") {
@@ -174,27 +233,13 @@ class RalphLoopDialog implements Focusable {
 				return;
 			}
 			if (matchesKey(data, "return")) {
-				const maxLoops = parseInt(this.maxLoopsText, 10);
-				if (!this.promptText.trim()) return;
-				if (isNaN(maxLoops) || maxLoops < 1) return;
-				this.done({
-					prompt: this.promptText,
-					maxLoops: Math.min(maxLoops, 999),
-					useAgentFollowUps: this.useAgentFollowUps,
-				});
+				this.submit();
 				return;
 			}
 		}
 
 		if (matchesKey(data, "return")) {
-			const maxLoops = parseInt(this.maxLoopsText, 10);
-			if (!this.promptText.trim()) return;
-			if (isNaN(maxLoops) || maxLoops < 1) return;
-			this.done({
-				prompt: this.promptText,
-				maxLoops: Math.min(maxLoops, 999),
-				useAgentFollowUps: this.useAgentFollowUps,
-			});
+			this.submit();
 			return;
 		}
 
@@ -203,6 +248,18 @@ class RalphLoopDialog implements Focusable {
 		} else if (this.activeField === "maxLoops") {
 			this.handleFieldInput("maxLoops", data);
 		}
+	}
+
+	private submit(): void {
+		const maxLoops = parseInt(this.maxLoopsText, 10);
+		if (!this.promptText.trim()) return;
+		if (isNaN(maxLoops) || maxLoops < 1) return;
+		this.done({
+			prompt: this.promptText,
+			maxLoops: Math.min(maxLoops, 999),
+			useAgentFollowUps: this.useAgentFollowUps,
+			useFreshSessionPerIteration: this.useFreshSessionPerIteration,
+		});
 	}
 
 	private handleFieldInput(field: "prompt" | "maxLoops", data: string): void {
@@ -268,7 +325,7 @@ class RalphLoopDialog implements Focusable {
 
 		lines.push(th.fg("border", `╭${"─".repeat(innerW)}╮`));
 		lines.push(row(` ${th.fg("accent", th.bold("🔁 Ralph Loop"))}`));
-		lines.push(row(` ${th.fg("dim", "Same prompt, repeated autonomously")}`));
+		lines.push(row(` ${th.fg("dim", "Fresh Pi session each iteration by default")}`));
 		lines.push(row(""));
 
 		// Prompt field
@@ -286,15 +343,40 @@ class RalphLoopDialog implements Focusable {
 		lines.push(row(`${loopsLabel} ${loopsInput}`));
 		lines.push(row(""));
 
+		// Fresh session checkbox
+		const freshSessionActive = this.activeField === "freshSession";
+		const freshSessionCheckbox = this.useFreshSessionPerIteration ? "[x]" : "[ ]";
+		const freshSessionLabel = freshSessionActive
+			? th.fg("accent", `  ${freshSessionCheckbox} Fresh session per iteration`)
+			: th.fg("text", `  ${freshSessionCheckbox} Fresh session per iteration`);
+		lines.push(row(freshSessionLabel));
+		if (this.useFreshSessionPerIteration) {
+			lines.push(row(`   ${th.fg("dim", "Each loop starts with ctx.newSession()")}`));
+			lines.push(row(`   ${th.fg("dim", "Prompt runs in a clean Pi context")}`));
+		} else {
+			lines.push(row(`   ${th.fg("dim", "Legacy mode: reuse the active session")}`));
+			lines.push(row(`   ${th.fg("dim", "Context accumulates across iterations")}`));
+		}
+		lines.push(row(""));
+
 		// Agent follow-ups checkbox
 		const followUpsActive = this.activeField === "agentFollowUps";
-		const checkbox = this.useAgentFollowUps ? "[x]" : "[ ]";
-		const checkboxLabel = followUpsActive
-			? th.fg("accent", `  ${checkbox} Use agent follow-ups after first iteration`)
-			: th.fg("text", `  ${checkbox} Use agent follow-ups after first iteration`);
-		lines.push(row(checkboxLabel));
+		const followUpsCheckbox = this.useAgentFollowUps ? "[x]" : "[ ]";
+		const followUpsLabel = followUpsActive
+			? th.fg("accent", `  ${followUpsCheckbox} Use hidden trigger messages after iter 1`)
+			: th.fg("text", `  ${followUpsCheckbox} Use hidden trigger messages after iter 1`);
+		lines.push(row(followUpsLabel));
 		lines.push(row(`   ${th.fg("dim", "Iter 1 = user message")}`));
-		lines.push(row(`   ${th.fg("dim", "Iter 2..N = sendMessage() + triggerTurn")}`));
+		lines.push(
+			row(
+				`   ${th.fg(
+					"dim",
+					this.useFreshSessionPerIteration
+						? "Iter 2..N = hidden sendMessage() in fresh sessions"
+						: "Iter 2..N = hidden sendMessage() + triggerTurn",
+				)}`,
+			),
+		);
 		lines.push(row(""));
 
 		lines.push(row(` ${th.fg("dim", " Tab switch • Space toggle • Enter start • Esc cancel")}`));
