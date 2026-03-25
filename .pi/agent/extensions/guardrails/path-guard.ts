@@ -237,14 +237,14 @@ export function checkWrite(filePath: string, cwd: string, config: GuardrailsConf
     }
   }
 
-  // 2. Check allowWrite if defined (even empty array = deny all)
+  // 2. Check allowWrite if defined (even empty array = no auto-allowed writes)
   if (allowWrite !== undefined) {
     if (allowWrite.length === 0) {
-      // Explicit empty whitelist = deny all writes
+      // Explicit empty whitelist = require confirmation for all writes
       return {
         allowed: false,
-        requiresConfirmation: false,
-        reason: "allowWrite is empty — all writes denied",
+        requiresConfirmation: true,
+        reason: "allowWrite is empty — no paths are allowlisted",
       };
     }
 
@@ -257,7 +257,7 @@ export function checkWrite(filePath: string, cwd: string, config: GuardrailsConf
     if (!lexAllow && !canAllow) {
       return {
         allowed: false,
-        requiresConfirmation: false,
+        requiresConfirmation: true,
         reason: "Path not in allowWrite list",
       };
     }
@@ -298,7 +298,7 @@ export function checkAllowWrite(filePath: string, cwd: string, config: Guardrail
   if (allowWrite === undefined) return undefined; // unrestricted
 
   if (allowWrite.length === 0) {
-    return "allowWrite is empty — all writes denied";
+    return "allowWrite is empty — no paths are allowlisted";
   }
 
   const absolutePath = resolvePath(filePath, cwd);

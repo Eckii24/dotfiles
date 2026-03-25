@@ -9,8 +9,8 @@ export interface PathsConfig {
   /**
    * Glob patterns for paths that are allowed to be written to.
    * - undefined / not set → unrestricted (only denyWrite applies)
-   * - [] (empty array) → deny ALL writes
-   * - [...patterns] → only matching paths are writable
+   * - [] (empty array) → no paths are auto-allowed; writes require confirmation
+   * - [...patterns] → matching paths are auto-allowed; non-matching writes require confirmation
    */
   allowWrite?: string[];
   /** Glob patterns for paths that are denied for writing (takes precedence over allowWrite) */

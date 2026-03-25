@@ -15,7 +15,7 @@
 // - Falls back to string-based parsing when shfmt is not installed
 //
 // Confirmation behavior:
-// - Matching `denyRead` or `denyWrite` rules triggers a confirmation dialog.
+// - Matching `denyRead`, `denyWrite`, or blocked `allowWrite` rules triggers a confirmation dialog.
 // - Bash violations offer three choices:
 //   - Allow once (y/Enter)
 //   - Allow for session (a) — skips future prompts for the same command pattern
@@ -30,8 +30,8 @@
 //   bypasses.
 // - `allowWrite` semantics:
 //   - undefined -> unrestricted writes (except `denyWrite`)
-//   - []        -> deny all writes
-//   - patterns  -> only matching paths writable
+//   - []        -> no paths auto-allowed; every write needs confirmation
+//   - patterns  -> matching paths are auto-allowed; others need confirmation
 // - `denyWrite` always wins over `allowWrite`.
 //
 // Bash behavior:
@@ -113,7 +113,7 @@
 //
 // Notes:
 // - `allowWrite` omitted => unrestricted writes except paths in `denyWrite`
-// - `allowWrite: []`   => deny all writes
+// - `allowWrite: []`   => no writes are auto-allowed; every write requires confirmation
 // - project config overrides global config field-by-field
 //
 // Commands:
@@ -142,7 +142,7 @@ import { DEFAULT_TIMEOUT } from "./types.js";
 function allowWriteLabel(config: GuardrailsConfig): string {
   const aw = config.paths?.allowWrite;
   if (aw === undefined) return "(unrestricted)";
-  if (aw.length === 0) return "(deny all)";
+  if (aw.length === 0) return "(confirmation required for all writes)";
   return aw.join(", ");
 }
 
