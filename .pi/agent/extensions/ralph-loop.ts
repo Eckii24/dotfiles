@@ -27,13 +27,14 @@ export default function (pi: ExtensionAPI) {
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			let prompt: string;
 			let maxLoops: number;
+			let useAgentFollowUps = false;
 			const trimmedArgs = args.trim();
 
 			if (trimmedArgs) {
 				prompt = trimmedArgs;
 				maxLoops = DEFAULT_MAX_LOOPS;
 			} else {
-				const result = await ctx.ui.custom<{ prompt: string; maxLoops: number } | null>(
+				const result = await ctx.ui.custom<{ prompt: string; maxLoops: number; useAgentFollowUps: boolean } | null>(
 					(_tui, theme, _kb, done) => new RalphLoopDialog(theme, done),
 					{ overlay: true },
 				);
@@ -45,6 +46,7 @@ export default function (pi: ExtensionAPI) {
 
 				prompt = result.prompt;
 				maxLoops = result.maxLoops;
+				useAgentFollowUps = result.useAgentFollowUps;
 			}
 
 			if (!prompt.trim()) {
@@ -52,25 +54,45 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			await runRalphLoop(pi, ctx, prompt, maxLoops);
+			await runRalphLoop(pi, ctx, prompt, maxLoops, useAgentFollowUps);
 		},
 	});
 }
 
 // --- Ralph Loop Logic ---
 
-async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, prompt: string, maxLoops: number) {
+async function runRalphLoop(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	prompt: string,
+	maxLoops: number,
+	useAgentFollowUps: boolean,
+) {
 	const updateStatus = (iteration: number, state: string) => {
 		ctx.ui.setStatus("ralph-loop", ctx.ui.theme.fg("accent", `🔁 Ralph [${iteration}/${maxLoops}] ${state}`));
 	};
 
-	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations)`, "info");
+	const modeLabel = useAgentFollowUps ? "user first, then agent follow-ups" : "all user messages";
+	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, ${modeLabel})`, "info");
 
 	for (let i = 1; i <= maxLoops; i++) {
-		updateStatus(i, "working…");
+		updateStatus(i, useAgentFollowUps && i > 1 ? "working as agent…" : "working…");
 
-		// Send the same prompt every iteration — the core of Ralph
-		pi.sendUserMessage(prompt);
+		// Default Ralph behavior: every iteration is a user message.
+		// Optional dialog checkbox: after the first iteration, switch to agent-triggered follow-ups.
+		if (useAgentFollowUps && i > 1) {
+			pi.sendMessage(
+				{
+					customType: "ralph-loop",
+					content: prompt,
+					display: false,
+					details: { iteration: i, mode: "agent-followup" },
+				},
+				{ triggerTurn: true },
+			);
+		} else {
+			pi.sendUserMessage(prompt);
+		}
 		await ctx.waitForIdle();
 
 		// Check if the user aborted the agent (Ctrl+C) — break the loop
@@ -108,15 +130,16 @@ class RalphLoopDialog implements Focusable {
 	readonly width = 64;
 	focused = false;
 
-	private activeField: "prompt" | "maxLoops" = "prompt";
+	private activeField: "prompt" | "maxLoops" | "agentFollowUps" = "prompt";
 	private promptText = "";
 	private promptCursor = 0;
 	private maxLoopsText = String(DEFAULT_MAX_LOOPS);
 	private maxLoopsCursor = String(DEFAULT_MAX_LOOPS).length;
+	private useAgentFollowUps = false;
 
 	constructor(
 		private theme: Theme,
-		private done: (result: { prompt: string; maxLoops: number } | null) => void,
+		private done: (result: { prompt: string; maxLoops: number; useAgentFollowUps: boolean } | null) => void,
 	) {}
 
 	handleInput(data: string): void {
@@ -125,22 +148,59 @@ class RalphLoopDialog implements Focusable {
 			return;
 		}
 
+		if (matchesKey(data, "tab")) {
+			this.activeField =
+				this.activeField === "prompt"
+					? "maxLoops"
+					: this.activeField === "maxLoops"
+						? "agentFollowUps"
+						: "prompt";
+			return;
+		}
+
+		if (matchesKey(data, "shift+tab")) {
+			this.activeField =
+				this.activeField === "prompt"
+					? "agentFollowUps"
+					: this.activeField === "maxLoops"
+						? "prompt"
+						: "maxLoops";
+			return;
+		}
+
+		if (this.activeField === "agentFollowUps") {
+			if (matchesKey(data, "space")) {
+				this.useAgentFollowUps = !this.useAgentFollowUps;
+				return;
+			}
+			if (matchesKey(data, "return")) {
+				const maxLoops = parseInt(this.maxLoopsText, 10);
+				if (!this.promptText.trim()) return;
+				if (isNaN(maxLoops) || maxLoops < 1) return;
+				this.done({
+					prompt: this.promptText,
+					maxLoops: Math.min(maxLoops, 999),
+					useAgentFollowUps: this.useAgentFollowUps,
+				});
+				return;
+			}
+		}
+
 		if (matchesKey(data, "return")) {
 			const maxLoops = parseInt(this.maxLoopsText, 10);
 			if (!this.promptText.trim()) return;
 			if (isNaN(maxLoops) || maxLoops < 1) return;
-			this.done({ prompt: this.promptText, maxLoops: Math.min(maxLoops, 999) });
-			return;
-		}
-
-		if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
-			this.activeField = this.activeField === "prompt" ? "maxLoops" : "prompt";
+			this.done({
+				prompt: this.promptText,
+				maxLoops: Math.min(maxLoops, 999),
+				useAgentFollowUps: this.useAgentFollowUps,
+			});
 			return;
 		}
 
 		if (this.activeField === "prompt") {
 			this.handleFieldInput("prompt", data);
-		} else {
+		} else if (this.activeField === "maxLoops") {
 			this.handleFieldInput("maxLoops", data);
 		}
 	}
@@ -226,7 +286,18 @@ class RalphLoopDialog implements Focusable {
 		lines.push(row(`${loopsLabel} ${loopsInput}`));
 		lines.push(row(""));
 
-		lines.push(row(` ${th.fg("dim", " Tab switch fields • Enter start • Esc cancel")}`));
+		// Agent follow-ups checkbox
+		const followUpsActive = this.activeField === "agentFollowUps";
+		const checkbox = this.useAgentFollowUps ? "[x]" : "[ ]";
+		const checkboxLabel = followUpsActive
+			? th.fg("accent", `  ${checkbox} Use agent follow-ups after first iteration`)
+			: th.fg("text", `  ${checkbox} Use agent follow-ups after first iteration`);
+		lines.push(row(checkboxLabel));
+		lines.push(row(`   ${th.fg("dim", "Iter 1 = user message")}`));
+		lines.push(row(`   ${th.fg("dim", "Iter 2..N = sendMessage() + triggerTurn")}`));
+		lines.push(row(""));
+
+		lines.push(row(` ${th.fg("dim", " Tab switch • Space toggle • Enter start • Esc cancel")}`));
 		lines.push(th.fg("border", `╰${"─".repeat(innerW)}╯`));
 
 		return lines;
