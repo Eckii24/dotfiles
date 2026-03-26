@@ -147,10 +147,10 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 							sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
 						},
 					},
-					{ triggerTurn: true },
+					{ triggerTurn: true, deliverAs: "followUp" },
 				);
 			} else {
-				pi.sendUserMessage(prompt);
+				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
 			}
 
 			await ctx.waitForIdle();
