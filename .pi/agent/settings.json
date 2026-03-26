@@ -5,7 +5,6 @@
   "defaultModel": "gpt-5.4",
   "packages": [
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/questionnaire.ts",
-    "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/dirty-repo-guard.ts",
     "../../.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/examples/extensions/subagent/index.ts"
   ]
 }

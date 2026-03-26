@@ -17,11 +17,13 @@
  *   /ralph                           - Open overlay dialog to configure the loop
  */
 
+import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
 import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
 
 const DEFAULT_MAX_LOOPS = 25;
 const SAME_SESSION_FLAG = "--same-session";
+const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 
 type RalphLoopOptions = {
 	prompt: string;
@@ -81,6 +83,14 @@ function parseRalphArgs(args: string): RalphLoopOptions {
 	};
 }
 
+function setDirtyRepoGuardBypass(pi: ExtensionAPI, token: string, active: boolean): void {
+	pi.events.emit(DIRTY_REPO_GUARD_BYPASS_EVENT, {
+		source: "ralph-loop",
+		token,
+		active,
+	});
+}
+
 // --- Ralph Loop Logic ---
 
 async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
@@ -91,6 +101,7 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 	};
 	const sessionModeLabel = useFreshSessionPerIteration ? "fresh session per iteration" : "same session (legacy)";
 	const promptModeLabel = useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
+	const dirtyRepoGuardBypassToken = useFreshSessionPerIteration ? randomUUID() : undefined;
 
 	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
 		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
@@ -100,58 +111,66 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 	const parentSession = useFreshSessionPerIteration ? ctx.sessionManager.getSessionFile() : undefined;
 	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, ${sessionModeLabel}, ${promptModeLabel})`, "info");
 
-	for (let i = 1; i <= maxLoops; i++) {
-		if (useFreshSessionPerIteration) {
-			updateStatus(i, "starting fresh session…");
-			const result = await ctx.newSession(parentSession ? { parentSession } : undefined);
-			if (result.cancelled) {
-				clearStatus();
-				ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${i}/${maxLoops}`, "warning");
-				return;
-			}
-		}
-
-		const isAgentFollowUpIteration = useAgentFollowUps && i > 1;
-		const workLabel = isAgentFollowUpIteration ? "working with hidden trigger message…" : "working…";
-		const branchEntryCountBeforeIteration = ctx.sessionManager.getBranch().length;
-		updateStatus(i, useFreshSessionPerIteration ? `fresh session, ${workLabel}` : workLabel);
-
-		// Default Ralph behavior now starts each iteration from a fresh session.
-		// Low-risk legacy mode can still reuse one session, and the optional
-		// hidden trigger-message mode still swaps away from user messages after
-		// the first iteration.
-		if (isAgentFollowUpIteration) {
-			pi.sendMessage(
-				{
-					customType: "ralph-loop",
-					content: prompt,
-					display: false,
-					details: {
-						iteration: i,
-						mode: "agent-followup",
-						sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
-					},
-				},
-				{ triggerTurn: true },
-			);
-		} else {
-			pi.sendUserMessage(prompt);
-		}
-
-		await ctx.waitForIdle();
-
-		// Stop if the user aborted the active session turn (Ctrl+C).
-		if (wasAbortedSince(ctx, branchEntryCountBeforeIteration)) {
-			clearStatus();
-			ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
-			return;
-		}
-
-		updateStatus(i, "done ✓");
+	if (dirtyRepoGuardBypassToken) {
+		setDirtyRepoGuardBypass(pi, dirtyRepoGuardBypassToken, true);
 	}
 
-	clearStatus();
-	ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
+	try {
+		for (let i = 1; i <= maxLoops; i++) {
+			if (useFreshSessionPerIteration) {
+				updateStatus(i, "starting fresh session…");
+				const result = await ctx.newSession(parentSession ? { parentSession } : undefined);
+				if (result.cancelled) {
+					ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${i}/${maxLoops}`, "warning");
+					return;
+				}
+			}
+
+			const isAgentFollowUpIteration = useAgentFollowUps && i > 1;
+			const workLabel = isAgentFollowUpIteration ? "working with hidden trigger message…" : "working…";
+			const branchEntryCountBeforeIteration = ctx.sessionManager.getBranch().length;
+			updateStatus(i, useFreshSessionPerIteration ? `fresh session, ${workLabel}` : workLabel);
+
+			// Default Ralph behavior now starts each iteration from a fresh session.
+			// Low-risk legacy mode can still reuse one session, and the optional
+			// hidden trigger-message mode still swaps away from user messages after
+			// the first iteration.
+			if (isAgentFollowUpIteration) {
+				pi.sendMessage(
+					{
+						customType: "ralph-loop",
+						content: prompt,
+						display: false,
+						details: {
+							iteration: i,
+							mode: "agent-followup",
+							sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+						},
+					},
+					{ triggerTurn: true },
+				);
+			} else {
+				pi.sendUserMessage(prompt);
+			}
+
+			await ctx.waitForIdle();
+
+			// Stop if the user aborted the active session turn (Ctrl+C).
+			if (wasAbortedSince(ctx, branchEntryCountBeforeIteration)) {
+				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
+				return;
+			}
+
+			updateStatus(i, "done ✓");
+		}
+
+		ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
+	} finally {
+		if (dirtyRepoGuardBypassToken) {
+			setDirtyRepoGuardBypass(pi, dirtyRepoGuardBypassToken, false);
+		}
+		clearStatus();
+	}
 }
 
 /**
