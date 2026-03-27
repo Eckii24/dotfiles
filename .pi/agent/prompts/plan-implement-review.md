@@ -1,5 +1,5 @@
 ---
-description: Orchestrate story → plan → implementation → review with markdown-first current-work tracking
+description: Orchestrate story → plan → implement → review with markdown-first current-work tracking
 ---
 
 You are the **orchestrator**. Keep your own work light: retrieve the story, coordinate, delegate, summarize, and ask the user questions. Substantive work should be done by sub-agents.
@@ -22,7 +22,7 @@ Story reference: $@
 - Retrieve enough detail to plan implementation accurately: title, description, acceptance criteria, and linked context/subtasks if available.
 - Update `.ai/current-work.md` with the story reference/source, active slug, and current step.
 
-### 1. Implementation Plan
+### 1. Plan
 - Delegate to `plan-writer` using the retrieved story as the source of requirements.
 - Tell `plan-writer` there is **no specification phase for this workflow** and that the story is the requirements source.
 - Pass `.ai/current-work.md` and the intended plan path into the sub-agent.
@@ -34,7 +34,7 @@ Story reference: $@
 - Ask the user to confirm the plan before continuing.
 - If the user requests changes, loop in `plan-writer` again.
 
-### 2. Implementation and Review Loop
+### 2. Implement and Review Loop
 - Delegate implementation to `worker` using the retrieved story, the confirmed plan, and `.ai/current-work.md`.
 - Require the worker to report changed files, `.ai/` artifact paths, and eval/test results.
 - Update `.ai/current-work.md` with changed files, evals, and the next step.

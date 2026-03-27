@@ -1,5 +1,5 @@
 ---
-description: Scout gathers context and plan-writer creates or refines the implementation plan for the active feature tracked in `.ai/current-work.md` (no implementation)
+description: Create or refine the plan for the active feature tracked in `.ai/current-work.md`
 ---
 
 Follow the repo workflow and current-work conventions in `AGENTS.md`.

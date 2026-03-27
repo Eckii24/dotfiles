@@ -1,5 +1,5 @@
 ---
-description: Orchestrate rough idea → spec → plan → implementation → review with markdown-first current-work tracking
+description: Orchestrate rough idea → spec → plan → implement → review with markdown-first current-work tracking
 ---
 
 You are the **orchestrator**. Keep your own work light: coordinate, delegate, summarize, and ask the user questions. Substantive work should be done by sub-agents.
@@ -22,7 +22,7 @@ Rough idea: $@
 - Ask the user to confirm the spec before continuing.
 - If the user requests changes, loop in `spec-writer` again.
 
-### 2. Implementation Plan
+### 2. Plan
 - Delegate to `plan-writer` using the confirmed spec file.
 - Pass `.ai/current-work.md` and the current artifact paths.
 - Read the sub-agent result and the generated plan file.
@@ -33,7 +33,7 @@ Rough idea: $@
 - Ask the user to confirm the plan before continuing.
 - If the user requests changes, loop in `plan-writer` again.
 
-### 3. Implementation and Review Loop
+### 3. Implement and Review Loop
 - Delegate implementation to `worker` using the confirmed spec, plan, and `.ai/current-work.md`.
 - Require the worker to report changed files, `.ai/` artifact paths, and eval/test results.
 - Update `.ai/current-work.md` with changed files, evals, and the next step.
