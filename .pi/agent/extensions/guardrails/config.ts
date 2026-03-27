@@ -3,7 +3,7 @@
  *
  * Loads config from:
  * - ~/.pi/agent/guardrails.json (global)
- * - <cwd>/.pi/guardrails.json (project-local, takes precedence)
+ * - <effective cwd>/.pi/guardrails.json (project-local, takes precedence)
  *
  * Validates config shape on load, reports errors, falls back to defaults.
  *
@@ -16,6 +16,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type { GuardrailsConfig } from "./types.js";
+import { getEffectiveCwd } from "./effective-cwd.js";
 
 export const DEFAULT_CONFIG: GuardrailsConfig = {
   timeout: 300000,
@@ -42,9 +43,10 @@ interface CachedConfig {
 const configCache = new Map<string, CachedConfig>();
 
 export function getConfigPaths(cwd: string): GuardrailsConfigPaths {
+  const effectiveCwd = getEffectiveCwd(cwd);
   return {
     globalPath: join(getAgentDir(), "guardrails.json"),
-    projectPath: join(cwd, ".pi", "guardrails.json"),
+    projectPath: join(effectiveCwd, ".pi", "guardrails.json"),
   };
 }
 

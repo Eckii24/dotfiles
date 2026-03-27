@@ -7,8 +7,12 @@
  * - Strip leading '@' prefix (some models add it)
  * - Expand '~' to home directory
  * - Normalize unicode spaces
- * - Resolve relative paths against cwd
+ * - Resolve relative file targets against cwd
  * - Canonicalize via realpath for symlink protection
+ *
+ * Relative guardrail patterns can optionally use a different base cwd
+ * (`patternCwd`), which lets Guardrails keep Pi's real path semantics while
+ * widening project-scoped rules to a git repo root.
  *
  * Both the lexical path AND the canonical path are checked against patterns.
  * A match on either means the rule applies.
@@ -151,14 +155,15 @@ function escapeRegex(str: string): string {
 }
 
 /**
- * Check if a path matches any pattern. Resolves relative patterns against cwd.
+ * Check if a path matches any pattern. Resolves relative patterns against the
+ * configured pattern base cwd.
  * Returns the first matching pattern, or undefined.
  */
-function matchesAnyPattern(filePath: string, patterns: string[], cwd: string): string | undefined {
+function matchesAnyPattern(filePath: string, patterns: string[], patternCwd: string): string | undefined {
   for (const pattern of patterns) {
     let resolvedPattern = pattern;
     if (!pattern.startsWith("/") && !pattern.startsWith("~") && !pattern.startsWith("**")) {
-      resolvedPattern = resolve(cwd, pattern);
+      resolvedPattern = resolve(patternCwd, pattern);
     }
     const regex = globToRegex(resolvedPattern);
     if (regex.test(filePath)) {
@@ -176,13 +181,13 @@ function matchesAnyPatternWithCanonical(
   lexicalPath: string,
   canonicalPath: string | undefined,
   patterns: string[],
-  cwd: string,
+  patternCwd: string,
 ): string | undefined {
-  const lexicalMatch = matchesAnyPattern(lexicalPath, patterns, cwd);
+  const lexicalMatch = matchesAnyPattern(lexicalPath, patterns, patternCwd);
   if (lexicalMatch) return lexicalMatch;
 
   if (canonicalPath && canonicalPath !== lexicalPath) {
-    return matchesAnyPattern(canonicalPath, patterns, cwd);
+    return matchesAnyPattern(canonicalPath, patterns, patternCwd);
   }
 
   return undefined;
@@ -190,10 +195,24 @@ function matchesAnyPatternWithCanonical(
 
 // ─── Public API ───
 
+export interface PathGuardOptions {
+  /** Base cwd used to resolve relative guardrail patterns. Defaults to `cwd`. */
+  patternCwd?: string;
+}
+
+function getPatternCwd(cwd: string, options?: PathGuardOptions): string {
+  return options?.patternCwd ?? cwd;
+}
+
 /**
  * Check if a read operation is allowed for the given path.
  */
-export function checkRead(filePath: string, cwd: string, config: GuardrailsConfig): PathCheckResult {
+export function checkRead(
+  filePath: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options?: PathGuardOptions,
+): PathCheckResult {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
   const denyRead = config.paths?.denyRead;
@@ -202,7 +221,7 @@ export function checkRead(filePath: string, cwd: string, config: GuardrailsConfi
     return { allowed: true, requiresConfirmation: false, reason: "No denyRead rules" };
   }
 
-  const matched = matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, cwd);
+  const matched = matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, getPatternCwd(cwd, options));
   if (matched) {
     return {
       allowed: false,
@@ -218,7 +237,12 @@ export function checkRead(filePath: string, cwd: string, config: GuardrailsConfi
 /**
  * Check if a write/edit operation is allowed for the given path.
  */
-export function checkWrite(filePath: string, cwd: string, config: GuardrailsConfig): PathCheckResult {
+export function checkWrite(
+  filePath: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options?: PathGuardOptions,
+): PathCheckResult {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
   const allowWrite = config.paths?.allowWrite;
@@ -226,7 +250,7 @@ export function checkWrite(filePath: string, cwd: string, config: GuardrailsConf
 
   // 1. Check denyWrite first (always wins)
   if (denyWrite && denyWrite.length > 0) {
-    const denyMatch = matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, cwd);
+    const denyMatch = matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, getPatternCwd(cwd, options));
     if (denyMatch) {
       return {
         allowed: false,
@@ -249,9 +273,10 @@ export function checkWrite(filePath: string, cwd: string, config: GuardrailsConf
     }
 
     // Check if lexical or canonical path matches any allow pattern
-    const lexAllow = matchesAnyPattern(absolutePath, allowWrite, cwd);
+    const patternCwd = getPatternCwd(cwd, options);
+    const lexAllow = matchesAnyPattern(absolutePath, allowWrite, patternCwd);
     const canAllow = canonical && canonical !== absolutePath
-      ? matchesAnyPattern(canonical, allowWrite, cwd)
+      ? matchesAnyPattern(canonical, allowWrite, patternCwd)
       : undefined;
 
     if (!lexAllow && !canAllow) {
@@ -270,30 +295,45 @@ export function checkWrite(filePath: string, cwd: string, config: GuardrailsConf
 /**
  * Check if a path matches denyWrite (used by bash guard for file operations).
  */
-export function matchesDenyWrite(filePath: string, cwd: string, config: GuardrailsConfig): string | undefined {
+export function matchesDenyWrite(
+  filePath: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options?: PathGuardOptions,
+): string | undefined {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
   const denyWrite = config.paths?.denyWrite;
   if (!denyWrite || denyWrite.length === 0) return undefined;
-  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, cwd);
+  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, getPatternCwd(cwd, options));
 }
 
 /**
  * Check if a path matches denyRead (used by bash guard for read commands).
  */
-export function matchesDenyRead(filePath: string, cwd: string, config: GuardrailsConfig): string | undefined {
+export function matchesDenyRead(
+  filePath: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options?: PathGuardOptions,
+): string | undefined {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
   const denyRead = config.paths?.denyRead;
   if (!denyRead || denyRead.length === 0) return undefined;
-  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, cwd);
+  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, getPatternCwd(cwd, options));
 }
 
 /**
  * Check if a write to a path would violate allowWrite (used by bash guard).
  * Returns a reason string if blocked, undefined if OK.
  */
-export function checkAllowWrite(filePath: string, cwd: string, config: GuardrailsConfig): string | undefined {
+export function checkAllowWrite(
+  filePath: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options?: PathGuardOptions,
+): string | undefined {
   const allowWrite = config.paths?.allowWrite;
   if (allowWrite === undefined) return undefined; // unrestricted
 
@@ -304,9 +344,10 @@ export function checkAllowWrite(filePath: string, cwd: string, config: Guardrail
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
 
-  const lexAllow = matchesAnyPattern(absolutePath, allowWrite, cwd);
+  const patternCwd = getPatternCwd(cwd, options);
+  const lexAllow = matchesAnyPattern(absolutePath, allowWrite, patternCwd);
   const canAllow = canonical && canonical !== absolutePath
-    ? matchesAnyPattern(canonical, allowWrite, cwd)
+    ? matchesAnyPattern(canonical, allowWrite, patternCwd)
     : undefined;
 
   if (!lexAllow && !canAllow) {

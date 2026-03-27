@@ -149,13 +149,14 @@ function detectFileReadTargets(args: string[]): string[] {
  */
 function checkWriteTarget(
   target: string,
-  effectiveCwd: string,
+  shellCwd: string,
+  patternCwd: string,
   config: GuardrailsConfig,
   commandName: string,
   segment: string,
   violations: BashViolation[],
 ): void {
-  const denyMatch = matchesDenyWrite(target, effectiveCwd, config);
+  const denyMatch = matchesDenyWrite(target, shellCwd, config, { patternCwd });
   if (denyMatch) {
     violations.push({
       type: "file_write_detected",
@@ -165,7 +166,7 @@ function checkWriteTarget(
     });
   }
 
-  const allowBlock = checkAllowWrite(target, effectiveCwd, config);
+  const allowBlock = checkAllowWrite(target, shellCwd, config, { patternCwd });
   if (allowBlock) {
     violations.push({
       type: "file_write_detected",
@@ -218,7 +219,8 @@ function unwrapPrefixes(args: string[]): number {
  */
 function processASTCommand(
   astCmd: ASTCommand,
-  cwd: string,
+  shellCwd: string,
+  patternCwd: string,
   config: GuardrailsConfig,
   denySet: Set<string>,
   violations: BashViolation[],
@@ -250,14 +252,14 @@ function processASTCommand(
   // ─── Check write redirections (from AST) ───
   if (hasDenyWrite || hasAllowWrite) {
     for (const target of astCmd.writeRedirects) {
-      checkWriteTarget(target, cwd, config, cmdName, segment, violations);
+      checkWriteTarget(target, shellCwd, patternCwd, config, cmdName, segment, violations);
     }
 
     // Check file write commands
     if (FILE_WRITE_COMMANDS.has(cmdName)) {
       const writeTargets = detectFileWriteTargets(cmdName, cmdArgs);
       for (const target of writeTargets) {
-        checkWriteTarget(target, cwd, config, cmdName, segment, violations);
+        checkWriteTarget(target, shellCwd, patternCwd, config, cmdName, segment, violations);
       }
     }
   }
@@ -266,7 +268,7 @@ function processASTCommand(
   if (hasDenyRead && FILE_READ_COMMANDS.has(cmdName)) {
     const readTargets = detectFileReadTargets(cmdArgs);
     for (const target of readTargets) {
-      const matched = matchesDenyRead(target, cwd, config);
+      const matched = matchesDenyRead(target, shellCwd, config, { patternCwd });
       if (matched) {
         violations.push({
           type: "file_read_detected",
@@ -307,7 +309,17 @@ function processASTCommand(
 
     if (innerCommand) {
       // Try AST parsing the inner command too
-      const innerViolations = checkBashInner(innerCommand, cwd, config, denySet, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+      const innerViolations = checkBashInner(
+        innerCommand,
+        shellCwd,
+        patternCwd,
+        config,
+        denySet,
+        hasDenyRules,
+        hasDenyWrite,
+        hasAllowWrite,
+        hasDenyRead,
+      );
       violations.push(...innerViolations);
     }
   }
@@ -319,6 +331,7 @@ function processASTCommand(
 function checkBashInner(
   command: string,
   cwd: string,
+  patternCwd: string,
   config: GuardrailsConfig,
   denySet: Set<string>,
   hasDenyRules: boolean,
@@ -331,10 +344,10 @@ function checkBashInner(
   // Try AST parsing
   const ast = parseShellAST(command);
   if (ast) {
-    checkBashViaAST(ast, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaAST(ast, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   } else {
     // Fallback to string-based parsing
-    checkBashViaFallback(command, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaFallback(command, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   }
 
   return violations;
@@ -346,6 +359,7 @@ function checkBashInner(
 function checkBashViaAST(
   ast: ShellFile,
   cwd: string,
+  patternCwd: string,
   config: GuardrailsConfig,
   denySet: Set<string>,
   violations: BashViolation[],
@@ -354,7 +368,7 @@ function checkBashViaAST(
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
 ): void {
-  let effectiveCwd = cwd;
+  let shellCwd = cwd;
 
   walkShellCommands(ast, (astCmd) => {
     // Track cwd changes
@@ -364,19 +378,20 @@ function checkBashViaAST(
         if (target === "-") {
           // cd - goes to previous dir, we can't track this
         } else if (target.startsWith("/")) {
-          effectiveCwd = target;
+          shellCwd = target;
         } else if (target === "~" || target.startsWith("~/")) {
           const homedir = process.env.HOME || "/";
-          effectiveCwd = target === "~" ? homedir : resolve(homedir, target.slice(2));
+          shellCwd = target === "~" ? homedir : resolve(homedir, target.slice(2));
         } else {
-          effectiveCwd = resolve(effectiveCwd, target);
+          shellCwd = resolve(shellCwd, target);
         }
       }
     }
 
     processASTCommand(
       astCmd,
-      effectiveCwd,
+      shellCwd,
+      patternCwd,
       config,
       denySet,
       violations,
@@ -783,6 +798,7 @@ function trackCwdChanges(segments: string[], baseCwd: string): string[] {
 function checkBashViaFallback(
   command: string,
   cwd: string,
+  patternCwd: string,
   config: GuardrailsConfig,
   denySet: Set<string>,
   violations: BashViolation[],
@@ -802,7 +818,7 @@ function checkBashViaFallback(
   }
 
   for (const cmd of allCommands) {
-    const effectiveCwd = segmentCwdMap.get(cmd.fullSegment) ?? cwd;
+    const shellCwd = segmentCwdMap.get(cmd.fullSegment) ?? cwd;
 
     if (hasDenyRules && denySet.has(cmd.name.toLowerCase())) {
       violations.push({
@@ -816,13 +832,13 @@ function checkBashViaFallback(
     if (hasDenyWrite || hasAllowWrite) {
       const redirectTargets = detectRedirections(cmd.fullSegment);
       for (const target of redirectTargets) {
-        checkWriteTarget(target, effectiveCwd, config, cmd.name, cmd.fullSegment, violations);
+        checkWriteTarget(target, shellCwd, patternCwd, config, cmd.name, cmd.fullSegment, violations);
       }
 
       if (FILE_WRITE_COMMANDS.has(cmd.name)) {
         const writeTargets = detectFileWriteTargets(cmd.name, cmd.args);
         for (const target of writeTargets) {
-          checkWriteTarget(target, effectiveCwd, config, cmd.name, cmd.fullSegment, violations);
+          checkWriteTarget(target, shellCwd, patternCwd, config, cmd.name, cmd.fullSegment, violations);
         }
       }
     }
@@ -830,7 +846,7 @@ function checkBashViaFallback(
     if (hasDenyRead && FILE_READ_COMMANDS.has(cmd.name)) {
       const readTargets = detectFileReadTargets(cmd.args);
       for (const target of readTargets) {
-        const matched = matchesDenyRead(target, effectiveCwd, config);
+        const matched = matchesDenyRead(target, shellCwd, config, { patternCwd });
         if (matched) {
           violations.push({
             type: "file_read_detected",
@@ -852,8 +868,14 @@ function checkBashViaFallback(
  * Check a bash command against guardrails configuration.
  * Uses AST parsing when shfmt is available, falls back to string parsing.
  */
-export function checkBash(command: string, cwd: string, config: GuardrailsConfig): BashCheckResult {
+export function checkBash(
+  command: string,
+  cwd: string,
+  config: GuardrailsConfig,
+  options: { patternCwd?: string } = {},
+): BashCheckResult {
   const violations: BashViolation[] = [];
+  const patternCwd = options.patternCwd ?? cwd;
   const denyList = config.bash?.deny ?? [];
   const denySet = new Set(denyList.map((c) => c.toLowerCase()));
 
@@ -869,10 +891,10 @@ export function checkBash(command: string, cwd: string, config: GuardrailsConfig
   // Try AST-based analysis first
   const ast = parseShellAST(command);
   if (ast) {
-    checkBashViaAST(ast, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaAST(ast, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   } else {
     // Fallback to string-based analysis
-    checkBashViaFallback(command, cwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaFallback(command, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   }
 
   // Deduplicate violations

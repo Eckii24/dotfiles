@@ -24,8 +24,11 @@
 // - Default timeout is 300000 ms (5 minutes), configurable via `timeout`.
 //
 // Path behavior:
-// - Matches Pi path semantics: strips leading `@`, expands `~`, resolves
-//   relative paths against `ctx.cwd`.
+// - File targets are resolved the same way Pi does, against `ctx.cwd`.
+// - Relative guardrail patterns and project-local config are resolved against
+//   Guardrails' effective cwd.
+// - When Pi starts inside a git repo subdirectory, Guardrails uses the git
+//   root as that effective cwd so project-scoped rules apply to the whole repo.
 // - Checks both lexical and canonical (realpath) paths to prevent symlink
 //   bypasses.
 // - `allowWrite` semantics:
@@ -59,7 +62,7 @@
 //
 // Config files (merged, project takes precedence):
 // - ~/.pi/agent/guardrails.json
-// - <cwd>/.pi/guardrails.json
+// - <effective cwd>/.pi/guardrails.json
 //
 // Example configs:
 //
@@ -134,6 +137,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
 import { getConfigSourceInfo, loadConfig } from "./config.js";
+import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
@@ -154,6 +158,11 @@ function configSourceLabel(cwd: string): string {
   if (info.hasProject) activeSources.push(info.projectPath);
 
   return activeSources.length > 0 ? activeSources.join(" + ") : "defaults only";
+}
+
+function scopeLabel(cwd: string): string {
+  const effectiveCwd = getEffectiveCwd(cwd);
+  return effectiveCwd === cwd ? effectiveCwd : `${effectiveCwd} (git root)`;
 }
 
 // ─── Session allow-list ───
@@ -322,6 +331,7 @@ export default function (pi: ExtensionAPI) {
     if (config.bash?.deny?.length) {
       lines.push(t.fg("dim", `  Bash Deny:   ${config.bash.deny.join(", ")}`));
     }
+    lines.push(t.fg("dim", `  Scope:       ${scopeLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
 
@@ -335,12 +345,13 @@ export default function (pi: ExtensionAPI) {
   // Main tool_call interceptor
   pi.on("tool_call", async (event, ctx) => {
     const currentConfig = refreshConfig(ctx.cwd);
+    const patternCwd = getEffectiveCwd(ctx.cwd);
     const timeout = currentConfig.timeout ?? DEFAULT_TIMEOUT;
 
     // ─── Read Guard ───
     if (isToolCallEventType("read", event)) {
       const filePath = event.input.path;
-      const result = checkRead(filePath, ctx.cwd, currentConfig);
+      const result = checkRead(filePath, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed && result.requiresConfirmation) {
         if (!ctx.hasUI) {
@@ -365,7 +376,7 @@ export default function (pi: ExtensionAPI) {
     // ─── Write / Edit Guard ───
     if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
       const filePath = event.input.path;
-      const result = checkWrite(filePath, ctx.cwd, currentConfig);
+      const result = checkWrite(filePath, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed) {
         if (result.requiresConfirmation) {
@@ -406,7 +417,7 @@ export default function (pi: ExtensionAPI) {
         return undefined;
       }
 
-      const result = checkBash(command, ctx.cwd, currentConfig);
+      const result = checkBash(command, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed) {
         // Filter out violations for commands already allowed in session
@@ -479,6 +490,7 @@ export default function (pi: ExtensionAPI) {
       const lines = [
         "🛡️ Guardrails Configuration",
         "",
+        `Scope: ${scopeLabel(ctx.cwd)}`,
         `Config source: ${configSourceLabel(ctx.cwd)}`,
         `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
         `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
