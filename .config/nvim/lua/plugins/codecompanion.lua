@@ -159,12 +159,6 @@ return {
                 description = "pi Agent",
                 provider = "terminal",
               },
-              opencode = {
-                cmd = "opencode",
-                args = {},
-                description = "OpenCode Agent",
-                provider = "terminal",
-              },
               copilot = {
                 cmd = "copilot",
                 args = {},
@@ -270,12 +264,6 @@ return {
         "<cmd>CodeCompanionCLI agent=copilot<cr>",
         mode = { "n", "v" },
         desc = "CodeCompanionCLI with Copilot",
-      },
-      {
-        "<leader>ao",
-        "<cmd>CodeCompanionCLI agent=opencode<cr>",
-        mode = { "n", "v" },
-        desc = "CodeCompanionCLI with OpenCode",
       },
       { "<leader>aA", "<cmd>CodeCompanionCLI Ask<cr>", mode = { "n", "v" }, desc = "CodeCompanionCLI Ask" },
     },
