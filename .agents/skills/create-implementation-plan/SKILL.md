@@ -68,10 +68,7 @@ All eval identifiers must use the prefix `EVAL-` followed by a zero-padded three
 
 ## Output File Specifications
 
-- Save implementation plan files in `/plan/` directory
-- Use naming convention: `[purpose]-[component]-[version].md`
-- Purpose prefixes: `upgrade|refactor|feature|data|infrastructure|process|architecture|design`
-- Example: `upgrade-system-command-4.md`, `feature-auth-module-1.md`
+- Save the implementation plan to the output path provided in the task. If no explicit path is provided, follow the `tracked-work` skill conventions.
 - File must be valid Markdown with proper front matter structure
 
 ## Mandatory Template Structure
