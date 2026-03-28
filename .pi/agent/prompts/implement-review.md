@@ -3,10 +3,8 @@ description: Implement → review for a tracked feature
 ---
 
 ## Tracked Work
-- Follow the tracked work artifact conventions in the `project-memory` skill.
+- Follow the conventions in the `tracked-work` skill.
 - This prompt produces: `.ai/<slug>-review.md`.
-
-This prompt assumes a plan already exists in the current-work context.
 
 Use the `subagent` tool with the `chain` parameter to execute this workflow:
 

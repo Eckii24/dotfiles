@@ -8,7 +8,7 @@ You are the **orchestrator**. Keep your own work light: coordinate, delegate, su
 Rough idea: $@
 
 ## Tracked Work
-- Follow the tracked work artifact conventions in the `project-memory` skill.
+- Follow the conventions in the `tracked-work` skill.
 - This prompt produces: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
 
 ## Workflow

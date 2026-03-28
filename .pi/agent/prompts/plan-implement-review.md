@@ -8,7 +8,7 @@ You are the **orchestrator**. Keep your own work light: retrieve the story, coor
 Story reference: $@
 
 ## Tracked Work
-- Follow the tracked work artifact conventions in the `project-memory` skill.
+- Follow the conventions in the `tracked-work` skill.
 - This prompt produces: `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
 
 ## Workflow
