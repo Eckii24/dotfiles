@@ -24,6 +24,12 @@ import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@marioz
 const DEFAULT_MAX_LOOPS = 25;
 const SAME_SESSION_FLAG = "--same-session";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
+const ITERATION_START_TIMEOUT_MS = 5_000;
+const ITERATION_START_POLL_MS = 25;
+
+// No existing structured Ralph completion signal was found in this repo or Pi,
+// so Ralph uses an explicit marker instead of fuzzy natural-language matching.
+const RALPH_DONE_MARKER = "[RALPH_DONE]";
 
 type RalphLoopOptions = {
 	prompt: string;
@@ -91,6 +97,45 @@ function setDirtyRepoGuardBypass(pi: ExtensionAPI, token: string, active: boolea
 	});
 }
 
+function buildIterationControlPrompt(options: {
+	iteration: number;
+	maxLoops: number;
+	useFreshSessionPerIteration: boolean;
+}): string {
+	const sessionResetNote = options.useFreshSessionPerIteration
+		? "Each iteration starts in a fresh Pi session, so do not rely on prior chat context."
+		: "This loop is reusing the same Pi session, so prior chat context may still be visible.";
+
+	return [
+		`Ralph loop control message: you are running iteration ${options.iteration} of ${options.maxLoops}.`,
+		"The same user task will be sent repeatedly until it is finished or the loop limit is reached.",
+		sessionResetNote,
+		`If the task is fully complete and no further Ralph iteration is needed, include the exact marker ${RALPH_DONE_MARKER} anywhere in your final response.`,
+		`Do not emit ${RALPH_DONE_MARKER} unless you are confident the task is actually complete.`,
+	].join("\n");
+}
+
+function injectIterationControlMessage(
+	pi: ExtensionAPI,
+	iteration: number,
+	maxLoops: number,
+	useFreshSessionPerIteration: boolean,
+): void {
+	pi.sendMessage(
+		{
+			customType: "ralph-loop-control",
+			content: buildIterationControlPrompt({ iteration, maxLoops, useFreshSessionPerIteration }),
+			display: true,
+			details: {
+				iteration,
+				maxLoops,
+				sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+				doneMarker: RALPH_DONE_MARKER,
+			},
+		},
+	);
+}
+
 // --- Ralph Loop Logic ---
 
 async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
@@ -135,6 +180,7 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 			// Low-risk legacy mode can still reuse one session, and the optional
 			// hidden trigger-message mode still swaps away from user messages after
 			// the first iteration.
+			injectIterationControlMessage(pi, i, maxLoops, useFreshSessionPerIteration);
 			if (isAgentFollowUpIteration) {
 				pi.sendMessage(
 					{
@@ -153,15 +199,29 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
 			}
 
-			await ctx.waitForIdle();
+			const iterationStarted = await waitForIterationToFinish(ctx, branchEntryCountBeforeIteration);
+			if (!iterationStarted) {
+				ctx.ui.notify(`⚠️ Ralph iteration ${i}/${maxLoops} never started; stopping loop`, "warning");
+				return;
+			}
+
+			const iterationOutcome = getIterationOutcome(ctx, branchEntryCountBeforeIteration);
 
 			// Stop if the user aborted the active session turn (Ctrl+C).
-			if (wasAbortedSince(ctx, branchEntryCountBeforeIteration)) {
+			if (iterationOutcome.aborted) {
 				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
 				return;
 			}
 
 			updateStatus(i, "done ✓");
+
+			if (iterationOutcome.done && i < maxLoops) {
+				ctx.ui.notify(
+					`✅ Ralph loop stopped early at iteration ${i}/${maxLoops} because the assistant emitted ${RALPH_DONE_MARKER}`,
+					"info",
+				);
+				return;
+			}
 		}
 
 		ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
@@ -173,20 +233,80 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 	}
 }
 
-/**
- * Check whether the assistant turn started by the current iteration was
- * aborted by the user (Ctrl+C). Older aborted turns should not stop a later
- * iteration, especially in legacy same-session mode.
- */
-function wasAbortedSince(ctx: ExtensionCommandContext, previousEntryCount: number): boolean {
-	const entries = ctx.sessionManager.getBranch();
-	for (let i = entries.length - 1; i >= previousEntryCount; i--) {
-		const entry = entries[i];
-		if (entry?.type === "message" && entry.message.role === "assistant" && entry.message.stopReason === "aborted") {
+type RalphIterationOutcome = {
+	aborted: boolean;
+	done: boolean;
+};
+
+async function waitForIterationToFinish(
+	ctx: ExtensionCommandContext,
+	previousEntryCount: number,
+): Promise<boolean> {
+	const started = await waitForIterationToStart(ctx, previousEntryCount);
+	if (!started) return false;
+	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+		await ctx.waitForIdle();
+	}
+	return true;
+}
+
+async function waitForIterationToStart(ctx: ExtensionCommandContext, previousEntryCount: number): Promise<boolean> {
+	const deadline = Date.now() + ITERATION_START_TIMEOUT_MS;
+
+	while (Date.now() < deadline) {
+		if (!ctx.isIdle() || ctx.hasPendingMessages() || hasAssistantMessageSince(ctx, previousEntryCount)) {
 			return true;
 		}
+		await sleep(ITERATION_START_POLL_MS);
 	}
-	return false;
+
+	return hasAssistantMessageSince(ctx, previousEntryCount);
+}
+
+function hasAssistantMessageSince(ctx: ExtensionCommandContext, previousEntryCount: number): boolean {
+	const entries = ctx.sessionManager.getBranch();
+	return entries
+		.slice(previousEntryCount)
+		.some((entry) => entry?.type === "message" && entry.message.role === "assistant");
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Inspect only the session entries created by the current iteration.
+ * This keeps Ralph's control flow scoped to the active loop turn instead of
+ * accidentally picking up old assistant messages from the session history.
+ */
+function getIterationOutcome(ctx: ExtensionCommandContext, previousEntryCount: number): RalphIterationOutcome {
+	const entries = ctx.sessionManager.getBranch();
+	const iterationEntries = entries.slice(previousEntryCount);
+	let latestAssistantText = "";
+
+	for (const entry of iterationEntries) {
+		if (entry?.type !== "message" || entry.message.role !== "assistant") continue;
+		if (entry.message.stopReason === "aborted") {
+			return { aborted: true, done: false };
+		}
+		latestAssistantText = getAssistantText(entry.message);
+	}
+
+	return {
+		aborted: false,
+		done: hasRalphDoneSignal(latestAssistantText),
+	};
+}
+
+function getAssistantText(message: { content: Array<{ type: string; text?: string }> }): string {
+	return message.content
+		.filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
+		.map((block) => block.text)
+		.join("\n");
+}
+
+function hasRalphDoneSignal(text: string): boolean {
+	return text.includes(RALPH_DONE_MARKER);
 }
 
 // --- Overlay Dialog ---
@@ -396,6 +516,8 @@ class RalphLoopDialog implements Focusable {
 				)}`,
 			),
 		);
+		lines.push(row(""));
+		lines.push(row(`   ${th.fg("dim", `Early stop marker: ${RALPH_DONE_MARKER}`)}`));
 		lines.push(row(""));
 
 		lines.push(row(` ${th.fg("dim", " Tab switch • Space toggle • Enter start • Esc cancel")}`));
