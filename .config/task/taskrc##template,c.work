@@ -77,6 +77,7 @@ urgency.uda.adostate.Active.coefficient=4
 urgency.uda.adostate.Ready for Development.coefficient=2
 urgency.uda.adotype.Task.coefficient=-1
 urgency.uda.adotype.Feature.coefficient=-3
+urgency.user.project.AI.coefficient=3
 urgency.user.project.OMR.coefficient=2
 urgency.user.project.RXP.coefficient=1
 
