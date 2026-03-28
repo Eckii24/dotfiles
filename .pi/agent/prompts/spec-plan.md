@@ -1,5 +1,5 @@
 ---
-description: Orchestrate rough idea → spec → plan → implement → review with tracked feature work
+description: Orchestrate rough idea → spec → plan with tracked feature work (no implementation)
 ---
 
 You are the **orchestrator**. Keep your own work light: coordinate, delegate, summarize, and ask the user questions. Substantive work should be done by sub-agents.
@@ -11,7 +11,7 @@ Rough idea: $@
 - If `.ai/current-work.md` exists and relates to this idea, continue from it.
 - If it tracks a different unfinished feature, ask the user before replacing it.
 - Keep exactly one active feature in `.ai/current-work.md`.
-- Artifact naming: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
+- Artifact naming: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`.
 - When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
 - For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
 
@@ -38,29 +38,11 @@ Rough idea: $@
 - Ask the user to confirm the plan before continuing.
 - If the user requests changes, loop in `plan-writer` again.
 
-### 3. Implement and Review Loop
-- Delegate implementation to `worker` using the confirmed spec, plan, and `.ai/current-work.md`.
-- Require the worker to report changed files, `.ai/` artifact paths, and eval/test results.
-- Update `.ai/current-work.md` with changed files, evals, and the next step.
-- If blockers or ambiguities appear, bring them back to the user via `questionnaire`.
-- Delegate review to `code-reviewer` using the spec file, plan file, changed files, and `.ai/current-work.md`.
-- Summarize the review for the user and ask what to do with the findings:
-  - fix critical issues only
-  - fix critical issues + warnings
-  - fix everything including suggestions
-  - accept as-is
-  - custom instruction
-- Record the review outcome in `.ai/current-work.md` and create or update `.ai/<slug>-review.md` when needed.
-- If fixes are requested, delegate another focused `worker` pass with the relevant spec/plan/review artifact paths, then re-run `code-reviewer` as needed.
-- Repeat until the user is satisfied.
-
-### 4. Completion
-- Update `.ai/current-work.md` with final status, linked artifacts, changed files, and handoff notes.
-- Provide a concise final summary with:
+### 3. Completion
+- Update `.ai/current-work.md` with the confirmed spec and plan status, linked artifacts, and any follow-up notes.
+- Do NOT implement. Provide a concise summary with:
   - current-work path
   - spec file path
   - plan file path
-  - review file path if any
-  - changed file list
-  - final review outcome
-  - any remaining assumptions / follow-ups
+  - any remaining open questions or next steps
+- Tell the user they can continue with `/implement-review` when ready.

@@ -1,17 +1,54 @@
 ---
-description: Create or refine the plan for the active feature tracked in `.ai/current-work.md`
+description: Orchestrate story → plan with tracked feature work (no implementation)
 ---
 
-Follow the repo workflow and current-work conventions in `AGENTS.md`.
-This prompt handles one focused planning pass for the active feature.
+You are the **orchestrator**. Keep your own work light: retrieve the story, coordinate, delegate, summarize, and ask the user questions. Substantive work should be done by sub-agents.
 
-Use the `subagent` tool with the `chain` parameter to execute this workflow:
+## Input
+Story reference: $@
 
-1. First, use the `scout` agent to find all code relevant to: $@
-   - Include `.ai/current-work.md` and any already-linked artifact paths in the handoff.
-2. Then, use the `plan-writer` agent to create or refine the implementation plan for the same active feature using the context from the previous step (`{previous}`).
-   - Tell `plan-writer` to keep the plan in `.ai/<slug>-plan.md` and echo the current-work context.
-3. After the chain returns, update `.ai/current-work.md` before you stop.
-   - Record the plan path, current step, linked artifacts, and any open questions in `.ai/current-work.md`.
+## Tracked Work
+- If `.ai/current-work.md` exists and relates to this story, continue from it.
+- If it tracks a different unfinished feature, ask the user before replacing it.
+- Keep exactly one active feature in `.ai/current-work.md`.
+- Artifact naming: `.ai/<slug>-plan.md`.
+- When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
+- For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
 
-Execute this as a chain, passing output between steps via `{previous}`. Do NOT implement — return the plan path, current-work path, and any follow-up questions only after `.ai/current-work.md` reflects the latest planning state.
+## Workflow
+
+### 0. Retrieve the Story
+- Resolve the story from the provided input.
+- Prefer a dedicated story-retrieval tool if one exists in the environment.
+- If no dedicated tool is available and the user did not specify another source, default to **Azure DevOps via `az` CLI**.
+- If the input is an ADO work item URL, extract the numeric work item ID first.
+- Use current Azure DevOps CLI defaults if configured; if org/project context is missing or retrieval fails, ask the user via `questionnaire`.
+- If the input is clearly a local file path, read it directly.
+- Retrieve enough detail to plan implementation accurately: title, description, acceptance criteria, and linked context/subtasks if available.
+- Update `.ai/current-work.md` with the story reference/source, active slug, and current step.
+
+### 1. Plan
+- Delegate to `plan-writer` using the retrieved story as the source of requirements.
+- Tell `plan-writer` there is **no specification phase for this workflow** and that the story is the requirements source.
+- Pass `.ai/current-work.md` and the intended plan path into the sub-agent.
+- Read the sub-agent result and the generated plan file.
+- Update `.ai/current-work.md` with the plan path, current step, and remaining questions.
+- Summarize the plan for the user.
+- Ask all open questions with the `questionnaire` tool.
+- Delegate back to `plan-writer` with the user's answers until no open questions remain.
+- Ask the user to confirm the plan before continuing.
+- If the user requests changes, loop in `plan-writer` again.
+
+### 2. Completion
+- Update `.ai/current-work.md` with the confirmed plan status, linked artifacts, and any follow-up notes.
+- Do NOT implement. Provide a concise summary with:
+  - current-work path
+  - story reference / retrieval source
+  - plan file path
+  - any remaining open questions or next steps
+- Tell the user they can continue with `/implement-review` or `/plan-implement-review` when ready.
+
+## Azure DevOps fallback notes
+- Default fallback: use `az` CLI for ADO work item retrieval.
+- If needed, ask the user for missing org/project details instead of guessing.
+- If the story cannot be fetched, stop and ask the user how to proceed.

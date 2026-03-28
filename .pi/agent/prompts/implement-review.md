@@ -1,10 +1,16 @@
 ---
-description: Implement → review for the active feature tracked in `.ai/current-work.md`
+description: Implement → review for a tracked feature
 ---
 
-Follow the repo workflow and current-work conventions in `AGENTS.md`.
-This prompt handles one focused implement → review iteration for the active feature.
-It assumes the relevant plan already exists in the current-work context.
+## Tracked Work
+- If `.ai/current-work.md` exists and relates to this task, continue from it.
+- If it tracks a different unfinished feature, ask the user before replacing it.
+- Keep exactly one active feature in `.ai/current-work.md`.
+- Artifact naming: `.ai/<slug>-review.md`.
+- When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
+- For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
+
+This prompt assumes a plan already exists in the current-work context.
 
 Use the `subagent` tool with the `chain` parameter to execute this workflow:
 
@@ -12,9 +18,9 @@ Use the `subagent` tool with the `chain` parameter to execute this workflow:
    - Include `.ai/current-work.md` and require explicit changed-file and artifact paths.
 2. Then, use the `code-reviewer` agent to review the implementation from the previous step (`{previous}`).
    - Require eval/test results and current-work-aware findings.
-3. After the chain returns, update `.ai/current-work.md` before you stop.
-   - Link review findings, changed files, `.ai/` artifact paths, and eval/test results in the current-work file.
-   - If follow-up fixes are needed, capture the next step explicitly in `.ai/current-work.md`.
-   - Create or update `.ai/<slug>-review.md` when the review output is substantial enough to deserve its own artifact.
+3. After the chain returns, update `.ai/current-work.md`:
+   - Link review findings, changed files, `.ai/` artifact paths, and eval/test results.
+   - If follow-up fixes are needed, capture the next step explicitly.
+   - Create or update `.ai/<slug>-review.md` when the review output is substantial.
 
 Execute this as a chain, passing output between steps via `{previous}`. Terminate only after `.ai/current-work.md` has the latest implementation and review status.

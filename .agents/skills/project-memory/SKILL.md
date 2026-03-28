@@ -259,6 +259,40 @@ Memory updated:
 
 Keep this short, but do not hide memory changes.
 
+## Tracked work artifacts
+
+When workflow prompts create tracked feature work in `.ai/`, follow these conventions:
+
+### `current-work.md`
+Operational state for exactly one active feature. Keep it lightweight — not a project log. Include only what helps resume:
+- Active feature (slug, title, status, dates)
+- Objective
+- Current step
+- Evolving plan (short checklist)
+- Relevant files
+- Linked artifacts
+- Open questions / blockers
+- Parking lot
+- Assumptions
+- Completion handoff
+
+### Slug convention
+Derive from the feature title: lowercase, hyphenated, concise (e.g. `auth-refresh-token`, `fix-build-race`).
+
+### Feature artifacts
+Named by slug alongside `current-work.md`:
+- `.ai/<slug>-spec.md`
+- `.ai/<slug>-plan.md`
+- `.ai/<slug>-review.md`
+
+Only create what the workflow actually needs — not all three every time.
+
+### Archive
+Move completed feature artifacts to `.ai/archive/` with dated prefixes:
+- `.ai/archive/YYYY-MM-DD-<description>.md`
+
+Leave `current-work.md` ready to be replaced by the next feature.
+
 ## Practical guardrails
 
 - Prefer updating an existing memory file over creating a new category too early.

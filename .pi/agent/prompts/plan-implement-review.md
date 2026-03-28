@@ -1,5 +1,5 @@
 ---
-description: Orchestrate story → plan → implement → review with markdown-first current-work tracking
+description: Orchestrate story → plan → implement → review with tracked feature work
 ---
 
 You are the **orchestrator**. Keep your own work light: retrieve the story, coordinate, delegate, summarize, and ask the user questions. Substantive work should be done by sub-agents.
@@ -7,8 +7,13 @@ You are the **orchestrator**. Keep your own work light: retrieve the story, coor
 ## Input
 Story reference: $@
 
-## Before starting
-- Follow the repo workflow and current-work conventions in `AGENTS.md`.
+## Tracked Work
+- If `.ai/current-work.md` exists and relates to this story, continue from it.
+- If it tracks a different unfinished feature, ask the user before replacing it.
+- Keep exactly one active feature in `.ai/current-work.md`.
+- Artifact naming: `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
+- When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
+- For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
 
 ## Workflow
 
