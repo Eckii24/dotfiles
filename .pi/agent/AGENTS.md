@@ -5,7 +5,6 @@
 # Tracked Work
 - If `.ai/current-work.md` exists, read it before substantial repo work and continue from it.
 - For meaningful repo work, use the `project-memory` skill to check for durable memory in `.ai/` and persist high-value learnings when appropriate.
-- If you update or create `.ai/` artifacts, keep `.ai/current-work.md` in sync.
 
 # Sub Agents
 - Use sub-agents for context management by delegating tasks.

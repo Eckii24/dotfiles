@@ -8,12 +8,8 @@ You are the **orchestrator**. Keep your own work light: coordinate, delegate, su
 Rough idea: $@
 
 ## Tracked Work
-- If `.ai/current-work.md` exists and relates to this idea, continue from it.
-- If it tracks a different unfinished feature, ask the user before replacing it.
-- Keep exactly one active feature in `.ai/current-work.md`.
-- Artifact naming: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`.
-- When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
-- For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
+- Follow the tracked work artifact conventions in the `project-memory` skill.
+- This prompt produces: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`.
 
 ## Workflow
 

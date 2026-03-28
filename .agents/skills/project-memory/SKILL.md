@@ -263,6 +263,12 @@ Keep this short, but do not hide memory changes.
 
 When workflow prompts create tracked feature work in `.ai/`, follow these conventions:
 
+### Lifecycle rules
+- If `.ai/current-work.md` exists and relates to the current task, continue from it.
+- If it tracks a different unfinished feature, ask the user before replacing it.
+- Keep exactly one active feature in `current-work.md` at a time.
+- When the feature completes, archive artifacts and leave `current-work.md` ready for the next feature.
+
 ### `current-work.md`
 Operational state for exactly one active feature. Keep it lightweight — not a project log. Include only what helps resume:
 - Active feature (slug, title, status, dates)

@@ -8,12 +8,8 @@ You are the **orchestrator**. Keep your own work light: retrieve the story, coor
 Story reference: $@
 
 ## Tracked Work
-- If `.ai/current-work.md` exists and relates to this story, continue from it.
-- If it tracks a different unfinished feature, ask the user before replacing it.
-- Keep exactly one active feature in `.ai/current-work.md`.
-- Artifact naming: `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
-- When the feature completes, move artifacts to `.ai/archive/` with dated filenames.
-- For `.ai/` conventions (slug, structure, archive format), use the `project-memory` skill.
+- Follow the tracked work artifact conventions in the `project-memory` skill.
+- This prompt produces: `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
 
 ## Workflow
 
