@@ -14,7 +14,8 @@
     ],
     "allowWrite": [
       "./**",
-      "/tmp/**"
+      "/tmp/**",
+      "**/.ai/**"
     ],
     "denyWrite": [
       "**/.env",
