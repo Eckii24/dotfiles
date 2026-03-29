@@ -8,7 +8,8 @@
 // macOS:  osascript display notification with sound "Glass"
 // tmux:   prepends 🔔 to the originating Pi window name (via TMUX_PANE)
 //
-// Reset:  on agent_start / input / session_shutdown
+// Reset:  on agent_start / input / questionnaire end / resolved event /
+//         tmux focus return / session_shutdown
 //
 // Commands:
 //   /notify        — show status
@@ -17,21 +18,26 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { exec, execSync } from "node:child_process";
 
-const MIN_AGENT_DURATION_MS = 3000;
+const TMUX_FOCUS_POLL_MS = 1000;
 const TMUX_MARK_PREFIX = "🔔 ";
 const TMUX_ORIGINAL_NAME_OPTION = "@pi_input_notify_original_name";
 const TMUX_AUTO_RENAME_OPTION = "@pi_input_notify_auto_rename";
+const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
+const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
+const SUBAGENT_ENV = "PI_SUBAGENT";
 
 export default function (pi: ExtensionAPI) {
   // ─── State ───────────────────────────────────────────────────────────
   let notified = false;
-  let agentStartTime: number | null = null;
   let sourceWindowId: string | null = null;
   let originalWindowName: string | null = null;
   let autoRenameWasOn: boolean | null = null;
   let markedWindowId: string | null = null;
+  let tmuxFocusWatcher: ReturnType<typeof setInterval> | null = null;
+  let tmuxTargetWasAway = false;
   const isTmux = !!process.env.TMUX;
   const tmuxPaneId = process.env.TMUX_PANE ?? null;
+  const isSubagent = process.env[SUBAGENT_ENV] === "1";
 
   // ─── macOS Notification ──────────────────────────────────────────────
 
@@ -80,6 +86,12 @@ export default function (pi: ExtensionAPI) {
     );
   }
 
+  function getPaneTitle(paneId: string): string | null {
+    return tmuxExec(
+      `tmux display-message -p -t ${shSingleQuote(paneId)} '#{pane_title}'`,
+    );
+  }
+
   function setWindowOption(windowId: string, option: string, value: string) {
     tmuxExec(
       `tmux set-window-option -t ${shSingleQuote(windowId)} ${option} ${shSingleQuote(value)} 2>/dev/null`,
@@ -109,6 +121,94 @@ export default function (pi: ExtensionAPI) {
     if (sourceWindowId !== null) return sourceWindowId;
     sourceWindowId = resolveSourceWindowId();
     return sourceWindowId;
+  }
+
+  function getSourcePaneTitle(): string | null {
+    if (!tmuxPaneId) return null;
+    return getPaneTitle(tmuxPaneId);
+  }
+
+  function getTmuxNotificationContext(): string | null {
+    if (!isTmux) return null;
+
+    const windowName = originalWindowName ?? (() => {
+      const windowId = markedWindowId ?? getSourceWindowId();
+      return windowId ? getWindowName(windowId) : null;
+    })();
+
+    // Assumption: tmux pane titles are the closest practical equivalent to a
+    // human-visible “pane name”, because tmux panes do not have a separate
+    // stable user-facing name field.
+    const paneTitle = getSourcePaneTitle();
+
+    const parts = [windowName, paneTitle]
+      .map((part) => part?.trim())
+      .filter((part): part is string => !!part);
+
+    return parts.length > 0 ? `tmux: ${parts.join(" / ")}` : null;
+  }
+
+  function withTmuxNotificationContext(message: string): string {
+    const tmuxContext = getTmuxNotificationContext();
+    return tmuxContext ? `${message} — ${tmuxContext}` : message;
+  }
+
+  function isTmuxTargetFocused(): boolean | null {
+    if (!isTmux) return null;
+
+    try {
+      // Assumption: attached tmux clients expose their currently selected
+      // window/pane via list-clients. Pi does not receive explicit tmux focus
+      // events, so we resolve the mark when the originating tmux target becomes
+      // selected again after being away.
+      const targetWindowId = markedWindowId ?? getSourceWindowId();
+      if (targetWindowId === null) return null;
+
+      const output = tmuxExec("tmux list-clients -F '#{session_attached}\t#{window_id}\t#{pane_id}' 2>/dev/null");
+      if (output === null) return null;
+      if (output.length === 0) return false;
+
+      return output
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .some((line) => {
+          const [sessionAttached, windowId, paneId] = line.split("\t");
+          if (sessionAttached !== "1") return false;
+          if (tmuxPaneId) return paneId === tmuxPaneId;
+          return windowId === targetWindowId;
+        });
+    } catch {
+      return null;
+    }
+  }
+
+  function stopTmuxFocusWatcher() {
+    if (tmuxFocusWatcher !== null) {
+      clearInterval(tmuxFocusWatcher);
+      tmuxFocusWatcher = null;
+    }
+    tmuxTargetWasAway = false;
+  }
+
+  function startTmuxFocusWatcher() {
+    if (!isTmux) return;
+
+    stopTmuxFocusWatcher();
+    tmuxTargetWasAway = isTmuxTargetFocused() === false;
+
+    tmuxFocusWatcher = setInterval(() => {
+      const focused = isTmuxTargetFocused();
+      if (focused === null) return;
+
+      if (!focused) {
+        tmuxTargetWasAway = true;
+        return;
+      }
+
+      if (tmuxTargetWasAway) {
+        resetNotification();
+      }
+    }, TMUX_FOCUS_POLL_MS);
   }
 
   function adoptExistingTmuxMark() {
@@ -200,17 +300,22 @@ export default function (pi: ExtensionAPI) {
 
   sourceWindowId = resolveSourceWindowId();
   adoptExistingTmuxMark();
+  if (notified) {
+    startTmuxFocusWatcher();
+  }
 
   // ─── Core ────────────────────────────────────────────────────────────
 
   function triggerNotification(message: string) {
     if (notified) return; // debounce
     notified = true;
-    sendMacOSNotification(message);
+    sendMacOSNotification(withTmuxNotificationContext(message));
     markTmuxWindow();
+    startTmuxFocusWatcher();
   }
 
   function resetNotification() {
+    stopTmuxFocusWatcher();
     if (!notified) return;
     notified = false;
     resetTmuxWindow();
@@ -218,18 +323,14 @@ export default function (pi: ExtensionAPI) {
 
   // ─── Events ──────────────────────────────────────────────────────────
 
-  // Track when the agent starts so we can skip fast responses
+  // Reset any previous indication when a new agent turn begins
   pi.on("agent_start", async () => {
-    agentStartTime = Date.now();
     resetNotification();
   });
 
   // Agent finished → waiting for next prompt
   pi.on("agent_end", async () => {
-    if (agentStartTime !== null) {
-      const duration = Date.now() - agentStartTime;
-      if (duration < MIN_AGENT_DURATION_MS) return; // skip fast responses
-    }
+    if (isSubagent) return;
     triggerNotification("Agent finished — waiting for your input");
   });
 
@@ -240,10 +341,20 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  pi.on("tool_execution_end", async (event) => {
+    if (event.toolName === "questionnaire") {
+      resetNotification();
+    }
+  });
+
   // Generic event bus integration — any extension can trigger a notification:
   //   pi.events.emit("notify:input-needed", { message: "..." })
-  pi.events.on("notify:input-needed", (data?: { message?: string }) => {
+  pi.events.on(NOTIFY_INPUT_NEEDED_EVENT, (data?: { message?: string }) => {
     triggerNotification(data?.message || "Your input is needed");
+  });
+
+  pi.events.on(NOTIFY_INPUT_RESOLVED_EVENT, () => {
+    resetNotification();
   });
 
   // Reset on user input
@@ -253,6 +364,7 @@ export default function (pi: ExtensionAPI) {
 
   // Clean up on shutdown
   pi.on("session_shutdown", async () => {
+    stopTmuxFocusWatcher();
     resetTmuxWindow();
     notified = false;
   });
@@ -284,11 +396,13 @@ export default function (pi: ExtensionAPI) {
         t.fg("dim", `  macOS:            osascript + sound "Glass"`),
         t.fg("dim", `  tmux detected:    ${isTmux ? "yes" : "no"}`),
         t.fg("dim", `  tmux source pane: ${tmuxPaneId ?? "(unknown)"}`),
+        t.fg("dim", `  tmux pane title:  ${getSourcePaneTitle() ?? "(unknown)"}`),
+        t.fg("dim", `  tmux subagent:    ${isSubagent ? "yes (agent_end ignored)" : "no"}`),
         t.fg("dim", `  notified:         ${notified ? "yes (waiting for reset)" : "no"}`),
-        t.fg("dim", `  min agent time:   ${MIN_AGENT_DURATION_MS / 1000}s`),
+        t.fg("dim", `  tmux auto-resolve:${isTmux ? ` poll ${TMUX_FOCUS_POLL_MS}ms on focus return` : " n/a"}`),
         "",
-        t.fg("dim", `  Triggers:         agent_end (≥${MIN_AGENT_DURATION_MS / 1000}s), questionnaire, event bus`),
-        t.fg("dim", `  Reset on:         agent_start, input, shutdown`),
+        t.fg("dim", `  Triggers:         agent_end, questionnaire, event bus`),
+        t.fg("dim", `  Reset on:         agent_start, input, shutdown, resolved event, tmux focus return`),
         "",
         t.fg("dim", `  Use ${t.fg("accent", "/notify test")} to send a test notification`),
       ];

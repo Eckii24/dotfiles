@@ -22,6 +22,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
+const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
+const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
 const STARTUP_GUARD_STATE_KEY = "__piDirtyRepoGuardStartupChecked";
 
 type DirtyRepoGuardBypassEvent = {
@@ -76,12 +78,18 @@ async function shouldCancelForDirtyRepo(
 		return true;
 	}
 
-	pi.events.emit("notify:input-needed", { message: "Dirty repo — confirmation needed" });
+	pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Dirty repo — confirmation needed" });
 
-	const choice = await ctx.ui.select(`You have ${state.changedFiles} uncommitted file(s). ${action} anyway?`, [
-		"Yes, proceed anyway",
-		"No, let me commit first",
-	]);
+	const choice = await (async () => {
+		try {
+			return await ctx.ui.select(`You have ${state.changedFiles} uncommitted file(s). ${action} anyway?`, [
+				"Yes, proceed anyway",
+				"No, let me commit first",
+			]);
+		} finally {
+			pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+		}
+	})();
 
 	if (choice === "Yes, proceed anyway") {
 		return false;

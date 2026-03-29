@@ -143,6 +143,9 @@ import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 
+const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
+const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
+
 function allowWriteLabel(config: GuardrailsConfig): string {
   const aw = config.paths?.allowWrite;
   if (aw === undefined) return "(unrestricted)";
@@ -358,13 +361,19 @@ export default function (pi: ExtensionAPI) {
           return { block: true, reason: `[Guardrails] Read blocked (no UI): ${result.reason}` };
         }
 
-        pi.events.emit("notify:input-needed", { message: "Guardrails — read confirmation needed" });
+        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — read confirmation needed" });
 
-        const confirmed = await ctx.ui.confirm(
-          "🛡️ Guardrails — Read Confirmation",
-          `Reading this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this read?`,
-          { timeout }
-        );
+        const confirmed = await (async () => {
+          try {
+            return await ctx.ui.confirm(
+              "🛡️ Guardrails — Read Confirmation",
+              `Reading this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this read?`,
+              { timeout }
+            );
+          } finally {
+            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+          }
+        })();
 
         if (!confirmed) {
           return {
@@ -386,13 +395,19 @@ export default function (pi: ExtensionAPI) {
             return { block: true, reason: `[Guardrails] Write blocked (no UI): ${result.reason}` };
           }
 
-          pi.events.emit("notify:input-needed", { message: "Guardrails — write confirmation needed" });
+          pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — write confirmation needed" });
 
-          const confirmed = await ctx.ui.confirm(
-            "🛡️ Guardrails — Write Confirmation",
-            `Writing to this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this write?`,
-            { timeout }
-          );
+          const confirmed = await (async () => {
+            try {
+              return await ctx.ui.confirm(
+                "🛡️ Guardrails — Write Confirmation",
+                `Writing to this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this write?`,
+                { timeout }
+              );
+            } finally {
+              pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+            }
+          })();
 
           if (!confirmed) {
             return {
@@ -444,9 +459,15 @@ export default function (pi: ExtensionAPI) {
           };
         }
 
-        pi.events.emit("notify:input-needed", { message: "Guardrails — bash confirmation needed" });
+        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — bash confirmation needed" });
 
-        const confirmResult = await confirmBashViolation(command, activeViolations, ctx, timeout);
+        const confirmResult = await (async () => {
+          try {
+            return await confirmBashViolation(command, activeViolations, ctx, timeout);
+          } finally {
+            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+          }
+        })();
 
         if (confirmResult === "allow-session") {
           // Remember this command for the session
