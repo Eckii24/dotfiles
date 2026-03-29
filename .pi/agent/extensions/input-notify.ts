@@ -6,7 +6,7 @@
 // "notify:input-needed" event on the shared event bus.
 //
 // macOS:  osascript display notification with sound "Glass"
-// tmux:   prepends 🔔 to the current window name
+// tmux:   prepends 🔔 to the originating Pi window name (via TMUX_PANE)
 //
 // Reset:  on agent_start / input / session_shutdown
 //
@@ -18,14 +18,20 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { exec, execSync } from "node:child_process";
 
 const MIN_AGENT_DURATION_MS = 3000;
+const TMUX_MARK_PREFIX = "🔔 ";
+const TMUX_ORIGINAL_NAME_OPTION = "@pi_input_notify_original_name";
+const TMUX_AUTO_RENAME_OPTION = "@pi_input_notify_auto_rename";
 
 export default function (pi: ExtensionAPI) {
   // ─── State ───────────────────────────────────────────────────────────
   let notified = false;
   let agentStartTime: number | null = null;
+  let sourceWindowId: string | null = null;
   let originalWindowName: string | null = null;
   let autoRenameWasOn: boolean | null = null;
+  let markedWindowId: string | null = null;
   const isTmux = !!process.env.TMUX;
+  const tmuxPaneId = process.env.TMUX_PANE ?? null;
 
   // ─── macOS Notification ──────────────────────────────────────────────
 
@@ -54,41 +60,146 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  function shSingleQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+  }
+
+  function stripTmuxMarkPrefix(name: string): string {
+    return name.startsWith(TMUX_MARK_PREFIX) ? name.slice(TMUX_MARK_PREFIX.length) : name;
+  }
+
+  function getWindowName(windowId: string): string | null {
+    return tmuxExec(
+      `tmux display-message -p -t ${shSingleQuote(windowId)} '#{window_name}'`,
+    );
+  }
+
+  function getWindowOption(windowId: string, option: string): string | null {
+    return tmuxExec(
+      `tmux show-window-option -t ${shSingleQuote(windowId)} -v ${option} 2>/dev/null`,
+    );
+  }
+
+  function setWindowOption(windowId: string, option: string, value: string) {
+    tmuxExec(
+      `tmux set-window-option -t ${shSingleQuote(windowId)} ${option} ${shSingleQuote(value)} 2>/dev/null`,
+    );
+  }
+
+  function unsetWindowOption(windowId: string, option: string) {
+    tmuxExec(
+      `tmux set-window-option -u -t ${shSingleQuote(windowId)} ${option} 2>/dev/null`,
+    );
+  }
+
+  function resolveSourceWindowId(): string | null {
+    if (!isTmux) return null;
+
+    if (tmuxPaneId) {
+      const paneWindowId = tmuxExec(
+        `tmux display-message -p -t ${shSingleQuote(tmuxPaneId)} '#{window_id}'`,
+      );
+      if (paneWindowId) return paneWindowId;
+    }
+
+    return tmuxExec("tmux display-message -p '#{window_id}'");
+  }
+
+  function getSourceWindowId(): string | null {
+    if (sourceWindowId !== null) return sourceWindowId;
+    sourceWindowId = resolveSourceWindowId();
+    return sourceWindowId;
+  }
+
+  function adoptExistingTmuxMark() {
+    if (!isTmux || originalWindowName !== null) return;
+
+    try {
+      const windowId = getSourceWindowId();
+      if (windowId === null) return;
+
+      const currentName = getWindowName(windowId);
+      if (currentName === null) return;
+
+      const savedOriginalName = getWindowOption(windowId, TMUX_ORIGINAL_NAME_OPTION);
+      const savedAutoRename = getWindowOption(windowId, TMUX_AUTO_RENAME_OPTION);
+      const isMarked = currentName.startsWith(TMUX_MARK_PREFIX);
+
+      if (!isMarked) {
+        if (savedOriginalName !== null || savedAutoRename !== null) {
+          unsetWindowOption(windowId, TMUX_ORIGINAL_NAME_OPTION);
+          unsetWindowOption(windowId, TMUX_AUTO_RENAME_OPTION);
+        }
+        return;
+      }
+
+      // Backward compatibility: if an older version marked the window without
+      // persisting tmux metadata, recover the original name by stripping the prefix.
+      originalWindowName = savedOriginalName ?? stripTmuxMarkPrefix(currentName);
+      autoRenameWasOn = savedAutoRename === "on" ? true : savedAutoRename === "off" ? false : null;
+      markedWindowId = windowId;
+      notified = true;
+
+      if (savedOriginalName === null) {
+        setWindowOption(windowId, TMUX_ORIGINAL_NAME_OPTION, originalWindowName);
+      }
+    } catch {
+      // Fail silently
+    }
+  }
+
   function markTmuxWindow() {
     if (!isTmux || originalWindowName !== null) return; // already marked
 
     try {
-      const name = tmuxExec("tmux display-message -p '#W'");
+      const windowId = getSourceWindowId();
+      if (windowId === null) return;
+
+      const name = getWindowName(windowId);
       if (name === null) return;
-      originalWindowName = name;
 
-      const autoRename = tmuxExec(
-        "tmux show-window-option -v automatic-rename 2>/dev/null",
-      );
-      autoRenameWasOn = autoRename === "on";
+      const savedOriginalName = getWindowOption(windowId, TMUX_ORIGINAL_NAME_OPTION);
+      const savedAutoRename = getWindowOption(windowId, TMUX_AUTO_RENAME_OPTION);
+      const autoRename = getWindowOption(windowId, "automatic-rename");
+      const isMarked = name.startsWith(TMUX_MARK_PREFIX);
 
-      tmuxExec("tmux set-window-option automatic-rename off 2>/dev/null");
-      tmuxExec(`tmux rename-window "🔔 ${originalWindowName}"`);
+      originalWindowName = savedOriginalName ?? stripTmuxMarkPrefix(name);
+      autoRenameWasOn = savedAutoRename === "on" ? true : savedAutoRename === "off" ? false : autoRename === "on";
+      markedWindowId = windowId;
+
+      setWindowOption(windowId, TMUX_ORIGINAL_NAME_OPTION, originalWindowName);
+      setWindowOption(windowId, TMUX_AUTO_RENAME_OPTION, autoRenameWasOn ? "on" : "off");
+
+      if (!isMarked) {
+        tmuxExec(`tmux set-window-option -t ${shSingleQuote(windowId)} automatic-rename off 2>/dev/null`);
+        tmuxExec(`tmux rename-window -t ${shSingleQuote(windowId)} ${shSingleQuote(`${TMUX_MARK_PREFIX}${originalWindowName}`)}`);
+      }
     } catch {
       // Fail silently
     }
   }
 
   function resetTmuxWindow() {
-    if (!isTmux || originalWindowName === null) return;
+    if (!isTmux || originalWindowName === null || markedWindowId === null) return;
 
     try {
-      tmuxExec(`tmux rename-window "${originalWindowName}"`);
+      tmuxExec(`tmux rename-window -t ${shSingleQuote(markedWindowId)} ${shSingleQuote(originalWindowName)}`);
       if (autoRenameWasOn) {
-        tmuxExec("tmux set-window-option automatic-rename on 2>/dev/null");
+        tmuxExec(`tmux set-window-option -t ${shSingleQuote(markedWindowId)} automatic-rename on 2>/dev/null`);
       }
+      unsetWindowOption(markedWindowId, TMUX_ORIGINAL_NAME_OPTION);
+      unsetWindowOption(markedWindowId, TMUX_AUTO_RENAME_OPTION);
     } catch {
       // Fail silently
     } finally {
       originalWindowName = null;
       autoRenameWasOn = null;
+      markedWindowId = null;
     }
   }
+
+  sourceWindowId = resolveSourceWindowId();
+  adoptExistingTmuxMark();
 
   // ─── Core ────────────────────────────────────────────────────────────
 
@@ -172,6 +283,7 @@ export default function (pi: ExtensionAPI) {
         t.fg("mdHeading", "[Input Notify]"),
         t.fg("dim", `  macOS:            osascript + sound "Glass"`),
         t.fg("dim", `  tmux detected:    ${isTmux ? "yes" : "no"}`),
+        t.fg("dim", `  tmux source pane: ${tmuxPaneId ?? "(unknown)"}`),
         t.fg("dim", `  notified:         ${notified ? "yes (waiting for reset)" : "no"}`),
         t.fg("dim", `  min agent time:   ${MIN_AGENT_DURATION_MS / 1000}s`),
         "",
@@ -183,7 +295,8 @@ export default function (pi: ExtensionAPI) {
 
       if (isTmux) {
         lines.splice(3, 0,
-          t.fg("dim", `  tmux window:      ${originalWindowName !== null ? `🔔 ${originalWindowName}` : "(not marked)"}`),
+          t.fg("dim", `  tmux target:      ${markedWindowId ?? getSourceWindowId() ?? "(unresolved)"}`),
+          t.fg("dim", `  tmux window:      ${originalWindowName !== null ? `${TMUX_MARK_PREFIX}${originalWindowName}` : "(not marked)"}`),
         );
       }
 
