@@ -358,6 +358,8 @@ export default function (pi: ExtensionAPI) {
           return { block: true, reason: `[Guardrails] Read blocked (no UI): ${result.reason}` };
         }
 
+        pi.events.emit("notify:input-needed", { message: "Guardrails — read confirmation needed" });
+
         const confirmed = await ctx.ui.confirm(
           "🛡️ Guardrails — Read Confirmation",
           `Reading this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this read?`,
@@ -383,6 +385,8 @@ export default function (pi: ExtensionAPI) {
           if (!ctx.hasUI) {
             return { block: true, reason: `[Guardrails] Write blocked (no UI): ${result.reason}` };
           }
+
+          pi.events.emit("notify:input-needed", { message: "Guardrails — write confirmation needed" });
 
           const confirmed = await ctx.ui.confirm(
             "🛡️ Guardrails — Write Confirmation",
@@ -439,6 +443,8 @@ export default function (pi: ExtensionAPI) {
             reason: `[Guardrails] Bash blocked (no UI):\n${reasons}`,
           };
         }
+
+        pi.events.emit("notify:input-needed", { message: "Guardrails — bash confirmation needed" });
 
         const confirmResult = await confirmBashViolation(command, activeViolations, ctx, timeout);
 

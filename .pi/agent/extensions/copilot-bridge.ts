@@ -599,6 +599,8 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 
 		if (missingValues.length > 0 && ctx.hasUI) {
 			for (const variable of missingValues) {
+				pi.events.emit("notify:input-needed", { message: `Copilot — input needed: ${variable.name}` });
+
 				const value = await ctx.ui.input(`/${invocation.commandName} → ${variable.name}`, variable.prompt);
 				if (value === undefined) {
 					return { action: "handled" as const };

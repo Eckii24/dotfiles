@@ -48,6 +48,8 @@ export default function (pi: ExtensionAPI) {
 			if (trimmedArgs) {
 				options = parseRalphArgs(trimmedArgs);
 			} else {
+				pi.events.emit("notify:input-needed", { message: "Ralph loop — configuration needed" });
+
 				const result = await ctx.ui.custom<RalphLoopOptions | null>((_tui, theme, _kb, done) => new RalphLoopDialog(theme, done), {
 					overlay: true,
 				});

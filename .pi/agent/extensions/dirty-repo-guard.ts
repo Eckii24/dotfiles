@@ -76,6 +76,8 @@ async function shouldCancelForDirtyRepo(
 		return true;
 	}
 
+	pi.events.emit("notify:input-needed", { message: "Dirty repo — confirmation needed" });
+
 	const choice = await ctx.ui.select(`You have ${state.changedFiles} uncommitted file(s). ${action} anyway?`, [
 		"Yes, proceed anyway",
 		"No, let me commit first",
