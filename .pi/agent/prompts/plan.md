@@ -42,7 +42,7 @@ Story reference: $@
   - story reference / retrieval source
   - plan file path
   - any remaining open questions or next steps
-- Tell the user they can continue with `/implement-review` or `/plan-implement-review` when ready.
+- Tell the user they can continue with `/implement-review` or `/plan-implement-review` when ready. Those workflows now automatically do review → fix → re-review until the latest review is clean or a decision is needed.
 
 ## Azure DevOps fallback notes
 - Default fallback: use `az` CLI for ADO work item retrieval.

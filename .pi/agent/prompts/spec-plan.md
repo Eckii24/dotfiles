@@ -41,4 +41,4 @@ Rough idea: $@
   - spec file path
   - plan file path
   - any remaining open questions or next steps
-- Tell the user they can continue with `/implement-review` when ready.
+- Tell the user they can continue with `/implement-review` when ready. That workflow now automatically does review → fix → re-review until the latest review is clean or a decision is needed.
