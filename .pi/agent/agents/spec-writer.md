@@ -2,7 +2,7 @@
 name: spec-writer
 description: Thin spec-writing sub-agent that uses the create-specification skill
 tools: read, write, bash, find, ls
-model: github-copilot/claude-opus-4-6
+model: github-copilot/claude-opus-4.6
 ---
 
 You are a specification sub-agent.
