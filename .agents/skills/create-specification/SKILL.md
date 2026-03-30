@@ -5,123 +5,126 @@ description: 'Create a new specification file for the solution, optimized for Ge
 
 # Create Specification
 
-Your goal is to create a new specification file for `${input:SpecPurpose}`.
+Create a specification for `${input:SpecPurpose}`.
 
-The specification file must define the requirements, constraints, and interfaces for the solution components in a manner that is clear, unambiguous, and structured for effective use by Generative AIs. Follow established documentation standards and ensure the content is machine-readable and self-contained.
+Save the spec to the output path provided in the task. If no explicit path is given, follow `tracked-work` skill conventions.
 
-## Best Practices for AI-Ready Specifications
+## What makes a good spec
 
-- Use precise, explicit, and unambiguous language.
-- Clearly distinguish between requirements, constraints, and recommendations.
-- Use structured formatting (headings, lists, tables) for easy parsing.
-- Avoid idioms, metaphors, or context-dependent references.
-- Define all acronyms and domain-specific terms.
-- Include examples and edge cases where applicable.
-- Ensure the document is self-contained and does not rely on external context.
+A good spec answers: what are we building, why, for whom, and how do we know it's done?
 
-The specification should be saved to the output path provided in the task. If no explicit path is provided, follow the `tracked-work` skill conventions.
+Write for an executor (AI agent or human) who has zero prior context. Be explicit, concrete, and self-contained:
 
-The specification file must be formatted in well formed Markdown.
+- Use precise language. Avoid idioms, metaphors, or ambiguous phrasing.
+- Distinguish requirements (must), constraints (cannot/must not), and guidelines (should/prefer).
+- Define domain terms the first time you use them.
+- Include examples and edge cases where behavior isn't obvious.
+- Prefer structured formats (tables, lists, code blocks) over prose for parseable content.
 
-Specification files must follow the template below, ensuring that all sections are filled out appropriately. The front matter for the markdown should be structured correctly as per the example following:
+## Before writing: interview or clarify
+
+If the input is a rough idea rather than a clear brief, **ask clarifying questions first**. Focus on:
+
+- What problem does this solve, and for whom?
+- What is explicitly in scope and out of scope?
+- What constraints are real (technical, business, regulatory)?
+- What does "done" look like — what are the acceptance criteria?
+- What tradeoffs are intentional vs. unresolved?
+
+A short, high-signal question set is better than a spec built on assumptions. When you have enough clarity, write the spec.
+
+## Sizing guidance
+
+Match the spec's weight to the work's complexity:
+
+| Complexity | What the spec looks like |
+|---|---|
+| **Small** (bugfix, config, single behavior) | Purpose, requirements, acceptance criteria. Skip interfaces, dependencies, and rationale unless non-obvious. |
+| **Medium** (feature, integration) | Full spec with interfaces, acceptance criteria, examples. Include dependencies and rationale when choices aren't obvious. |
+| **Large** (system, architecture, multi-team) | Thorough spec with all sections. Definitions, detailed interfaces, edge cases, and explicit rationale are essential. |
+
+## Template
+
+Include only the sections relevant to the scope. Sections marked *(if relevant)* should be skipped when they'd just contain filler.
 
 ```md
 ---
-title: [Concise Title Describing the Specification's Focus]
-version: [Optional: e.g., 1.0, Date]
+title: [Concise title]
 date_created: [YYYY-MM-DD]
-last_updated: [Optional: YYYY-MM-DD]
-owner: [Optional: Team/Individual responsible for this spec]
-tags: [Optional: List of relevant tags or categories, e.g., `infrastructure`, `process`, `design`, `app` etc]
+status: Draft | Review | Approved | Deprecated
+tags: [optional, e.g. feature, api, infrastructure, migration]
 ---
 
-# Introduction
+# [Spec title]
 
-[A short concise introduction to the specification and the goal it is intended to achieve.]
+[1-3 sentences: what this spec defines, why it exists, and who it's for.]
 
-## 1. Purpose & Scope
+## Definitions *(if relevant)*
 
-[Provide a clear, concise description of the specification's purpose and the scope of its application. State the intended audience and any assumptions.]
+[Define domain terms, acronyms, or abbreviations that aren't obvious. Skip for specs where all terms are standard.]
 
-## 2. Definitions
+| Term | Meaning |
+|------|---------|
+| ... | ... |
 
-[List and define all acronyms, abbreviations, and domain-specific terms used in this specification.]
+## Requirements & Constraints
 
-## 3. Requirements, Constraints & Guidelines
+[The core of the spec. List what must be true, what must not happen, and what is preferred.]
 
-[Explicitly list all requirements, constraints, rules, and guidelines. Use bullet points or tables for clarity.]
+- **Must**: [Requirement — concrete, testable]
+- **Must not**: [Constraint — what is explicitly forbidden or out of scope]
+- **Should**: [Guideline — preferred but flexible]
+- ...
 
-- **REQ-001**: Requirement 1
-- **SEC-001**: Security Requirement 1
-- **[3 LETTERS]-001**: Other Requirement 1
-- **CON-001**: Constraint 1
-- **GUD-001**: Guideline 1
-- **PAT-001**: Pattern to follow 1
+## Interfaces & Data Contracts *(if relevant)*
 
-## 4. Interfaces & Data Contracts
+[APIs, schemas, data flows, integration points. Use code blocks for schemas and examples.]
 
-[Describe the interfaces, APIs, data contracts, or integration points. Use tables or code blocks for schemas and examples.]
+```typescript
+// Example interface or schema
+```
 
-## 5. Acceptance Criteria
+## Acceptance Criteria
 
-[Define clear, testable acceptance criteria for each requirement using Given-When-Then format where appropriate.]
+[How do we know this is done? Each criterion should be testable.]
 
-- **AC-001**: Given [context], When [action], Then [expected outcome]
-- **AC-002**: The system shall [specific behavior] when [condition]
-- **AC-003**: [Additional acceptance criteria as needed]
+- Given [context], when [action], then [expected outcome]
+- The system shall [specific behavior] when [condition]
+- ...
 
-## 6. Test Automation Strategy
+## Examples & Edge Cases *(if relevant)*
 
-[Define the testing approach, frameworks, and automation requirements.]
+[Concrete examples showing expected behavior, especially for non-obvious cases.]
 
-- **Test Levels**: Unit, Integration, End-to-End
-- **Frameworks**: MSTest, FluentAssertions, Moq (for .NET applications)
-- **Test Data Management**: [approach for test data creation and cleanup]
-- **CI/CD Integration**: [automated testing in GitHub Actions pipelines]
-- **Coverage Requirements**: [minimum code coverage thresholds]
-- **Performance Testing**: [approach for load and performance testing]
+**Example: [scenario name]**
+- Input: ...
+- Expected: ...
+- Why: ...
 
-## 7. Rationale & Context
+**Edge case: [scenario name]**
+- Input: ...
+- Expected: ...
+- Why: ...
 
-[Explain the reasoning behind the requirements, constraints, and guidelines. Provide context for design decisions.]
+## Dependencies *(if relevant)*
 
-## 8. Dependencies & External Integrations
+[External systems, services, or other work this spec depends on. Focus on what is needed, not specific packages.]
 
-[Define the external systems, services, and architectural dependencies required for this specification. Focus on **what** is needed rather than **how** it's implemented. Avoid specific package or library versions unless they represent architectural constraints.]
+- [System/service] — what capability is required and why
+- ...
 
-### External Systems
-- **EXT-001**: [External system name] - [Purpose and integration type]
+## Rationale & Context *(if relevant)*
 
-### Third-Party Services
-- **SVC-001**: [Service name] - [Required capabilities and SLA requirements]
+[Why these requirements exist. What alternatives were considered. What tradeoffs were made. Include when the reasoning isn't obvious from the requirements alone.]
 
-### Infrastructure Dependencies
-- **INF-001**: [Infrastructure component] - [Requirements and constraints]
+## Open Questions *(if any)*
 
-### Data Dependencies
-- **DAT-001**: [External data source] - [Format, frequency, and access requirements]
+[Questions that surfaced during spec writing but couldn't be resolved.]
 
-### Technology Platform Dependencies
-- **PLT-001**: [Platform/runtime requirement] - [Version constraints and rationale]
+- Question — why it matters
+- ...
 
-### Compliance Dependencies
-- **COM-001**: [Regulatory or compliance requirement] - [Impact on implementation]
+## References
 
-**Note**: This section should focus on architectural and business dependencies, not specific package implementations. For example, specify "OAuth 2.0 authentication library" rather than "Microsoft.AspNetCore.Authentication.JwtBearer v6.0.1".
-
-## 9. Examples & Edge Cases
-
-    ```code
-    // Code snippet or data example demonstrating the correct application of the guidelines, including edge cases
-    ```
-
-## 10. Validation Criteria
-
-[List the criteria or tests that must be satisfied for compliance with this specification.]
-
-## 11. Related Specifications / Further Reading
-
-[Link to related spec 1]
-[Link to relevant external documentation]
-
+[Links to related specs, ADRs, docs, external resources.]
 ```

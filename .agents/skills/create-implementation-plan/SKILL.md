@@ -5,286 +5,136 @@ description: 'Create a new implementation plan file for new features, refactorin
 
 # Create Implementation Plan
 
-## Primary Directive
+Create an implementation plan for `${input:PlanPurpose}`.
 
-Your goal is to create a new implementation plan file for `${input:PlanPurpose}`. Your output must be machine-readable, deterministic, and structured for autonomous execution by other AI systems or humans.
+Save the plan to the output path provided in the task. If no explicit path is given, follow `tracked-work` skill conventions.
 
-**Every plan MUST include evals.** Evals are not optional. Each implementation phase must contain an Eval Gate, and the plan must contain a dedicated Evals section (§7) with quantitative metrics and exact expected outputs that prove the implementation is correct and complete.
+## What makes a good plan
 
-## Execution Context
+A good plan lets an agent or human execute confidently without guessing. The best plans are:
 
-This prompt is designed for AI-to-AI communication and automated processing. All instructions must be interpreted literally and executed systematically without human interpretation or clarification.
+- **Concrete**: name files, functions, and components — not abstractions.
+- **Right-sized**: a 3-task bugfix gets a short plan. A multi-phase feature gets phases. Match the weight of the plan to the weight of the work.
+- **Verifiable**: every phase ends with an eval gate — the exact commands and expected output that prove it's done. Evals are not optional.
+- **Honest about uncertainty**: call out risks, assumptions, and open questions explicitly instead of pretending they don't exist.
 
-## Core Requirements
+## Before writing: plan or clarify
 
-- Generate implementation plans that are fully executable by AI agents or humans
-- Use deterministic language with zero ambiguity
-- Structure all content for automated parsing and execution
-- Ensure complete self-containment with no external dependencies for understanding
-- **Always include Eval Gates per phase and a final Evals section — no exceptions**
+If the requirements are ambiguous, incomplete, or missing critical context — **ask clarifying questions first** instead of producing a plan full of guesses. A short, targeted question set is better than a detailed plan built on wrong assumptions.
 
-## Plan Structure Requirements
+When you have enough clarity, produce the plan.
 
-Plans must consist of discrete, atomic phases containing executable tasks. Each phase must be independently processable by AI agents or humans without cross-phase dependencies unless explicitly declared.
+## Sizing guidance
 
-## Phase Architecture
+Not every task needs the same plan structure. Match the ceremony to the complexity:
 
-- Each phase must have measurable completion criteria
-- Tasks within phases must be executable in parallel unless dependencies are specified
-- All task descriptions must include specific file paths, function names, and exact implementation details
-- No task should require human interpretation or decision-making
-- **Each phase must end with an Eval Gate** — a table of metrics, the exact command to run, and the exact expected output that must be observed before proceeding to the next phase
+| Complexity | What the plan looks like |
+|---|---|
+| **Small** (single-file fix, config change) | A short task list with one eval gate. Skip Alternatives, Dependencies, Risks unless relevant. |
+| **Medium** (feature touching 3-10 files) | 2-3 phases with eval gates. Include affected files and any non-obvious constraints. |
+| **Large** (multi-system, multi-day) | Full phased plan with dependencies, risks, alternatives, and thorough eval gates. |
 
-## Eval Requirements
+## Eval gates
 
-Evals serve as the definitive proof that an implementation is correct and complete. They are not aspirational — they are executable verification steps with exact expected outputs.
+Every phase must end with an eval gate. An eval gate contains:
+- The exact command to run
+- The exact output that proves success
 
-### Per-Phase Eval Gates
+Evals are the proof. If you can't define how to verify a phase is done, the phase isn't well-defined enough.
 
-Every implementation phase must include an `#### Eval Gate` subsection containing:
-- A metrics table with: Eval ID, metric description, target value, verification command
-- Expected output blocks — exact terminal/log output that must match when the implementation is correct
+## Accumulated learnings
 
-### Final Evals Section (§7)
+When a plan has multiple phases, later phases may depend on discoveries from earlier ones. If Phase 1 reveals patterns, conventions, or constraints that affect Phase 2, note them as **Learnings** at the end of the phase so the executor carries that context forward.
 
-The plan must contain a standalone Evals section with:
-- **Metrics table**: All EVAL-IDs across all phases, their targets, and a column for actual results (filled in during execution)
-- **Expected eval outputs**: One block per critical metric showing the exact command and the exact output that proves success
-- Coverage of all critical correctness, performance, and integration properties
+## Template
 
-### Eval Identifier Standard
-
-All eval identifiers must use the prefix `EVAL-` followed by a zero-padded three-digit number (e.g., `EVAL-001`, `EVAL-002`). Eval IDs must be unique across the entire plan.
-
-## AI-Optimized Implementation Standards
-
-- Use explicit, unambiguous language with zero interpretation required
-- Structure all content as machine-parseable formats (tables, lists, structured data)
-- Include specific file paths, line numbers, and exact code references where applicable
-- Define all variables, constants, and configuration values explicitly
-- Provide complete context within each task description
-- Use standardized prefixes for all identifiers (REQ-, TASK-, EVAL-, etc.)
-- Include validation criteria that can be automatically verified
-
-## Output File Specifications
-
-- Save the implementation plan to the output path provided in the task. If no explicit path is provided, follow the `tracked-work` skill conventions.
-- File must be valid Markdown with proper front matter structure
-
-## Mandatory Template Structure
-
-All implementation plans must strictly adhere to the following template. Each section is required and must be populated with specific, actionable content. AI agents must validate template compliance before execution.
-
-## Template Validation Rules
-
-- All front matter fields must be present and properly formatted
-- All section headers must match exactly (case-sensitive)
-- All identifier prefixes must follow the specified format
-- Tables must include all required columns
-- No placeholder text may remain in the final output
-- Every implementation phase must contain an `#### Eval Gate` subsection
-- Section §7 (Evals) must be present and fully populated
-
-## Status
-
-The status of the implementation plan must be clearly defined in the front matter and must reflect the current state of the plan. The status can be one of the following (status_color in brackets): `Completed` (bright green badge), `In progress` (yellow badge), `Planned` (blue badge), `Deprecated` (red badge), or `On Hold` (orange badge). It should also be displayed as a badge in the introduction section.
+Include only the sections relevant to the scope. Sections marked *(if relevant)* should be skipped when they'd just contain filler.
 
 ```md
 ---
-goal: [Concise Title Describing the Package Implementation Plan's Goal]
-version: [Optional: e.g., 1.0, Date]
+goal: [What this plan achieves — one sentence]
 date_created: [YYYY-MM-DD]
-last_updated: [Optional: YYYY-MM-DD]
-owner: [Optional: Team/Individual responsible for this spec]
-status: 'Completed'|'In progress'|'Planned'|'Deprecated'|'On Hold'
-tags: [Optional: List of relevant tags or categories, e.g., `feature`, `upgrade`, `chore`, `architecture`, `migration`, `bug` etc]
+status: Planned | In progress | Completed | On Hold | Deprecated
+tags: [optional, e.g. feature, bugfix, refactor, migration]
 ---
 
-# Introduction
+# [Plan title]
 
-![Status: <status>](https://img.shields.io/badge/status-<status>-<status_color>)
+[1-3 sentences: what, why, and what success looks like.]
 
-[A short concise introduction to the plan and the goal it is intended to achieve.]
+## Requirements & Constraints *(if relevant)*
 
-## 1. Requirements & Constraints
+[Only list requirements and constraints that materially affect implementation decisions. Skip if the spec or story already covers them.]
 
-[Explicitly list all requirements & constraints that affect the plan and constrain how it is implemented. Use bullet points or tables for clarity.]
+- Requirement or constraint — why it matters for this plan
+- ...
 
-- **REQ-001**: Requirement 1
-- **SEC-001**: Security Requirement 1
-- **[3 LETTERS]-001**: Other Requirement 1
-- **CON-001**: Constraint 1
-- **GUD-001**: Guideline 1
-- **PAT-001**: Pattern to follow 1
+## Phases
 
-## 2. Implementation Steps
+### Phase 1 — [Goal of this phase]
 
-### Implementation Phase 1
+| Task | Description | Done |
+|------|-------------|------|
+| 1.1 | [Concrete task: file paths, function names, what changes] | |
+| 1.2 | [Next task] | |
 
-- GOAL-001: [Describe the goal of this phase, e.g., "Implement feature X", "Refactor module Y", etc.]
+#### Eval Gate
 
-| Task | Description | Completed | Date |
-|------|-------------|-----------|------|
-| TASK-001 | Description of task 1 | ✅ | 2025-04-25 |
-| TASK-002 | Description of task 2 | |  |
-| TASK-003 | Description of task 3 | |  |
+[Every criterion must pass before the next phase.]
 
-#### Eval Gate — Phase 1
+| What | Target | Command |
+|------|--------|---------|
+| [e.g., Unit tests pass] | [e.g., 0 failures] | `npm test` |
+| [e.g., Build succeeds] | [e.g., exit 0] | `npm run build` |
 
-> All criteria in this gate must pass before proceeding to Phase 2.
+Expected outputs:
 
-| Eval ID | Metric | Target | Verification Command |
-|---------|--------|--------|----------------------|
-| EVAL-001 | [e.g., Unit tests pass] | [e.g., 0 failures] | `[e.g., npm test]` |
-| EVAL-002 | [e.g., Build succeeds] | [e.g., exit code 0] | `[e.g., npm run build]` |
-
-**EVAL-001 — [Metric name]**
+**[Eval name]**
 ```
-# Run
-[exact command]
-
-# Expected output
-[exact terminal/log output that must be observed to consider this eval passed]
+$ [exact command]
+[exact expected output]
 ```
 
-**EVAL-002 — [Metric name]**
-```
-# Run
-[exact command]
+#### Learnings *(if any)*
 
-# Expected output
-[exact terminal/log output that must be observed to consider this eval passed]
-```
+[Patterns, conventions, or constraints discovered during this phase that affect later phases.]
 
-### Implementation Phase 2
+### Phase 2 — [Goal of this phase]
 
-- GOAL-002: [Describe the goal of this phase, e.g., "Implement feature X", "Refactor module Y", etc.]
+[Same structure. Add more phases as needed.]
 
-| Task | Description | Completed | Date |
-|------|-------------|-----------|------|
-| TASK-004 | Description of task 4 | |  |
-| TASK-005 | Description of task 5 | |  |
-| TASK-006 | Description of task 6 | |  |
+## Affected Files *(if relevant)*
 
-#### Eval Gate — Phase 2
+[Skip if the task list already makes this obvious.]
 
-> All criteria in this gate must pass before proceeding to the next phase (or marking the implementation complete).
+- `path/to/file.ts` — what changes
+- ...
 
-| Eval ID | Metric | Target | Verification Command |
-|---------|--------|--------|----------------------|
-| EVAL-003 | [e.g., Integration tests pass] | [e.g., 100% pass rate] | `[e.g., npm run test:integration]` |
-| EVAL-004 | [e.g., Response time p95] | [e.g., < 200 ms] | `[e.g., npm run benchmark]` |
+## Alternatives Considered *(if relevant)*
 
-**EVAL-003 — [Metric name]**
-```
-# Run
-[exact command]
+[Include when a non-obvious choice was made.]
 
-# Expected output
-[exact terminal/log output that must be observed to consider this eval passed]
-```
+- Alternative approach — why not chosen
+- ...
 
-**EVAL-004 — [Metric name]**
-```
-# Run
-[exact command]
+## Dependencies *(if relevant)*
 
-# Expected output
-[exact terminal/log output that must be observed to consider this eval passed]
-```
+- Dependency — what it's needed for
+- ...
 
-## 3. Alternatives
+## Risks & Assumptions
 
-[A bullet point list of any alternative approaches that were considered and why they were not chosen. This helps to provide context and rationale for the chosen approach.]
+- Risk or assumption — impact if wrong
+- ...
 
-- **ALT-001**: Alternative approach 1
-- **ALT-002**: Alternative approach 2
+## Open Questions *(if any)*
 
-## 4. Dependencies
+[Questions that surfaced during planning but couldn't be resolved without more input.]
 
-[List any dependencies that need to be addressed, such as libraries, frameworks, or other components that the plan relies on.]
+- Question — why it matters for the plan
+- ...
 
-- **DEP-001**: Dependency 1
-- **DEP-002**: Dependency 2
+## References
 
-## 5. Files
-
-[List the files that will be affected by the feature or refactoring task.]
-
-- **FILE-001**: Description of file 1
-- **FILE-002**: Description of file 2
-
-## 6. Testing
-
-[List the tests that need to be implemented to verify the feature or refactoring task. This section defines what tests must exist — §7 Evals defines how to run them and what output proves they pass.]
-
-- **TEST-001**: Description of test 1
-- **TEST-002**: Description of test 2
-
-## 7. Evals
-
-[Consolidated evaluation criteria across all phases. This section is the single source of truth for proving the implementation is correct and complete. Fill in the "Actual" column during or after execution.]
-
-### 7.1 Metrics
-
-| Eval ID | Phase | Metric | Target | Actual | Status |
-|---------|-------|--------|--------|--------|--------|
-| EVAL-001 | Phase 1 | [Metric description] | [Target value] | | ⬜ |
-| EVAL-002 | Phase 1 | [Metric description] | [Target value] | | ⬜ |
-| EVAL-003 | Phase 2 | [Metric description] | [Target value] | | ⬜ |
-| EVAL-004 | Phase 2 | [Metric description] | [Target value] | | ⬜ |
-
-> Status legend: ⬜ Not run · ✅ Passed · ❌ Failed
-
-### 7.2 Expected Eval Outputs
-
-[For each eval, the exact command to execute and the exact output that must be observed. These outputs serve as the definitive proof of a correct implementation.]
-
-**EVAL-001 — [Metric name]**
-```
-# Run
-[exact command]
-
-# Expected output
-[exact terminal/log output that must be observed]
-```
-
-**EVAL-002 — [Metric name]**
-```
-# Run
-[exact command]
-
-# Expected output
-[exact terminal/log output that must be observed]
-```
-
-**EVAL-003 — [Metric name]**
-```
-# Run
-[exact command]
-
-# Expected output
-[exact terminal/log output that must be observed]
-```
-
-**EVAL-004 — [Metric name]**
-```
-# Run
-[exact command]
-
-# Expected output
-[exact terminal/log output that must be observed]
-```
-
-## 8. Risks & Assumptions
-
-[List any risks or assumptions related to the implementation of the plan.]
-
-- **RISK-001**: Risk 1
-- **ASSUMPTION-001**: Assumption 1
-
-## 9. Related Specifications / Further Reading
-
-[Link to related spec 1]
-[Link to relevant external documentation]
+[Links to specs, ADRs, docs, stories.]
 ```
