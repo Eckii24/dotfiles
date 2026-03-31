@@ -20,6 +20,7 @@ Write for an executor (AI agent or human) who has zero prior context. Be explici
 - Define domain terms the first time you use them.
 - Include examples and edge cases where behavior isn't obvious.
 - Prefer structured formats (tables, lists, code blocks) over prose for parseable content.
+- Capture rationale, tradeoffs, and unresolved questions in a form that can be copied into `.ai/current-work.md` without re-reading the whole conversation.
 
 ## Before writing: interview or clarify
 
@@ -42,6 +43,21 @@ Match the spec's weight to the work's complexity:
 | **Small** (bugfix, config, single behavior) | Purpose, requirements, acceptance criteria. Skip interfaces, dependencies, and rationale unless non-obvious. |
 | **Medium** (feature, integration) | Full spec with interfaces, acceptance criteria, examples. Include dependencies and rationale when choices aren't obvious. |
 | **Large** (system, architecture, multi-team) | Thorough spec with all sections. Definitions, detailed interfaces, edge cases, and explicit rationale are essential. |
+
+## Integration with `tracked-work` and `project-memory`
+
+If tracked feature work is active, use `tracked-work` as the source of truth for `.ai/current-work.md` structure and feature artifact conventions.
+
+Write the spec so it supports the feature anchor without becoming the anchor itself:
+- make constraints easy to lift into `.ai/current-work.md`
+- state non-obvious decisions and rationale clearly
+- separate rejected alternatives from still-open questions
+- keep durable decisions easy to promote later via `project-memory` into project memory or ADRs
+
+## See also
+
+- `tracked-work` — active feature anchor and tracked feature artifacts
+- `project-memory` — durable memory and promotion rules
 
 ## Template
 
@@ -115,7 +131,7 @@ tags: [optional, e.g. feature, api, infrastructure, migration]
 
 ## Rationale & Context *(if relevant)*
 
-[Why these requirements exist. What alternatives were considered. What tradeoffs were made. Include when the reasoning isn't obvious from the requirements alone.]
+[Why these requirements exist. What alternatives were considered. What tradeoffs were made. Write this so future sessions can reuse the reasoning quickly and promote major decisions later into ADRs when needed.]
 
 ## Open Questions *(if any)*
 

@@ -42,9 +42,25 @@ Every phase must end with an eval gate. An eval gate contains:
 
 Evals are the proof. If you can't define how to verify a phase is done, the phase isn't well-defined enough.
 
+## Integration with `tracked-work` and `project-memory`
+
+If tracked feature work is active, use `tracked-work` as the source of truth for `.ai/current-work.md` structure, feature artifact conventions, archive behavior, and promotion review.
+
+Use this plan for **execution structure**, not as the running context record:
+- record phase learnings, major decisions, and restart state in `.ai/current-work.md`
+- keep project memory read-mostly during implementation
+- use `project-memory` at feature completion to decide what gets promoted into durable memory or ADRs
+
 ## Accumulated learnings
 
 When a plan has multiple phases, later phases may depend on discoveries from earlier ones. If Phase 1 reveals patterns, conventions, or constraints that affect Phase 2, note them as **Learnings** at the end of the phase so the executor carries that context forward.
+
+If tracked work is active, sync those learnings into `.ai/current-work.md` following `tracked-work` conventions.
+
+## See also
+
+- `tracked-work` — active feature anchor, artifact paths, archive, promotion review
+- `project-memory` — durable project memory and promotion criteria
 
 ## Template
 
@@ -97,7 +113,7 @@ $ [exact command]
 
 #### Learnings *(if any)*
 
-[Patterns, conventions, or constraints discovered during this phase that affect later phases.]
+[Patterns, conventions, constraints, or decisions discovered during this phase that affect later phases. If the work is tracked, sync these into `.ai/current-work.md`.]
 
 ### Phase 2 — [Goal of this phase]
 
