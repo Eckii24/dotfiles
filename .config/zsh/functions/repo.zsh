@@ -7,6 +7,7 @@ function repo() {
   local mode="interactive"  # modes: interactive, list, search, name
   local search_query=""
   local repo_name_arg=""
+  local return_path=false
 
   # Parse parameters
   local args=()
@@ -24,6 +25,10 @@ function repo() {
       -c|--command)
         command_to_run="$2"
         shift 2
+        ;;
+      --path)
+        return_path=true
+        shift
         ;;
       --list)
         mode="list"
@@ -72,7 +77,12 @@ OPTIONS
       Select a repository by its exact name (case-insensitive) and cd into it,
       cloning first if the local folder does not exist yet. No fzf required.
       Combine with --command to run a shell command inside the repo instead of
-      changing directory.
+      changing directory, or with --path to print the local repository path.
+
+  --path
+      Ensure the selected repository exists locally, then print its absolute
+      path to stdout without changing directory. Compatible with --name and
+      interactive mode. Cannot be combined with --command.
 
   -c, --command <cmd>
       Shell command to run inside the repository folder. When given, the
@@ -108,6 +118,9 @@ EXAMPLES
   # Navigate to a repo by name (clones if necessary)
   repo --name my-service-api
 
+  # Print the local path without cd-ing
+  repo --name my-service-api --path
+
   # Run a command inside a repo without cd-ing
   repo --name my-service-api --command "git status"
   repo --name my-service-api -c "git log --oneline -10"
@@ -125,8 +138,9 @@ LLM USAGE GUIDE
 
   2. Pick the exact name from the output.
 
-  3. Navigate or run a command:
+  3. Navigate, print the local path, or run a command:
        repo --name <exact-name>
+       repo --name <exact-name> --path
        repo --name <exact-name> --command "<shell-cmd>"
 
   If REPO_PATH is not set, pass --repo-path <dir> explicitly.
@@ -135,7 +149,7 @@ EOF
         return 0
         ;;
       -* )
-        echo "Unknown parameter: $1"
+        echo "Unknown parameter: $1" >&2
         return 1
         ;;
       * )
@@ -150,10 +164,19 @@ EOF
     pre_query="${args[1]}"
   fi
 
+  if [[ "$return_path" == true && -n "$command_to_run" ]]; then
+    echo "Error: --path cannot be combined with --command." >&2
+    return 1
+  fi
+
   # Check if repo_path is set (not needed for list/search)
   if [[ "$mode" != "list" && "$mode" != "search" && -z "$repo_path" ]]; then
-    echo "Error: REPO_PATH is not set and --repo-path not provided."
+    echo "Error: REPO_PATH is not set and --repo-path not provided." >&2
     return 1
+  fi
+
+  if [[ -n "$repo_path" ]]; then
+    repo_path="${repo_path:A}"
   fi
 
   # Handle --no-cache: remove cache file if it exists
@@ -167,11 +190,11 @@ EOF
     mkdir -p "$cache_dir"
 
     # Run az repos list command and save to cache
-    echo "Fetching repository list..."
+    echo "Fetching repository list..." >&2
     az repos list --organization $AZURE_DEVOPS_ORG_URL --project $AZURE_DEVOPS_DEFAULT_PROJECT --output tsv --query '[].{Name:name,SSHUrl:sshUrl}' > "$cache_file"
 
     if [[ $? -ne 0 ]]; then
-      echo "Error: Failed to fetch repository list."
+      echo "Error: Failed to fetch repository list." >&2
       return 1
     fi
   fi
@@ -187,27 +210,27 @@ EOF
   # --search: print repository names matching query (case-insensitive)
   if [[ "$mode" == "search" ]]; then
     if [[ -z "$search_query" ]]; then
-      echo "Error: --search requires a query argument."
+      echo "Error: --search requires a query argument." >&2
       return 1
     fi
-    cut -f1 "$cache_file" | grep -i "$search_query"
+    cut -f1 "$cache_file" | grep -iF -- "$search_query"
     return 0
   fi
 
   # --name: select repository by exact name (case-insensitive)
   if [[ "$mode" == "name" ]]; then
     if [[ -z "$repo_name_arg" ]]; then
-      echo "Error: --name requires a repository name argument."
+      echo "Error: --name requires a repository name argument." >&2
       return 1
     fi
     if [[ -z "$repo_path" ]]; then
-      echo "Error: REPO_PATH is not set and --repo-path not provided."
+      echo "Error: REPO_PATH is not set and --repo-path not provided." >&2
       return 1
     fi
     local matched_line
-    matched_line=$(grep -i "^${repo_name_arg}"$'\t' "$cache_file" | head -n1)
+    matched_line=$(awk -F $'\t' -v name="$repo_name_arg" 'tolower($1) == tolower(name) { print; exit }' "$cache_file")
     if [[ -z "$matched_line" ]]; then
-      echo "Error: No repository found matching name '${repo_name_arg}'."
+      echo "Error: No repository found matching name '${repo_name_arg}'." >&2
       return 1
     fi
     local repo_name=$(echo "$matched_line" | cut -f1)
@@ -215,15 +238,17 @@ EOF
     local repo_folder="$repo_path/$repo_name"
 
     if [[ ! -d "$repo_folder" ]]; then
-      echo "Cloning repository: $repo_name"
+      echo "Cloning repository: $repo_name" >&2
       git clone "$repo_url" "$repo_folder"
       if [[ $? -ne 0 ]]; then
-        echo "Error: Failed to clone repository."
+        echo "Error: Failed to clone repository." >&2
         return 1
       fi
     fi
 
-    if [[ -n "$command_to_run" ]]; then
+    if [[ "$return_path" == true ]]; then
+      printf '%s\n' "$repo_folder"
+    elif [[ -n "$command_to_run" ]]; then
       (
         cd "$repo_folder" || exit 1
         eval "$command_to_run"
@@ -244,7 +269,7 @@ EOF
   fi
 
   if [[ -z "$selected_repo" ]]; then
-    echo "No repository selected."
+    echo "No repository selected." >&2
     return 1
   fi
 
@@ -255,17 +280,19 @@ EOF
 
   # Check if folder exists in repo_path
   if [[ ! -d "$repo_folder" ]]; then
-    echo "Cloning repository: $repo_name"
+    echo "Cloning repository: $repo_name" >&2
     git clone "$repo_url" "$repo_folder"
 
     if [[ $? -ne 0 ]]; then
-      echo "Error: Failed to clone repository."
+      echo "Error: Failed to clone repository." >&2
       return 1
     fi
   fi
 
   # Execute command if not "cd"
-  if [[ -n "$command_to_run" ]]; then
+  if [[ "$return_path" == true ]]; then
+    printf '%s\n' "$repo_folder"
+  elif [[ -n "$command_to_run" ]]; then
     (
       cd "$repo_folder" || exit 1
       eval "$command_to_run"
