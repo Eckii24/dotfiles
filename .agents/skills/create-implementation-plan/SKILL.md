@@ -7,7 +7,7 @@ description: 'Create a new implementation plan file for new features, refactorin
 
 Create an implementation plan for `${input:PlanPurpose}`.
 
-Save the plan to the output path provided in the task. If no explicit path is given, follow `tracked-work` skill conventions.
+Save the plan to the output path provided in the task. If no explicit path is given, follow `project-memory` skill conventions.
 
 ## What makes a good plan
 
@@ -42,25 +42,21 @@ Every phase must end with an eval gate. An eval gate contains:
 
 Evals are the proof. If you can't define how to verify a phase is done, the phase isn't well-defined enough.
 
-## Integration with `tracked-work` and `project-memory`
+## Integration with `project-memory`
 
-If tracked feature work is active, use `tracked-work` as the source of truth for `.ai/current-work.md` structure, feature artifact conventions, archive behavior, and promotion review.
+If tracked feature work is active, follow `project-memory` conventions for `.ai/current-work.md` structure, artifact paths, and promotion review.
 
-Use this plan for **execution structure**, not as the running context record:
-- record phase learnings, major decisions, and restart state in `.ai/current-work.md`
-- keep project memory read-mostly during implementation
-- use `project-memory` at feature completion to decide what gets promoted into durable memory or ADRs
+The plan is for **execution structure** — not the running context record. Record phase learnings, major decisions, and restart state in `.ai/current-work.md` instead.
 
 ## Accumulated learnings
 
 When a plan has multiple phases, later phases may depend on discoveries from earlier ones. If Phase 1 reveals patterns, conventions, or constraints that affect Phase 2, note them as **Learnings** at the end of the phase so the executor carries that context forward.
 
-If tracked work is active, sync those learnings into `.ai/current-work.md` following `tracked-work` conventions.
+If tracked work is active, sync those learnings into `.ai/current-work.md` following `project-memory` conventions.
 
 ## See also
 
-- `tracked-work` — active feature anchor, artifact paths, archive, promotion review
-- `project-memory` — durable project memory and promotion criteria
+- `project-memory` — project memory, feature anchor, tracked work lifecycle, promotion review
 
 ## Template
 

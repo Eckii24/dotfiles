@@ -7,7 +7,7 @@ description: 'Create a new specification file for the solution, optimized for Ge
 
 Create a specification for `${input:SpecPurpose}`.
 
-Save the spec to the output path provided in the task. If no explicit path is given, follow `tracked-work` skill conventions.
+Save the spec to the output path provided in the task. If no explicit path is given, follow `project-memory` skill conventions.
 
 ## What makes a good spec
 
@@ -44,20 +44,19 @@ Match the spec's weight to the work's complexity:
 | **Medium** (feature, integration) | Full spec with interfaces, acceptance criteria, examples. Include dependencies and rationale when choices aren't obvious. |
 | **Large** (system, architecture, multi-team) | Thorough spec with all sections. Definitions, detailed interfaces, edge cases, and explicit rationale are essential. |
 
-## Integration with `tracked-work` and `project-memory`
+## Integration with `project-memory`
 
-If tracked feature work is active, use `tracked-work` as the source of truth for `.ai/current-work.md` structure and feature artifact conventions.
+If tracked feature work is active, follow `project-memory` conventions for `.ai/current-work.md` structure and feature artifact paths.
 
 Write the spec so it supports the feature anchor without becoming the anchor itself:
 - make constraints easy to lift into `.ai/current-work.md`
 - state non-obvious decisions and rationale clearly
 - separate rejected alternatives from still-open questions
-- keep durable decisions easy to promote later via `project-memory` into project memory or ADRs
+- keep durable decisions easy to promote later into project memory or ADRs
 
 ## See also
 
-- `tracked-work` — active feature anchor and tracked feature artifacts
-- `project-memory` — durable memory and promotion rules
+- `project-memory` — project memory, feature anchor, tracked work lifecycle, promotion review
 
 ## Template
 

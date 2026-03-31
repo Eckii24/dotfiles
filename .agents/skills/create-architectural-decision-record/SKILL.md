@@ -16,7 +16,7 @@ Create an ADR when a decision should outlive the current feature and be easy to 
 - rejects alternatives that would otherwise be re-proposed repeatedly
 - deserves formal visibility beyond `.ai/current-work.md`
 
-For decisions that are still evolving during implementation, keep them in `.ai/current-work.md` first. Use `tracked-work` and `project-memory` to decide when the decision is stable enough to promote into an ADR.
+For decisions that are still evolving during implementation, keep them in `.ai/current-work.md` first. Use the `project-memory` skill to decide when the decision is stable enough to promote into an ADR.
 
 ## Inputs
 
@@ -28,15 +28,13 @@ For decisions that are still evolving during implementation, keep them in `.ai/c
 ## Input Validation
 If any of the required inputs are not provided or cannot be determined from the conversation history, ask the user to provide the missing information before proceeding with ADR generation.
 
-If `.ai/current-work.md` or related feature artifacts exist, read them before drafting the ADR. Treat them as source material for the original rationale, rejected alternatives, constraints, and consequences instead of inventing that context from memory.
+## Integration with `project-memory`
 
-## Integration with `tracked-work` and `project-memory`
+If the decision originated in tracked feature work, read `.ai/current-work.md` and related artifacts first. Treat them as source material for the original rationale, rejected alternatives, constraints, and consequences.
 
-If the decision originated in tracked feature work, use `tracked-work` as the source of truth for the feature record and artifact set.
-
-Use `project-memory` to distinguish:
+Follow `project-memory` conventions to distinguish:
 - active feature reasoning that should stay in the feature record
-- durable project decisions that should be promoted and preserved broadly
+- durable project decisions that should be promoted into an ADR
 
 ## Requirements
 
@@ -52,8 +50,7 @@ The ADR must be saved in the `/docs/adr/` directory using the naming convention:
 
 ## See also
 
-- `tracked-work` — feature anchor, artifact context, promotion review
-- `project-memory` — durable memory and promotion criteria
+- `project-memory` — project memory, feature anchor, tracked work lifecycle, promotion review
 
 ## Required Documentation Structure
 

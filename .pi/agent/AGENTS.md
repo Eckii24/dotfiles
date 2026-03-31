@@ -2,10 +2,9 @@
 - If you have open questions, always use the `questionnaire` tool before you start any implementation.
 - If you still make assumptions, write them down in the implementation and explain why you made those assumptions.
 
-# Tracked Work
+# Project Memory & Tracked Work
 - If `.ai/current-work.md` exists, read it before substantial repo work and continue from it.
-- For tracked work conventions (lifecycle, slugs, artifacts, archive), use the `tracked-work` skill.
-- For durable cross-session memory (conventions, pitfalls, decisions), use the `project-memory` skill.
+- For tracked work conventions (lifecycle, slugs, artifacts, archive) and durable cross-session memory (conventions, pitfalls, decisions), use the `project-memory` skill.
 
 # Sub Agents
 - Use sub-agents for context management by delegating tasks.
