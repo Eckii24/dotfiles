@@ -27,11 +27,11 @@ Prefer a repo-root `.ai/` folder:
   conventions.md     # coding, testing, workflow rules
   pitfalls.md        # recurring gotchas with root causes and fixes
   decisions/         # YYYY-MM-DD-short-title.md — durable decisions with rationale
-  current-work.md    # active feature anchor (when tracked work is active)
-  <slug>-spec.md     # feature spec (when needed)
-  <slug>-plan.md     # feature plan (when needed)
-  <slug>-review.md   # feature review (when needed)
-  archive/           # completed feature snapshots
+  current-work.md    # active feature anchor
+  <slug>-spec.md     # optional active feature spec
+  <slug>-plan.md     # optional active feature plan
+  <slug>-review.md   # optional active feature review
+  archive/           # archived feature snapshots
   scratchpad.md      # optional, temporary — not authoritative
 ```
 
@@ -168,9 +168,17 @@ For a quick question or single-session fix, skip tracking. A few decision bullet
 
 ### Creating `current-work.md`
 
-Create `.ai/current-work.md` when starting a new tracked feature. If one already exists for a different feature, ask the user before replacing it. Keep exactly one active feature at a time.
+Create `.ai/current-work.md` when starting a new tracked feature. If one already exists for a different feature, ask the user before replacing it.
 
-Mark the previous `current-work.md` as done at the top before starting new tracked work.
+Keep only one tracked feature in top-level `.ai/`:
+- `.ai/current-work.md`
+- optional `.ai/<slug>-spec.md`
+- optional `.ai/<slug>-plan.md`
+- optional `.ai/<slug>-review.md`
+
+All top-level tracked-work files must use the same slug.
+
+When starting a new tracked feature, mark the previous `current-work.md` as done and archive the previous feature's `spec/plan/review` files into `.ai/archive/` before creating new ones.
 
 ### Lifecycle
 
@@ -229,7 +237,7 @@ Derive from the feature title: lowercase, hyphenated, concise (e.g. `auth-refres
 
 ### Feature artifacts
 
-Named by slug alongside `current-work.md`:
+Named by slug alongside `current-work.md` while the feature is active:
 - `.ai/<slug>-spec.md`
 - `.ai/<slug>-plan.md`
 - `.ai/<slug>-review.md`
@@ -273,14 +281,13 @@ Always tell the user what was promoted, what was archived only, and where each a
 
 ## Archive
 
-Move completed feature artifacts to `.ai/archive/` with dated prefixes. Include the final `current-work.md` snapshot so the feature anchor survives closure.
+Move completed or replaced tracked-work artifacts to `.ai/archive/` with dated prefixes. Include the final `current-work.md` snapshot so the feature anchor survives closure.
 
 Examples:
 - `.ai/archive/YYYY-MM-DD-<slug>-current-work.md`
 - `.ai/archive/YYYY-MM-DD-<slug>-spec.md`
 - `.ai/archive/YYYY-MM-DD-<slug>-plan.md`
-
-Leave `current-work.md` ready to be replaced by the next feature.
+- `.ai/archive/YYYY-MM-DD-<slug>-review.md`
 
 ---
 
