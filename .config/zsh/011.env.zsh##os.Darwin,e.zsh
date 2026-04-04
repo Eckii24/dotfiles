@@ -14,3 +14,6 @@ export KARAKEEP_TOKEN="op://Private/Karakeep/password"
 export TASKSERVER_HOST="op://Private/Taskwarrior/Host"
 export TASKSERVER_ENCRYPTION_SECRET="op://Private/Taskwarrior/Secret"
 export TASKSERVER_CLIENT_ID="op://Private/Taskwarrior/ClientId"
+
+export COPILOT_BASE="githubcopilot.com"
+export COPILOT_API_BASE="https://api.githubcopilot.com"

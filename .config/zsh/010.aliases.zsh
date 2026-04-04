@@ -13,9 +13,8 @@ alias tasksync='gitsync $TASKDATA'
 alias allsync='wikisync && tasksync'
 
 # AI related stuff
-alias ai='CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
-alias db='nvim -c "set previewheight=25" +"DBUI"'
-alias update-copilot-instructions='cp /home/vimateck/Development/Repos/Notes/p0-rules.instructions.md /mnt/c/Users/vimateck/AppData/Roaming/Code/User/prompts/'
+alias ai='OM CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
+alias db='OM nvim -c "set previewheight=25" +"DBUI"'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
@@ -43,3 +42,5 @@ alias -g W='| wc -l'
 alias -g NE='2>/dev/null'
 alias -g DN='>/dev/null'
 alias -g NUL='>/dev/null 2>&1'
+alias -g O='op run --'
+alias -g OM='op run --no-masking --'
