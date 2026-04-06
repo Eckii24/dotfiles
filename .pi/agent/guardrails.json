@@ -15,7 +15,9 @@
     "allowWrite": [
       "./**",
       "/tmp/**",
-      "**/.ai/**"
+      "**/.ai/**",
+      "~/.agents/**",
+      "~/.pi/**"
     ],
     "denyWrite": [
       "**/.env",
