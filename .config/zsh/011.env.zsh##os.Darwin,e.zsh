@@ -7,3 +7,10 @@ export HERD_PHP_83_INI_SCAN_DIR="$HOME/Library/Application Support/Herd/config/p
 export HERD_PHP_74_INI_SCAN_DIR="$HOME/Library/Application Support/Herd/config/php/74/"
 
 export PATH
+
+export GEMINI_API_KEY="op://Private/GEMINI_API_KEY/password"
+export KARAKEEP_HOST="op://Private/Karakeep/Host"
+export KARAKEEP_TOKEN="op://Private/Karakeep/password"
+export TASKSERVER_HOST="op://Private/Taskwarrior/Host"
+export TASKSERVER_ENCRYPTION_SECRET="op://Private/Taskwarrior/Secret"
+export TASKSERVER_CLIENT_ID="op://Private/Taskwarrior/ClientId"
