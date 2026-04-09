@@ -186,7 +186,7 @@ return {
             prompts = {
               {
                 role = "user",
-                content = [[You are an @{agent} with access to #{context}. The current project structure is #{ls}.
+                content = [[You are an @{agent} with access to #{buffer}. The current project structure is #{ls}.
 
 ]],
               },
