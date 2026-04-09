@@ -3,7 +3,7 @@ description: Implement → review → fix → re-review for a tracked feature
 ---
 
 ## Tracked Work
-- Follow the conventions in the `tracked-work` skill.
+- Follow the conventions in the `project-memory` skill.
 - This prompt produces: `.ai/<slug>-review.md`.
 
 ## Default review policy

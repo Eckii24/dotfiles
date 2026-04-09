@@ -8,7 +8,7 @@ You are the **orchestrator**. Keep your own work light: coordinate, delegate, su
 Rough idea: $@
 
 ## Tracked Work
-- Follow the conventions in the `tracked-work` skill.
+- Follow the conventions in the `project-memory` skill.
 - This prompt produces: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
 
 ## Default review policy
