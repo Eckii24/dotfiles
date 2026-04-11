@@ -74,8 +74,7 @@ function formatToolCall(
 	switch (toolName) {
 		case "bash": {
 			const command = (args.command as string) || "...";
-			const preview = command.length > 60 ? `${command.slice(0, 60)}...` : command;
-			return themeFg("muted", "$ ") + themeFg("toolOutput", preview);
+			return themeFg("muted", "$ ") + themeFg("toolOutput", command);
 		}
 		case "read": {
 			const rawPath = (args.file_path || args.path || "...") as string;
@@ -123,8 +122,7 @@ function formatToolCall(
 		}
 		default: {
 			const argsStr = JSON.stringify(args);
-			const preview = argsStr.length > 50 ? `${argsStr.slice(0, 50)}...` : argsStr;
-			return themeFg("accent", toolName) + themeFg("dim", ` ${preview}`);
+			return themeFg("accent", toolName) + themeFg("dim", ` ${argsStr}`);
 		}
 	}
 }
@@ -679,13 +677,12 @@ export default function (pi: ExtensionAPI) {
 					const step = args.chain[i];
 					// Clean up {previous} placeholder for display
 					const cleanTask = step.task.replace(/\{previous\}/g, "").trim();
-					const preview = cleanTask.length > 40 ? `${cleanTask.slice(0, 40)}...` : cleanTask;
 					text +=
 						"\n  " +
 						theme.fg("muted", `${i + 1}.`) +
 						" " +
 						theme.fg("accent", step.agent) +
-						theme.fg("dim", ` ${preview}`);
+						theme.fg("dim", ` ${cleanTask}`);
 				}
 				if (args.chain.length > 3) text += `\n  ${theme.fg("muted", `... +${args.chain.length - 3} more`)}`;
 				return new Text(text, 0, 0);
@@ -696,19 +693,18 @@ export default function (pi: ExtensionAPI) {
 					theme.fg("accent", `parallel (${args.tasks.length} tasks)`) +
 					theme.fg("muted", ` [${scope}]`);
 				for (const t of args.tasks.slice(0, 3)) {
-					const preview = t.task.length > 40 ? `${t.task.slice(0, 40)}...` : t.task;
-					text += `\n  ${theme.fg("accent", t.agent)}${theme.fg("dim", ` ${preview}`)}`;
+					text += `\n  ${theme.fg("accent", t.agent)}${theme.fg("dim", ` ${t.task}`)}`;
 				}
 				if (args.tasks.length > 3) text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
 				return new Text(text, 0, 0);
 			}
 			const agentName = args.agent || "...";
-			const preview = args.task ? (args.task.length > 60 ? `${args.task.slice(0, 60)}...` : args.task) : "...";
+			const task = args.task || "...";
 			let text =
 				theme.fg("toolTitle", theme.bold("subagent ")) +
 				theme.fg("accent", agentName) +
 				theme.fg("muted", ` [${scope}]`);
-			text += `\n  ${theme.fg("dim", preview)}`;
+			text += `\n  ${theme.fg("dim", task)}`;
 			return new Text(text, 0, 0);
 		},
 

@@ -136,6 +136,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
+import { wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import { getConfigSourceInfo, loadConfig } from "./config.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";
@@ -227,17 +228,15 @@ async function confirmBashViolation(
   ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1],
   timeout: number,
 ): Promise<ConfirmResult> {
-  const violationLines = violations.map(v => {
+  const violationTexts = violations.map(v => {
     if (v.type === "denied_command") {
-      return `  • Denied command: ${v.command}`;
+      return `• Denied command: ${v.command}`;
     } else if (v.type === "file_read_detected") {
-      return `  • File read detected: ${v.details}`;
+      return `• File read detected: ${v.details}`;
     } else {
-      return `  • File write detected: ${v.details}`;
+      return `• File write detected: ${v.details}`;
     }
-  }).join("\n");
-
-  const truncatedCmd = truncate(command, 200);
+  });
 
   const result = await ctx.ui.custom<ConfirmResult>(
     (_tui, theme, _kb, done) => {
@@ -260,6 +259,16 @@ async function confirmBashViolation(
           const countdownText = remaining <= 30
             ? theme.fg("error", ` (${remaining}s)`)
             : theme.fg("dim", ` (${remaining}s)`);
+          const wrapWithPrefixes = (
+            text: string,
+            firstPrefix: string,
+            continuationPrefix: string,
+            style: (text: string) => string,
+          ) => {
+            const prefixWidth = Math.max(firstPrefix.length, continuationPrefix.length);
+            const wrapped = wrapTextWithAnsi(text, Math.max(1, width - prefixWidth));
+            return wrapped.map((line, index) => style(`${index === 0 ? firstPrefix : continuationPrefix}${line}`));
+          };
 
           const lines: string[] = [
             warningLine,
@@ -267,13 +276,20 @@ async function confirmBashViolation(
             warningLine,
             "",
             theme.fg("text", "  Command:"),
-            theme.fg("dim", `    ${truncatedCmd}`),
+            ...wrapWithPrefixes(command, "    ", "    ", (text) => theme.fg("dim", text)),
             "",
             theme.fg("text", "  Violations:"),
-            ...violationLines.split("\n").map(l => theme.fg("warning", l)),
+            ...violationTexts.flatMap((violation) =>
+              wrapWithPrefixes(violation, "  ", "    ", (text) => theme.fg("warning", text)),
+            ),
             "",
             accentLine,
-            `  ${theme.fg("accent", "y/Enter")} allow once  •  ${theme.fg("accent", "a")} allow for session  •  ${theme.fg("accent", "n/Esc")} deny`,
+            ...wrapWithPrefixes(
+              `${theme.fg("accent", "y/Enter")} allow once  •  ${theme.fg("accent", "a")} allow for session  •  ${theme.fg("accent", "n/Esc")} deny`,
+              "  ",
+              "  ",
+              (text) => text,
+            ),
             accentLine,
           ];
 
@@ -536,7 +552,3 @@ export default function (pi: ExtensionAPI) {
   });
 }
 
-function truncate(s: string, maxLen: number): string {
-  if (s.length <= maxLen) return s;
-  return s.slice(0, maxLen) + "...";
-}
