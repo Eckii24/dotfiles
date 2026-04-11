@@ -10,13 +10,14 @@
  *
  * Ralph compatibility:
  * - Ralph fresh-session loops intentionally create many `newSession()` calls.
- * - While Ralph is actively looping, it emits a temporary bypass token on
- *   `dirty-repo-guard:bypass`.
- * - The guard skips only `reason === "new"` checks while at least one bypass
- *   token is active, so manual `/new`, `/resume`, and `/fork` behavior stays
- *   unchanged outside the loop.
- * - Startup guarding uses `session_start`, which Ralph's repeated `newSession()`
- *   calls do not trigger, so the loop remains unaffected.
+ * - While Ralph is actively handing off to the next fresh session, it emits a
+ *   temporary bypass token on `dirty-repo-guard:bypass`.
+ * - The guard only trusts bypass events from `source === "ralph-loop"` and
+ *   skips only `reason === "new"` checks while at least one Ralph token is
+ *   active, so manual `/new`, `/resume`, and `/fork` behavior stays unchanged
+ *   outside the loop.
+ * - Startup guarding still runs on the initial `session_start`, while Ralph's
+ *   loop-owned bypass only affects the fresh-session handoff itself.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -109,7 +110,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.events.on(DIRTY_REPO_GUARD_BYPASS_EVENT, (data) => {
 		const payload = data as DirtyRepoGuardBypassEvent | undefined;
-		if (!payload?.token) return;
+		if (payload?.source !== "ralph-loop" || !payload.token) return;
 
 		if (payload.active) {
 			activeBypassTokens.add(payload.token);
@@ -141,6 +142,10 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_before_switch", async (event, ctx) => {
 		if (event.reason === "new" && activeBypassTokens.size > 0) {
+			const token = activeBypassTokens.values().next().value;
+			if (typeof token === "string") {
+				activeBypassTokens.delete(token);
+			}
 			return;
 		}
 

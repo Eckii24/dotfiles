@@ -18,7 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
+import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@mariozechner/pi-coding-agent";
 import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
 
 const DEFAULT_MAX_LOOPS = 25;
@@ -26,6 +26,8 @@ const SAME_SESSION_FLAG = "--same-session";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 const ITERATION_START_TIMEOUT_MS = 5_000;
 const ITERATION_START_POLL_MS = 25;
+const RALPH_STATE_ENTRY_TYPE = "ralph-loop-state";
+const RALPH_GLOBAL_STATE_KEY = "__piRalphLoopGlobalState";
 
 // No existing structured Ralph completion signal was found in this repo or Pi,
 // so Ralph uses an explicit marker instead of fuzzy natural-language matching.
@@ -36,6 +38,47 @@ type RalphLoopOptions = {
 	maxLoops: number;
 	useAgentFollowUps: boolean;
 	useFreshSessionPerIteration: boolean;
+};
+
+type RalphLoopStateStatus = "queued" | "running" | "done" | "aborted";
+
+type RalphLoopState = RalphLoopOptions & {
+	version: 1;
+	loopId: string;
+	iteration: number;
+	parentSession?: string;
+	status: RalphLoopStateStatus;
+};
+
+type RalphIterationOutcome = {
+	aborted: boolean;
+	done: boolean;
+};
+
+type RalphLoopStateRecord = {
+	state: RalphLoopState;
+	index: number;
+};
+
+type AssistantTextMessage = {
+	role: "assistant";
+	stopReason?: string;
+	content: Array<{ type: string; text?: string }>;
+};
+
+type RalphSessionControl = Pick<
+	ExtensionCommandContext,
+	"newSession" | "waitForIdle" | "isIdle" | "hasPendingMessages"
+>;
+
+type RalphActiveRuntime = {
+	pi: ExtensionAPI;
+	ctx: ExtensionContext;
+};
+
+type RalphGlobalState = {
+	control?: RalphSessionControl;
+	runtime?: RalphActiveRuntime;
 };
 
 export default function (pi: ExtensionAPI) {
@@ -50,9 +93,10 @@ export default function (pi: ExtensionAPI) {
 			} else {
 				pi.events.emit("notify:input-needed", { message: "Ralph loop — configuration needed" });
 
-				const result = await ctx.ui.custom<RalphLoopOptions | null>((_tui, theme, _kb, done) => new RalphLoopDialog(theme, done), {
-					overlay: true,
-				});
+				const result = await ctx.ui.custom<RalphLoopOptions | null>(
+					(_tui, theme, _kb, done) => new RalphLoopDialog(theme, done),
+					{ overlay: true },
+				);
 
 				if (!result) {
 					ctx.ui.notify("Ralph loop cancelled", "info");
@@ -67,8 +111,91 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			await runRalphLoop(pi, ctx, options);
+			if (options.useFreshSessionPerIteration) {
+				await startFreshSessionRalphLoop(pi, ctx, options);
+				return;
+			}
+
+			await runSameSessionRalphLoop(pi, ctx, options);
 		},
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		setActiveRalphRuntime(pi, ctx);
+
+		const currentStateRecord = getLatestRalphStateRecord(ctx);
+		const currentState = currentStateRecord?.state;
+		if (!currentState?.useFreshSessionPerIteration) return;
+
+		if (!getRalphSessionControl() && (currentState.status === "running" || currentState.status === "queued")) {
+			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...currentState, status: "aborted" });
+			clearFreshSessionStatus(ctx);
+			if (ctx.hasUI) {
+				ctx.ui.notify("⚠️ Ralph loop cannot resume automatically after a Pi restart; start /ralph again", "warning");
+			}
+			return;
+		}
+
+		syncFreshSessionStatus(ctx, currentState);
+		if (currentState.status !== "running") return;
+		if (!currentStateRecord || hasIterationPromptAfterState(ctx, currentStateRecord)) return;
+
+		setTimeout(() => {
+			const latestStateRecord = getLatestRalphStateRecord(ctx);
+			if (!latestStateRecord) return;
+			if (latestStateRecord.state.loopId !== currentState.loopId) return;
+			if (latestStateRecord.state.iteration !== currentState.iteration) return;
+			if (hasIterationPromptAfterState(ctx, latestStateRecord)) return;
+			startFreshIterationInCurrentSession(pi, currentState);
+		}, 0);
+	});
+
+	pi.on("agent_end", async (event, ctx) => {
+		const state = getLatestRalphState(ctx);
+		if (!state || !state.useFreshSessionPerIteration || state.status !== "running") return;
+
+		const finalAssistantMessage = getLatestAssistantMessage(event.messages);
+		if (!finalAssistantMessage) return;
+
+		const nextBaseState = { ...state };
+		const finalAssistantText = getAssistantText(finalAssistantMessage);
+
+		if (finalAssistantMessage.stopReason === "aborted") {
+			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "aborted" });
+			clearFreshSessionStatus(ctx);
+			if (ctx.hasUI) {
+				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${state.iteration}/${state.maxLoops}`, "warning");
+			}
+			return;
+		}
+
+		if (hasRalphDoneSignal(finalAssistantText)) {
+			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "done" });
+			clearFreshSessionStatus(ctx);
+			if (ctx.hasUI) {
+				ctx.ui.notify(
+					`✅ Ralph loop stopped early at iteration ${state.iteration}/${state.maxLoops} because the assistant emitted ${RALPH_DONE_MARKER}`,
+					"info",
+				);
+			}
+			return;
+		}
+
+		if (state.iteration >= state.maxLoops) {
+			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "done" });
+			clearFreshSessionStatus(ctx);
+			if (ctx.hasUI) {
+				ctx.ui.notify(`✅ Ralph loop completed all ${state.maxLoops} iterations`, "info");
+			}
+			return;
+		}
+
+		const nextState: RalphLoopState = {
+			...nextBaseState,
+			iteration: state.iteration + 1,
+			status: "running",
+		};
+		await openNextFreshSession(pi, ctx, nextState);
 	});
 }
 
@@ -123,66 +250,256 @@ function injectIterationControlMessage(
 	maxLoops: number,
 	useFreshSessionPerIteration: boolean,
 ): void {
-	pi.sendMessage(
-		{
-			customType: "ralph-loop-control",
-			content: buildIterationControlPrompt({ iteration, maxLoops, useFreshSessionPerIteration }),
-			display: true,
-			details: {
-				iteration,
-				maxLoops,
-				sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
-				doneMarker: RALPH_DONE_MARKER,
-			},
+	pi.sendMessage({
+		customType: "ralph-loop-control",
+		content: buildIterationControlPrompt({ iteration, maxLoops, useFreshSessionPerIteration }),
+		display: true,
+		details: {
+			iteration,
+			maxLoops,
+			sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+			doneMarker: RALPH_DONE_MARKER,
 		},
-	);
+	});
 }
 
-// --- Ralph Loop Logic ---
-
-async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
-	const { prompt, maxLoops, useAgentFollowUps, useFreshSessionPerIteration } = options;
-	const clearStatus = () => ctx.ui.setStatus("ralph-loop", undefined);
-	const updateStatus = (iteration: number, state: string) => {
-		ctx.ui.setStatus("ralph-loop", ctx.ui.theme.fg("accent", `🔁 Ralph [${iteration}/${maxLoops}] ${state}`));
+function getRalphGlobalState(): RalphGlobalState {
+	const globalState = globalThis as typeof globalThis & {
+		[RALPH_GLOBAL_STATE_KEY]?: RalphGlobalState;
 	};
-	const sessionModeLabel = useFreshSessionPerIteration ? "fresh session per iteration" : "same session (legacy)";
-	const promptModeLabel = useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
-	const dirtyRepoGuardBypassToken = useFreshSessionPerIteration ? randomUUID() : undefined;
+
+	if (!globalState[RALPH_GLOBAL_STATE_KEY]) {
+		globalState[RALPH_GLOBAL_STATE_KEY] = {};
+	}
+
+	return globalState[RALPH_GLOBAL_STATE_KEY]!;
+}
+
+function setRalphSessionControl(ctx: ExtensionCommandContext): void {
+	getRalphGlobalState().control = {
+		newSession: ctx.newSession,
+		waitForIdle: ctx.waitForIdle,
+		isIdle: ctx.isIdle,
+		hasPendingMessages: ctx.hasPendingMessages,
+	};
+}
+
+function getRalphSessionControl(): RalphSessionControl | undefined {
+	return getRalphGlobalState().control;
+}
+
+function setActiveRalphRuntime(pi: ExtensionAPI, ctx: ExtensionContext): void {
+	getRalphGlobalState().runtime = { pi, ctx };
+}
+
+function getActiveRalphRuntime(): RalphActiveRuntime | undefined {
+	return getRalphGlobalState().runtime;
+}
+
+function createInitialRalphState(ctx: ExtensionCommandContext, options: RalphLoopOptions): RalphLoopState {
+	return {
+		version: 1,
+		loopId: randomUUID(),
+		iteration: 1,
+		parentSession: ctx.sessionManager.getSessionFile(),
+		status: "running",
+		...options,
+	};
+}
+
+async function startFreshSessionRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
+	setRalphSessionControl(ctx);
 
 	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
 		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
 		await ctx.waitForIdle();
 	}
 
-	const parentSession = useFreshSessionPerIteration ? ctx.sessionManager.getSessionFile() : undefined;
-	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, ${sessionModeLabel}, ${promptModeLabel})`, "info");
+	const sessionModeLabel = "fresh session per iteration";
+	const promptModeLabel = options.useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
+	ctx.ui.notify(`🔁 Starting Ralph loop (${options.maxLoops} iterations, ${sessionModeLabel}, ${promptModeLabel})`, "info");
 
-	if (dirtyRepoGuardBypassToken) {
-		setDirtyRepoGuardBypass(pi, dirtyRepoGuardBypassToken, true);
+	const initialState = createInitialRalphState(ctx, options);
+	await openNextFreshSession(pi, ctx, initialState);
+}
+
+async function openNextFreshSession(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	state: RalphLoopState,
+): Promise<boolean> {
+	const control = getRalphSessionControl();
+	if (!control) {
+		clearFreshSessionStatus(ctx);
+		if (ctx.hasUI) {
+			ctx.ui.notify("⚠️ Ralph loop lost its session handoff controller; stopping loop", "warning");
+		}
+		return false;
 	}
+
+	syncFreshSessionStatus(ctx, state);
+	setDirtyRepoGuardBypass(pi, state.loopId, true);
+
+	try {
+		const result = await control.newSession({
+			...(state.parentSession ? { parentSession: state.parentSession } : {}),
+			setup: async (sessionManager) => {
+				sessionManager.appendCustomEntry(RALPH_STATE_ENTRY_TYPE, state);
+			},
+		});
+		if (result.cancelled) {
+			setDirtyRepoGuardBypass(pi, state.loopId, false);
+			clearFreshSessionStatus(ctx);
+			if (ctx.hasUI) {
+				ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${state.iteration}/${state.maxLoops}`, "warning");
+			}
+			return false;
+		}
+		const activeRuntime = getActiveRalphRuntime();
+		if (activeRuntime) {
+			const stateRecord = getLatestRalphStateRecord(activeRuntime.ctx);
+			syncFreshSessionStatus(activeRuntime.ctx, state);
+			if (!stateRecord || !hasIterationPromptAfterState(activeRuntime.ctx, stateRecord)) {
+				startFreshIterationInCurrentSession(activeRuntime.pi, state);
+			}
+		}
+		return true;
+	} catch (error) {
+		setDirtyRepoGuardBypass(pi, state.loopId, false);
+		throw error;
+	}
+}
+
+function startFreshIterationInCurrentSession(pi: ExtensionAPI, state: RalphLoopState): void {
+	const isAgentFollowUpIteration = state.useAgentFollowUps && state.iteration > 1;
+
+	injectIterationControlMessage(pi, state.iteration, state.maxLoops, true);
+	if (isAgentFollowUpIteration) {
+		pi.sendMessage(
+			{
+				customType: "ralph-loop",
+				content: state.prompt,
+				display: false,
+				details: {
+					iteration: state.iteration,
+					mode: "agent-followup",
+					sessionMode: "fresh",
+					loopId: state.loopId,
+				},
+			},
+			{ triggerTurn: true, deliverAs: "followUp" },
+		);
+		return;
+	}
+
+	pi.sendUserMessage(state.prompt);
+}
+
+function syncFreshSessionStatus(ctx: ExtensionContext, state: RalphLoopState): void {
+	if (!ctx.hasUI) return;
+
+	if (state.status === "done" || state.status === "aborted") {
+		clearFreshSessionStatus(ctx);
+		return;
+	}
+
+	const statusText =
+		state.status === "queued"
+			? "starting fresh session…"
+			: state.useAgentFollowUps && state.iteration > 1
+				? "fresh session, working with hidden trigger message…"
+				: "fresh session, working…";
+
+	ctx.ui.setStatus("ralph-loop", ctx.ui.theme.fg("accent", `🔁 Ralph [${state.iteration}/${state.maxLoops}] ${statusText}`));
+}
+
+function clearFreshSessionStatus(ctx: ExtensionContext): void {
+	if (!ctx.hasUI) return;
+	ctx.ui.setStatus("ralph-loop", undefined);
+}
+
+function getLatestRalphState(ctx: ExtensionContext): RalphLoopState | undefined {
+	return getLatestRalphStateRecord(ctx)?.state;
+}
+
+function getLatestRalphStateRecord(ctx: ExtensionContext): RalphLoopStateRecord | undefined {
+	return getLatestRalphStateRecordFromEntries(
+		ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: unknown }>,
+	);
+}
+
+function getLatestRalphStateRecordFromEntries(
+	entries: Array<{ type: string; customType?: string; data?: unknown }>,
+): RalphLoopStateRecord | undefined {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry.type !== "custom" || entry.customType !== RALPH_STATE_ENTRY_TYPE) continue;
+		if (isRalphLoopState(entry.data)) {
+			return { state: entry.data, index: i };
+		}
+	}
+	return;
+}
+
+function hasIterationPromptAfterState(ctx: ExtensionContext, stateRecord: RalphLoopStateRecord): boolean {
+	const entries = ctx.sessionManager.getEntries() as Array<{
+		type: string;
+		customType?: string;
+		message?: { role?: string };
+	}>;
+
+	return entries.slice(stateRecord.index + 1).some((entry) => {
+		if (entry.type === "message") {
+			return entry.message?.role === "user" || entry.message?.role === "assistant";
+		}
+		if (entry.type === "custom_message") {
+			return entry.customType === "ralph-loop";
+		}
+		return false;
+	});
+}
+
+function isRalphLoopState(value: unknown): value is RalphLoopState {
+	if (!value || typeof value !== "object") return false;
+	const state = value as Partial<RalphLoopState>;
+	return (
+		state.version === 1 &&
+		typeof state.loopId === "string" &&
+		typeof state.prompt === "string" &&
+		typeof state.maxLoops === "number" &&
+		typeof state.useAgentFollowUps === "boolean" &&
+		typeof state.useFreshSessionPerIteration === "boolean" &&
+		typeof state.iteration === "number" &&
+		(state.parentSession === undefined || typeof state.parentSession === "string") &&
+		(state.status === "queued" || state.status === "running" || state.status === "done" || state.status === "aborted")
+	);
+}
+
+// --- Same-session legacy Ralph loop ---
+
+async function runSameSessionRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, options: RalphLoopOptions) {
+	const { prompt, maxLoops, useAgentFollowUps } = options;
+	const clearStatus = () => ctx.ui.setStatus("ralph-loop", undefined);
+	const updateStatus = (iteration: number, state: string) => {
+		ctx.ui.setStatus("ralph-loop", ctx.ui.theme.fg("accent", `🔁 Ralph [${iteration}/${maxLoops}] ${state}`));
+	};
+	const promptModeLabel = useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
+
+	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
+		await ctx.waitForIdle();
+	}
+
+	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, same session (legacy), ${promptModeLabel})`, "info");
 
 	try {
 		for (let i = 1; i <= maxLoops; i++) {
-			if (useFreshSessionPerIteration) {
-				updateStatus(i, "starting fresh session…");
-				const result = await ctx.newSession(parentSession ? { parentSession } : undefined);
-				if (result.cancelled) {
-					ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${i}/${maxLoops}`, "warning");
-					return;
-				}
-			}
-
 			const isAgentFollowUpIteration = useAgentFollowUps && i > 1;
 			const workLabel = isAgentFollowUpIteration ? "working with hidden trigger message…" : "working…";
 			const branchEntryCountBeforeIteration = ctx.sessionManager.getBranch().length;
-			updateStatus(i, useFreshSessionPerIteration ? `fresh session, ${workLabel}` : workLabel);
+			updateStatus(i, workLabel);
 
-			// Default Ralph behavior now starts each iteration from a fresh session.
-			// Low-risk legacy mode can still reuse one session, and the optional
-			// hidden trigger-message mode still swaps away from user messages after
-			// the first iteration.
-			injectIterationControlMessage(pi, i, maxLoops, useFreshSessionPerIteration);
+			injectIterationControlMessage(pi, i, maxLoops, false);
 			if (isAgentFollowUpIteration) {
 				pi.sendMessage(
 					{
@@ -192,7 +509,7 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 						details: {
 							iteration: i,
 							mode: "agent-followup",
-							sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+							sessionMode: "same",
 						},
 					},
 					{ triggerTurn: true, deliverAs: "followUp" },
@@ -208,8 +525,6 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 			}
 
 			const iterationOutcome = getIterationOutcome(ctx, branchEntryCountBeforeIteration);
-
-			// Stop if the user aborted the active session turn (Ctrl+C).
 			if (iterationOutcome.aborted) {
 				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
 				return;
@@ -228,17 +543,9 @@ async function runRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandContext, opti
 
 		ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
 	} finally {
-		if (dirtyRepoGuardBypassToken) {
-			setDirtyRepoGuardBypass(pi, dirtyRepoGuardBypassToken, false);
-		}
 		clearStatus();
 	}
 }
-
-type RalphIterationOutcome = {
-	aborted: boolean;
-	done: boolean;
-};
 
 async function waitForIterationToFinish(
 	ctx: ExtensionCommandContext,
@@ -298,6 +605,20 @@ function getIterationOutcome(ctx: ExtensionCommandContext, previousEntryCount: n
 		aborted: false,
 		done: hasRalphDoneSignal(latestAssistantText),
 	};
+}
+
+function isAssistantTextMessage(message: unknown): message is AssistantTextMessage {
+	if (!message || typeof message !== "object") return false;
+	const candidate = message as Partial<AssistantTextMessage>;
+	return candidate.role === "assistant" && Array.isArray(candidate.content);
+}
+
+function getLatestAssistantMessage(messages: readonly unknown[]): AssistantTextMessage | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (isAssistantTextMessage(message)) return message;
+	}
+	return;
 }
 
 function getAssistantText(message: { content: Array<{ type: string; text?: string }> }): string {
