@@ -1,11 +1,12 @@
 // Input Notification Extension
 //
-// Sends macOS notifications and marks the tmux window whenever Pi needs
-// user input — after the agent finishes, when the questionnaire tool
-// fires, or when guardrails (or any other extension) emits the
-// "notify:input-needed" event on the shared event bus.
+// Sends macOS notifications, optionally POSTs sanitized ntfy messages, and
+// marks the tmux window whenever Pi needs user input — after the agent
+// finishes, when the questionnaire tool fires, or when guardrails (or any
+// other extension) emits the "notify:input-needed" event on the shared event bus.
 //
 // macOS:  osascript display notification with sound "Glass"
+// ntfy:   POST fixed safe strings to PI_NOTIFY_TOPIC when configured
 // tmux:   prepends 🔔 to the originating Pi window name (via TMUX_PANE)
 //
 // Reset:  on agent_start / input / questionnaire end / resolved event /
@@ -17,6 +18,8 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { exec, execSync } from "node:child_process";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const TMUX_FOCUS_POLL_MS = 1000;
 const TMUX_MARK_PREFIX = "🔔 ";
@@ -25,6 +28,36 @@ const TMUX_AUTO_RENAME_OPTION = "@pi_input_notify_auto_rename";
 const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
 const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
 const SUBAGENT_ENV = "PI_SUBAGENT";
+const NTFY_TOPIC_ENV = "PI_NOTIFY_TOPIC";
+const NTFY_DEFAULT_BASE_URL = "https://ntfy.sh";
+const NTFY_TITLE = "Pi Agent";
+const NTFY_DEFAULT_PRIORITY = "default";
+const NTFY_INTERACTION_PRIORITY = "urgent";
+
+type RemoteNotificationKind = "agent-finished" | "agent-asks-questions" | "test";
+
+const REMOTE_NOTIFICATION_MESSAGES: Record<RemoteNotificationKind, string> = {
+  "agent-finished": "Agent finished",
+  "agent-asks-questions": "Agent required interaction",
+  test: "Test notification",
+};
+
+function resolveNtfyPublishUrl(topic: string): URL | null {
+  const trimmed = topic.trim();
+  if (!trimmed) return null;
+
+  try {
+    // Assumption: PI_NOTIFY_TOPIC may be either a bare ntfy topic name or a
+    // full publish URL for self-hosted ntfy instances.
+    if (/^https?:\/\//i.test(trimmed)) {
+      return new URL(trimmed);
+    }
+
+    return new URL(`${NTFY_DEFAULT_BASE_URL}/${encodeURIComponent(trimmed)}`);
+  } catch {
+    return null;
+  }
+}
 
 export default function (pi: ExtensionAPI) {
   // ─── State ───────────────────────────────────────────────────────────
@@ -38,6 +71,8 @@ export default function (pi: ExtensionAPI) {
   const isTmux = !!process.env.TMUX;
   const tmuxPaneId = process.env.TMUX_PANE ?? null;
   const isSubagent = process.env[SUBAGENT_ENV] === "1";
+  const ntfyTopic = process.env[NTFY_TOPIC_ENV]?.trim() || null;
+  const ntfyPublishUrl = ntfyTopic ? resolveNtfyPublishUrl(ntfyTopic) : null;
 
   // ─── macOS Notification ──────────────────────────────────────────────
 
@@ -50,6 +85,44 @@ export default function (pi: ExtensionAPI) {
         { timeout: 5000 },
         () => {}, // fire-and-forget, ignore errors
       );
+    } catch {
+      // Fail silently
+    }
+  }
+
+  function sendNtfyNotification(kind: RemoteNotificationKind) {
+    if (ntfyPublishUrl === null) return;
+
+    // Never publish dynamic event data here — only fixed safe strings.
+    const message = REMOTE_NOTIFICATION_MESSAGES[kind];
+    const priority = kind === "agent-asks-questions" ? NTFY_INTERACTION_PRIORITY : NTFY_DEFAULT_PRIORITY;
+    const requestFn = ntfyPublishUrl.protocol === "http:" ? httpRequest : httpsRequest;
+
+    try {
+      const req = requestFn(
+        ntfyPublishUrl,
+        {
+          method: "POST",
+          timeout: 5000,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Length": Buffer.byteLength(message),
+            Title: NTFY_TITLE,
+            Priority: priority,
+          },
+        },
+        (res) => {
+          res.resume();
+        },
+      );
+
+      req.on("error", () => {
+        // Fail silently
+      });
+      req.on("timeout", () => {
+        req.destroy();
+      });
+      req.end(message);
     } catch {
       // Fail silently
     }
@@ -306,10 +379,13 @@ export default function (pi: ExtensionAPI) {
 
   // ─── Core ────────────────────────────────────────────────────────────
 
-  function triggerNotification(message: string) {
+  function triggerNotification(message: string, remoteKind?: RemoteNotificationKind) {
     if (notified) return; // debounce
     notified = true;
     sendMacOSNotification(withTmuxNotificationContext(message));
+    if (remoteKind) {
+      sendNtfyNotification(remoteKind);
+    }
     markTmuxWindow();
     startTmuxFocusWatcher();
   }
@@ -331,13 +407,13 @@ export default function (pi: ExtensionAPI) {
   // Agent finished → waiting for next prompt
   pi.on("agent_end", async () => {
     if (isSubagent) return;
-    triggerNotification("Agent finished — waiting for your input");
+    triggerNotification("Agent finished — waiting for your input", "agent-finished");
   });
 
   // Questionnaire tool started → will show a dialog
   pi.on("tool_execution_start", async (event) => {
     if (event.toolName === "questionnaire") {
-      triggerNotification("Questionnaire — your input is needed");
+      triggerNotification("Questionnaire — your input is needed", "agent-asks-questions");
     }
   });
 
@@ -349,8 +425,9 @@ export default function (pi: ExtensionAPI) {
 
   // Generic event bus integration — any extension can trigger a notification:
   //   pi.events.emit("notify:input-needed", { message: "..." })
+  // ntfy still only receives the fixed safe string "Agent required interaction".
   pi.events.on(NOTIFY_INPUT_NEEDED_EVENT, (data?: { message?: string }) => {
-    triggerNotification(data?.message || "Your input is needed");
+    triggerNotification(data?.message || "Your input is needed", "agent-asks-questions");
   });
 
   pi.events.on(NOTIFY_INPUT_RESOLVED_EVENT, () => {
@@ -380,7 +457,7 @@ export default function (pi: ExtensionAPI) {
         // Force a test notification regardless of debounce state
         const wasNotified = notified;
         notified = false;
-        triggerNotification("Test notification from Pi");
+        triggerNotification("Test notification from Pi", "test");
         ctx.ui.notify("✅ Test notification sent", "info");
         if (!wasNotified) {
           // Reset after a short delay so the test doesn't stick
@@ -394,6 +471,11 @@ export default function (pi: ExtensionAPI) {
       const lines = [
         t.fg("mdHeading", "[Input Notify]"),
         t.fg("dim", `  macOS:            osascript + sound "Glass"`),
+        t.fg("dim", `  ntfy topic:       ${ntfyTopic ?? "(disabled)"}`),
+        t.fg("dim", `  ntfy publish url: ${ntfyPublishUrl?.toString() ?? "(disabled)"}`),
+        t.fg("dim", `  ntfy payloads:    fixed safe strings only`),
+        t.fg("dim", `  ntfy title:       ${NTFY_TITLE}`),
+        t.fg("dim", `  ntfy priority:    interaction/input=${NTFY_INTERACTION_PRIORITY}, finished/test=${NTFY_DEFAULT_PRIORITY}`),
         t.fg("dim", `  tmux detected:    ${isTmux ? "yes" : "no"}`),
         t.fg("dim", `  tmux source pane: ${tmuxPaneId ?? "(unknown)"}`),
         t.fg("dim", `  tmux pane title:  ${getSourcePaneTitle() ?? "(unknown)"}`),
