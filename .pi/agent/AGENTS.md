@@ -1,6 +1,5 @@
 # Questions
 - If you have open questions, always use the `questionnaire` tool before you start any implementation.
-- Every question in the `questionnaire` tool must include a free-text option so the user can provide additional details or context beyond the predefined choices.
 - If you still make assumptions, write them down in the implementation and explain why you made those assumptions.
 
 # Project Memory & Tracked Work
