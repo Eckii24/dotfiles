@@ -56,6 +56,29 @@ EOF
     _log_debug() { [[ "$verbose" == true ]] && echo "[$FUNCTION_NAME] DEBUG: $1" >&2; }
     _error() { echo "[$FUNCTION_NAME] ERROR: $1" >&2; }
     
+    _resolve_secret_reference() {
+        local label="$1"
+        local value="$2"
+
+        if [[ -z "$value" || "$value" != op://* ]]; then
+            printf '%s' "$value"
+            return 0
+        fi
+
+        command -v op >/dev/null || {
+            echo "Error: 1Password CLI (op) is required to resolve ${label}." >&2
+            return 1
+        }
+
+        local resolved
+        resolved="$(op read --no-newline "$value" 2>/dev/null)" || {
+            echo "Error: Failed to resolve ${label} from 1Password: $value" >&2
+            return 1
+        }
+
+        printf '%s' "$resolved"
+    }
+    
     _slugify() {
         echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
     }
@@ -71,6 +94,9 @@ EOF
             -d "{\"tags\":[{\"tagId\":\"$tag_id\"}]}" \
             "$KARAKEEP_HOST/api/v1/bookmarks/$bookmark_id/tags" >/dev/null
     }
+
+    KARAKEEP_TOKEN_VAL="$(_resolve_secret_reference "KARAKEEP_TOKEN" "$KARAKEEP_TOKEN_VAL")" || return 1
+    KARAKEEP_HOST="$(_resolve_secret_reference "KARAKEEP_HOST" "$KARAKEEP_HOST")" || return 1
 
     # Fetch bookmarks
     _log_step "Fetching bookmarks..."
