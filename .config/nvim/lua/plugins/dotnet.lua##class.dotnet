@@ -295,7 +295,7 @@ return {
       formatters = {
         csharpier = {
           command = "csharpier",
-          args = { "format", "--write-stdout" },
+          args = { "format", "--stdin-path", "$FILENAME" },
         },
       },
     },
