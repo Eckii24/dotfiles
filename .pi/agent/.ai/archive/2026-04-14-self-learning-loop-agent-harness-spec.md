@@ -1,9 +1,11 @@
 ---
 title: Memory System for Pi Agent Harness
 date_created: 2026-04-11
-status: Review
-tags: feature, memory, agent-harness, profiles, learning, retrieval
+status: Historical
+tags: feature, memory, agent-harness, learning
 ---
+
+> **Historical reference only.** The system was simplified to 4 layers (session, working, learning, durable) on 2026-04-14. Profiles were merged into `AGENTS.md` and references were removed. See `.ai/README.md` for the current architecture.
 
 # Memory System for Pi Agent Harness
 
