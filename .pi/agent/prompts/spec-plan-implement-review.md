@@ -55,8 +55,13 @@ Rough idea: $@
 - Do NOT ask the user whether the review findings should be fixed by default — the default is to fix them.
 - Record each review/fix outcome in `.ai/current-work.md` and keep `.ai/<slug>-review.md` up to date when findings exist.
 
-### 4. Completion
-- Update `.ai/current-work.md` with final status, linked artifacts, changed files, and handoff notes.
+### 4. Optional learning analysis follow-up
+- When the implementation/review loop exposed reusable tactics, recurring failure patterns, or stable user/project preferences, surface `/learn` as an optional post-review step.
+- Cite the exact `.ai/` artifacts, changed files, and review findings that should feed the learning analysis.
+- Do not force `/learn` when there is no meaningful learning signal.
+
+### 5. Completion
+- Update `.ai/current-work.md` with final status, linked artifacts, changed files, handoff notes, and any recommended `/learn` follow-up.
 - Provide a concise final summary with:
   - current-work path
   - spec file path
