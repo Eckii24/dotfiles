@@ -26,11 +26,14 @@ Use the `subagent` tool with the `chain` parameter for each implementation/revie
    - Run another `subagent` chain: focused `worker` fix pass → `code-reviewer` verification pass.
    - Pass the exact review artifact path, changed files, and prior eval/test context into the fix pass.
    - Repeat the fix → review cycle until the latest review has no `Critical Issues` and no `Warnings`, or until user input is required via `questionnaire`.
-4. After the loop, create or update `.ai/current-work.md`:
-   - Link the latest review findings, changed files, `.ai/` artifact paths, and eval/test results.
+4. After the loop, optionally surface `/learn` as a post-review step when the implementation or review revealed reusable patterns, repeated mistakes, or profile-worthy preferences.
+   - Do not run `/learn` by default when there is no meaningful learning signal.
+   - If you recommend it, cite the exact review/current-work artifacts that should feed the learning analysis.
+5. After the loop, create or update `.ai/current-work.md`:
+   - Link the latest review findings, changed files, `.ai/` artifact paths, eval/test results, and any recommended `/learn` follow-up.
    - Record any remaining suggestions, assumptions, or follow-up items explicitly.
    - Leave the current step clear for the next session.
-5. Terminate only when one of these is true:
+6. Terminate only when one of these is true:
    - the latest review has no `Critical Issues` and no `Warnings`
    - the user explicitly accepts remaining findings
    - a blocker or ambiguity requires user input via `questionnaire`

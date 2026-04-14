@@ -20,19 +20,18 @@
  *
  * ── PARENT SIDE  (PI_SUBAGENT env var NOT set) ────────────────────────────────────
  *
- *   Intercepts tool calls via the `tool_call` event.  Two cases are handled:
+ *   Intercepts tool calls via the `tool_call` event.
  *
- *   a) `bash` tool — whenever the command is about to spawn a `pi` subprocess
- *      (detected by a conservative regex), it patches the command string in-place
- *      to export `PI_SUBAGENT=1` into the child's environment before the command runs.
+ *   a) `bash` tool — every agent-initiated bash command is patched in-place to export
+ *      `PI_SUBAGENT=1` before the command runs.  This deliberately covers not only
+ *      direct `pi ...` calls, but also indirect descendants such as `bun script.ts`
+ *      or `./wrapper.sh` that later spawn `pi`.  Those child `pi` processes are still
+ *      the result of one agent action triggered by one human message, so they must
+ *      preserve the subagent initiator semantics.
  *
- *   b) `subagent` tool — the built-in subagent extension spawns `pi` via Node's
- *      `spawn("pi", args, { shell: false })`, bypassing bash entirely.  It passes no
- *      explicit `env` to spawn(), so child processes inherit `process.env`.  When a
- *      `subagent` tool call is detected the handler sets `process.env.PI_SUBAGENT=1`
- *      on the parent process before the tool executes; every `pi` child spawned
- *      subsequently inherits the flag automatically.  The parent's own `isSubagent`
- *      flag is evaluated once at extension-load time and is unaffected by this mutation.
+ *   b) `subagent` tool — the built-in subagent extension now passes `PI_SUBAGENT=1`
+ *      explicitly in the child spawn environment, so no parent-process mutation is
+ *      needed here.
  *
  * ── SUBAGENT SIDE  (PI_SUBAGENT=1) ───────────────────────────────────────────────
  *
@@ -80,19 +79,15 @@ const AGENT_INITIATOR_HEADER = { "X-Initiator": "agent" } as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Return true if the shell command looks like it's spawning a pi subprocess.
- *
- * Conservative heuristic: match `pi` as a standalone command token that appears
- * - at the very beginning of the command string
- * - after a pipe, semicolon, or logical operator  (|, ;, &&, ||)
- * - after `exec`, `command`, or `env` keywords
- *
- * Deliberately errs on the side of false-negatives (miss some cases) to avoid
- * injecting the env var into unrelated commands that happen to contain "pi".
- */
-function commandSpawnsPi(cmd: string): boolean {
-	return /(?:^|[|&;]\s*|\bexec\s+|\bcommand\s+|\benv(?:\s+\S+=\S+)*\s+)\bpi\b/.test(cmd);
+function commandAlreadySetsSubagentEnv(cmd: string): boolean {
+	const directAssignment = new RegExp(String.raw`(?:^|[;&|]\s*|\benv(?:\s+\S+=\S+)*\s+)${SUBAGENT_ENV}=`);
+	const exportAssignment = new RegExp(String.raw`\bexport\s+${SUBAGENT_ENV}=`);
+	return directAssignment.test(cmd) || exportAssignment.test(cmd);
+}
+
+function withSubagentEnv(cmd: string): string {
+	if (commandAlreadySetsSubagentEnv(cmd)) return cmd;
+	return `export ${SUBAGENT_ENV}=1\n${cmd}`;
 }
 
 /**
@@ -178,40 +173,15 @@ export default function (pi: ExtensionAPI) {
 
 	// ── PARENT SIDE ─────────────────────────────────────────────────────────────
 	//
-	// Intercept tool calls that spawn a pi subprocess and inject PI_SUBAGENT=1
-	// into the child process environment.  There are two paths to handle:
-	//
-	//   1. `bash` tool calls — pi is spawned via a shell command string, so we
-	//      prepend `export PI_SUBAGENT=1` to the command.
-	//
-	//   2. The built-in `subagent` tool — it calls Node's `spawn("pi", args,
-	//      { shell: false })` directly, completely bypassing bash.  No explicit
-	//      `env` is passed to spawn(), so the child inherits `process.env`.
-	//      Setting PI_SUBAGENT=1 on the parent's process.env here (before the
-	//      tool executes) is enough: every pi child spawned by the subagent tool
-	//      will inherit it automatically.
-	//
-	//      NOTE: `isSubagent` is evaluated once at extension-load time (before
-	//      any tool calls), so mutating process.env here does NOT flip the
-	//      parent into "subagent mode".
+	// Intercept every agent-initiated bash tool call and export PI_SUBAGENT=1
+	// inside that shell. This ensures any descendant process spawned by that bash
+	// command — including wrapper scripts or eval harnesses that later spawn `pi`
+	// — inherits subagent mode and therefore uses `X-Initiator: agent` for
+	// GitHub Copilot requests.
 
 	pi.on("tool_call", async (event, _ctx) => {
-		// Path 1: bash commands that spawn pi
-		if (isToolCallEventType("bash", event)) {
-			const cmd: string = event.input.command ?? "";
-			if (!commandSpawnsPi(cmd)) return;
-
-			// Prepend an `export` statement so the env var is visible to the
-			// spawned pi process and any nested subshells it may create.
-			event.input.command = `export ${SUBAGENT_ENV}=1\n${cmd}`;
-			return; // modifying in-place, not blocking
-		}
-
-		// Path 2: the built-in subagent tool spawns pi via spawn() directly.
-		// Set PI_SUBAGENT=1 on the parent process so all child pi processes
-		// inherit it through the default env inheritance of spawn().
-		if (event.toolName === "subagent") {
-			process.env[SUBAGENT_ENV] = "1";
-		}
+		if (!isToolCallEventType("bash", event)) return;
+		const cmd: string = event.input.command ?? "";
+		event.input.command = withSubagentEnv(cmd);
 	});
 }

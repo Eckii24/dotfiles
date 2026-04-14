@@ -27,6 +27,7 @@ import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
+const SUBAGENT_ENV = "PI_SUBAGENT";
 
 function formatTokens(count: number): string {
 	if (count < 1000) return count.toString();
@@ -304,6 +305,7 @@ async function runSingleAgent(
 				cwd: cwd ?? defaultCwd,
 				shell: false,
 				stdio: ["ignore", "pipe", "pipe"],
+				env: { ...process.env, [SUBAGENT_ENV]: "1" },
 			});
 			let buffer = "";
 
