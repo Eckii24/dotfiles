@@ -22,7 +22,7 @@ import { StringEnum } from "@mariozechner/pi-ai";
 import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
+import { type AgentConfig, type AgentScope, discoverAgents, formatAgentsForPrompt } from "./agents.js";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -428,6 +428,17 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
+	// Inject available subagents into the system prompt (name + description),
+	// similar to how skills are listed for progressive disclosure.
+	pi.on("before_agent_start", async (event, ctx) => {
+		const discovery = discoverAgents(ctx.cwd, "both");
+		if (discovery.agents.length === 0) return undefined;
+		const agentsBlock = formatAgentsForPrompt(discovery.agents);
+		return {
+			systemPrompt: event.systemPrompt + agentsBlock,
+		};
+	});
+
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",

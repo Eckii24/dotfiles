@@ -124,3 +124,41 @@ export function formatAgentList(agents: AgentConfig[], maxItems: number): { text
 		remaining,
 	};
 }
+
+function escapeXml(str: string): string {
+	return str
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
+}
+
+/**
+ * Format agents for inclusion in the system prompt.
+ * Uses XML format similar to how skills are listed, providing
+ * progressive disclosure: only name + description are in context.
+ */
+export function formatAgentsForPrompt(agents: AgentConfig[]): string {
+	if (agents.length === 0) return "";
+
+	const lines = [
+		"",
+		"",
+		"The following subagents are available for task delegation via the `subagent` tool.",
+		"Each agent runs in an isolated context window. Choose the right agent based on the task description.",
+		"",
+		"<available_agents>",
+	];
+
+	for (const agent of agents) {
+		lines.push("  <agent>");
+		lines.push(`    <name>${escapeXml(agent.name)}</name>`);
+		lines.push(`    <description>${escapeXml(agent.description)}</description>`);
+		lines.push(`    <source>${escapeXml(agent.source)}</source>`);
+		lines.push("  </agent>");
+	}
+
+	lines.push("</available_agents>");
+	return lines.join("\n");
+}
