@@ -17,30 +17,8 @@ For every task:
 
 Bash is read-only except for verification commands from the plan. Do not modify files.
 
-Return exactly these sections:
+Use the output format defined in the skill. Prepend this section before it:
 
 ## Current-Work Context
 - Exact current-work file path if provided
 - If none: `No current-work context provided.`
-
-## Eval Gate Results
-- Table of evals run, targets, actuals, and pass/fail status
-
-## Critical Issues (Must Fix)
-- File path + line number, issue, impact, suggested fix
-
-## Warnings (Should Fix)
-- File path + line number, issue, rationale
-
-## Suggestions (Consider)
-- Optional improvements
-
-## Requirements Compliance Checklist
-- Requirement/criterion, status, notes
-
-## Open Questions
-- `Q1: ...`
-- If none remain: `No open questions.`
-
-## Summary
-- Overall readiness and most important next actions

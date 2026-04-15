@@ -26,7 +26,7 @@ Use `.ai/current-work.md` as the active feature anchor:
 - linked spec/plan/review artifacts
 - next restart step
 - open questions/blockers
-- promotion candidates
+- a bounded evidence log for pitfalls/surprises, failed or rejected attempts, review findings/fixes, and learning candidates with exact evidence paths
 
 This is the **source of truth for in-progress work**.
 
@@ -181,31 +181,47 @@ Keep it compact. Aim for a working record, not a transcript.
 
 - [Question] — [why it matters]
 
-## Promotion candidates
+## Pitfalls & surprises
 
-- [Could become a learning]
-- [Could become AGENTS.md guidance]
-- [Archive only]
+- [Short note] — Evidence: [exact path]
+
+## Failed attempts / rejected options
+
+- [Attempt or option] — [why it was rejected] — Evidence: [exact path]
+
+## Review findings & fixes
+
+- [Finding] — [fix or current status] — Evidence: [exact path]
+
+## Learning candidates
+
+- Summary: [one-sentence candidate learning]
+  - Why it matters: [1-2 lines]
+  - Evidence:
+    - [exact path]
+  - Candidate target: project learning | global learning | AGENTS.md | archive only
 ```
 
-Add sections only when useful.
+Add sections only when useful. Keep each evidence-log section bounded to roughly 3–5 terse items. Refresh, merge, or drop stale/resolved noise instead of appending a session transcript.
 
 ## Feature lifecycle
 
 During active work:
-- record new findings in `current-work.md`
+- record new findings in `current-work.md`, especially pitfalls/surprises, failed attempts, review findings/fixes, and learning candidates
+- keep evidence-log entries concise and backed by exact file/artifact paths
 - link spec/plan/review artifacts explicitly
 - keep the restart step fresh
 - do **not** create approved learnings directly
 
 When the work produces reusable lessons:
+- prefer explicit `current-work.md` learning candidates first, then use review artifacts, changed files, and session context to validate or fill gaps
 - feed them into `/learn <focus>` as pending learnings
 - review them via `/learn review`
 - promote only the compact durable essence into `AGENTS.md`
 
 ## Promotion review
 
-When a feature is done, classify each candidate finding into one of four buckets:
+When a feature is done, classify each learning candidate into one of four buckets:
 
 ### A. Keep in `current-work.md`
 Use when the work is still active or the note is only needed for the immediate restart.
@@ -235,6 +251,7 @@ Include the final `current-work.md` snapshot so the feature can be reconstructed
 
 Before finishing meaningful work, ask:
 - Is `current-work.md` up to date enough for a cold restart?
+- Did I capture fresh pitfalls, rejected options, review fixes, and learning candidates while the evidence is still easy to recover?
 - Did this session produce a reusable learning?
 - Did anything become durable enough for `AGENTS.md`?
 - Should anything be archived now?
@@ -253,7 +270,7 @@ When you update the feature anchor:
 
 ```md
 Feature anchor updated:
-- `.ai/current-work.md` — captured decision, linked review artifact, refreshed next restart step
+- `.ai/current-work.md` — captured decision, refreshed bounded evidence-log sections, linked review artifact, refreshed next restart step
 ```
 
 When you close and archive work:
@@ -262,5 +279,6 @@ When you close and archive work:
 Tracked work updated:
 - `.ai/archive/2026-03-31-auth-refresh-token-current-work.md` — archived final feature anchor
 - `.ai/archive/2026-03-31-auth-refresh-token-review.md` — archived review snapshot
-- `/learn review` — queued reusable findings for approval/promotion
+- `/learn auth refresh token` — created pending learnings from explicit current-work candidates and review evidence
+- `/learn review` — curated pending learnings for approval/promotion
 ```
