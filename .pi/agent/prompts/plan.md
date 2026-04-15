@@ -42,7 +42,7 @@ Story reference: $@
   - story reference / retrieval source
   - plan file path
   - any remaining open questions or next steps
-- Tell the user they can continue with `/implement-review` or `/plan-implement-review` when ready. Those workflows now automatically do review → fix → re-review until the latest review is clean or a decision is needed.
+- Tell the user they can continue with `/implement-review` or `/plan-implement-review` when ready. Those workflows now automatically do review → fix → re-review until the latest review is clean or a decision is needed, then hand off to the dedicated canonical `/learn` flow in `prompts/learn.md`. If direct prompt-to-prompt dispatch is unavailable, they should record an explicit follow-up for the user to run `/learn <focus>` instead of improvising a separate learning flow.
 
 ## Azure DevOps fallback notes
 - Default fallback: use `az` CLI for ADO work item retrieval.

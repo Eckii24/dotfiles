@@ -17,6 +17,11 @@ Rough idea: $@
 - Apply `Suggestions (Consider)` when they are clearly correct, low-risk, and in scope; otherwise record them as follow-up items.
 - Only ask the user via `questionnaire` when a finding is ambiguous, requires a scope/product decision, or cannot be resolved safely.
 
+## Orchestration boundary
+- The orchestrator owns the top-level spec/plan/implement/review flow.
+- Do not push orchestration back down into sub-agents (for example: do not ask `worker` to start the main review loop or other workflow-level follow-up on its own).
+- Scoped subagent-of-subagent delegation is fine when it stays narrow and local to the assigned step: focused implementation slices, target/app-area review help, scouts/research helpers, or other small delegated subtasks.
+
 ## Workflow
 
 ### 1. Specification
@@ -55,13 +60,17 @@ Rough idea: $@
 - Do NOT ask the user whether the review findings should be fixed by default — the default is to fix them.
 - Record each review/fix outcome in `.ai/current-work.md` and keep `.ai/<slug>-review.md` up to date when findings exist.
 
-### 4. Optional learning analysis follow-up
-- When the implementation/review loop exposed reusable tactics, recurring failure patterns, or stable user/project preferences, surface `/learn` as an optional post-review step.
-- Cite the exact `.ai/` artifacts, changed files, and review findings that should feed the learning analysis.
-- Do not force `/learn` when there is no meaningful learning signal.
+### 4. Learning follow-up
+- When the session produced meaningful implementation, review, or repair artifacts, treat the dedicated canonical `/learn` flow in `prompts/learn.md` as the normal final step.
+- If direct prompt-to-prompt dispatch is available, hand off to `/learn <focus>`. Otherwise, do not improvise a parallel learning flow; record an explicit follow-up for the user to run `/learn <focus>`.
+- Preserve/pass at least the exact changed files, `.ai/current-work.md`, `.ai/<slug>-review.md` when present, and the implementation/review summaries from this session. These are the minimum artifacts/context to carry into `/learn`, not the full evidence scope defined in `prompts/learn.md`.
+- Use the current learning flow terminology:
+  - `/learn <focus>` creates pending learnings directly
+  - `/learn review` is the curator flow for approval, consolidation, normalization, and AGENTS.md promotion
+- If there is truly no meaningful learning signal, say so explicitly and skip `/learn`.
 
 ### 5. Completion
-- Update `.ai/current-work.md` with final status, linked artifacts, changed files, handoff notes, and any recommended `/learn` follow-up.
+- Update `.ai/current-work.md` with final status, linked artifacts, changed files, handoff notes, and the `/learn` follow-up outcome or explicit skip rationale.
 - Provide a concise final summary with:
   - current-work path
   - spec file path
