@@ -11,6 +11,11 @@ Story reference: $@
 - Follow the conventions in the `project-memory` skill.
 - This prompt produces: `.ai/<slug>-plan.md`.
 
+## Current-work discipline
+- Treat `.ai/current-work.md` as a living but bounded evidence log, not just a restart note.
+- Capture early pitfalls, rejected options, review-relevant context, and candidate learnings only when they materially help restart or later `/learn` extraction, always with exact evidence paths.
+- Keep those sections tight: roughly 3–5 terse items each; merge, compress, or remove stale/resolved noise instead of appending a transcript.
+
 ## Workflow
 
 ### 0. Retrieve the Story
@@ -22,6 +27,7 @@ Story reference: $@
 - If the input is clearly a local file path, read it directly.
 - Retrieve enough detail to plan implementation accurately: title, description, acceptance criteria, and linked context/subtasks if available.
 - Update `.ai/current-work.md` with the story reference/source, active slug, and current step.
+- Refresh the bounded evidence-log sections there when story retrieval exposes notable constraints, pitfalls, or likely learning candidates.
 
 ### 1. Plan
 - Delegate to `plan-writer` using the retrieved story as the source of requirements.
@@ -29,6 +35,7 @@ Story reference: $@
 - Pass `.ai/current-work.md` and the intended plan path into the sub-agent.
 - Read the sub-agent result and the generated plan file.
 - Update `.ai/current-work.md` with the plan path, current step, and remaining questions.
+- Refresh the bounded evidence-log sections there when planning reveals early pitfalls, rejected options, or candidate learnings worth preserving.
 - Summarize the plan for the user.
 - Ask all open questions with the `questionnaire` tool.
 - Delegate back to `plan-writer` with the user's answers until no open questions remain.
@@ -36,7 +43,7 @@ Story reference: $@
 - If the user requests changes, loop in `plan-writer` again.
 
 ### 2. Completion
-- Update `.ai/current-work.md` with the confirmed plan status, linked artifacts, and any follow-up notes.
+- Update `.ai/current-work.md` with the confirmed plan status, linked artifacts, any early high-signal evidence-log notes, and any follow-up notes.
 - Do NOT implement. Provide a concise summary with:
   - current-work path
   - story reference / retrieval source

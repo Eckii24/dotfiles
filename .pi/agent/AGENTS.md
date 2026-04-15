@@ -4,8 +4,10 @@
 
 # Memory Model & Tracked Work
 - If `.ai/current-work.md` exists, read it before substantial repo work and continue from it.
-- Treat `.ai/current-work.md` as the active feature anchor and restart point.
+- Treat `.ai/current-work.md` as the active feature anchor, restart point, and living working document.
+- Keep `.ai/current-work.md` bounded: capture concise notes in `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates` with exact evidence paths, but do not turn it into a transcript.
 - Treat `.ai/learnings/*.md` and `~/.agents/learnings/*.md` as curated reusable learnings. Pending learnings may be created directly; approved-state changes and AGENTS.md promotions must go through `/learn review`.
+- Prefer `/learn` extraction from explicit current-work learning candidates first, then use review artifacts, changed files, and session context to validate or fill gaps.
 - Treat `AGENTS.md` as compact durable operating guidance, not as a scratchpad.
 - When a feature ends: archive feature artifacts, keep reusable context as learnings, and promote only the compact durable rule into `AGENTS.md`.
 - Use the `project-memory` skill when you need the detailed tracked-work lifecycle, archive, and handoff conventions.

@@ -6,6 +6,11 @@ description: Implement → review → fix → re-review for a tracked feature
 - Follow the conventions in the `project-memory` skill.
 - This prompt produces: `.ai/<slug>-review.md`.
 
+## Current-work discipline
+- Treat `.ai/current-work.md` as a living but bounded evidence log, not just a restart note.
+- When meaningful signal appears, refresh concise entries for `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates`, each with exact evidence paths.
+- Keep those sections tight: roughly 3–5 terse items each; merge, compress, or remove stale/resolved noise instead of appending a transcript.
+
 ## Default review policy
 - Do NOT stop after the first review if it returns actionable findings.
 - Treat `Critical Issues (Must Fix)` and `Warnings (Should Fix)` as mandatory fix work for this workflow.
@@ -26,6 +31,7 @@ Use the `subagent` tool with the `chain` parameter for each implementation/revie
 2. Then, use the `code-reviewer` agent to review the implementation from the previous step (`{previous}`).
    - Pass `.ai/current-work.md` when it exists.
    - Require eval/test results and current-work-aware findings.
+   - Refresh `.ai/current-work.md` between passes when new pitfalls, rejected approaches, review findings/fixes, or candidate learnings become clear.
 3. If the review returns any `Critical Issues` or `Warnings`:
    - Create or update `.ai/<slug>-review.md` with the actionable findings before requesting fixes.
    - Run another `subagent` chain: focused `worker` fix pass → `code-reviewer` verification pass.
@@ -34,11 +40,13 @@ Use the `subagent` tool with the `chain` parameter for each implementation/revie
 4. After meaningful implementation/review work, treat the dedicated canonical `/learn` flow in `prompts/learn.md` as the normal final step.
    - If direct prompt-to-prompt dispatch is available, hand off to `/learn <focus>`. Otherwise, do not improvise a parallel learning flow; record an explicit follow-up for the user to run `/learn <focus>`.
    - Preserve/pass at least the exact changed files, `.ai/current-work.md`, `.ai/<slug>-review.md` when present, and the relevant eval/test outcomes. These are the minimum artifacts/context to carry into `/learn`, not the full evidence scope defined in `prompts/learn.md`.
+   - Prefer explicit `Learning candidates` already captured in `.ai/current-work.md` as the primary `/learn` source; use review artifacts, changed files, and session context to validate, enrich, or fill gaps.
    - Use the current learning flow terminology: `/learn <focus>` creates pending learnings directly, and `/learn review` is the curator flow.
    - If there is truly no meaningful learning signal, say so explicitly and skip `/learn`.
 5. After the loop, create or update `.ai/current-work.md`:
-   - Link the latest review findings, changed files, `.ai/` artifact paths, eval/test results, and the `/learn` follow-up outcome or explicit skip rationale.
+   - Link the latest review findings, changed files, `.ai/` artifact paths, eval/test results, refreshed bounded evidence-log sections, and the `/learn` follow-up outcome or explicit skip rationale.
    - Record any remaining suggestions, assumptions, or follow-up items explicitly.
+   - Make sure `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates` reflect only the highest-signal current state with exact evidence paths.
    - Leave the current step clear for the next session.
 6. Terminate only when one of these is true:
    - the latest review has no `Critical Issues` and no `Warnings`

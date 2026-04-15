@@ -11,6 +11,11 @@ Rough idea: $@
 - Follow the conventions in the `project-memory` skill.
 - This prompt produces: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`.
 
+## Current-work discipline
+- Treat `.ai/current-work.md` as a living but bounded evidence log, not just a restart note.
+- When meaningful signal appears, refresh concise entries for `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates`, each with exact evidence paths.
+- Keep those sections tight: roughly 3–5 terse items each; merge, compress, or remove stale/resolved noise instead of appending a transcript.
+
 ## Default review policy
 - Do not stop at the first review.
 - Automatically fix `Critical Issues (Must Fix)` and `Warnings (Should Fix)` from `code-reviewer` before asking the user for final acceptance.
@@ -29,6 +34,7 @@ Rough idea: $@
 - Pass `.ai/current-work.md`, the active slug, and the intended spec path into the sub-agent.
 - Read the sub-agent result and the generated spec file.
 - Update `.ai/current-work.md` with the spec path, current step, and open questions.
+- Refresh the bounded evidence-log sections there when specification work reveals early pitfalls, rejected options, or candidate learnings worth preserving.
 - Ask all open questions with the `questionnaire` tool.
 - Delegate back to `spec-writer` with the user's answers until no open questions remain.
 - Ask the user to confirm the spec before continuing.
@@ -39,6 +45,7 @@ Rough idea: $@
 - Pass `.ai/current-work.md` and the current artifact paths.
 - Read the sub-agent result and the generated plan file.
 - Update `.ai/current-work.md` with the plan path, current step, and remaining questions.
+- Refresh the bounded evidence-log sections there when planning reveals early pitfalls, rejected options, or candidate learnings worth preserving.
 - Summarize the plan for the user.
 - Ask all open questions with the `questionnaire` tool.
 - Delegate back to `plan-writer` with the user's answers until no open questions remain.
@@ -49,6 +56,7 @@ Rough idea: $@
 - Delegate implementation to `worker` using the confirmed spec, plan, and `.ai/current-work.md`.
 - Require the worker to report changed files, `.ai/` artifact paths, and eval/test results.
 - Update `.ai/current-work.md` with changed files, evals, and the next step.
+- Refresh the bounded evidence-log sections there when implementation reveals pitfalls, rejected options, review-relevant context, or candidate learnings.
 - If blockers or ambiguities appear, bring them back to the user via `questionnaire`.
 - Delegate review to `code-reviewer` using the spec file, plan file, changed files, and `.ai/current-work.md`.
 - If the review contains any `Critical Issues` or `Warnings`:
@@ -59,18 +67,20 @@ Rough idea: $@
 - Fix `Suggestions` when they are clearly correct and low-risk; otherwise record them in `.ai/<slug>-review.md` and/or `.ai/current-work.md`.
 - Do NOT ask the user whether the review findings should be fixed by default — the default is to fix them.
 - Record each review/fix outcome in `.ai/current-work.md` and keep `.ai/<slug>-review.md` up to date when findings exist.
+- Mirror only the high-signal findings/fixes into `current-work.md`; keep the detailed evidence in the review artifact and exact file paths in both places when useful.
 
 ### 4. Learning follow-up
 - When the session produced meaningful implementation, review, or repair artifacts, treat the dedicated canonical `/learn` flow in `prompts/learn.md` as the normal final step.
 - If direct prompt-to-prompt dispatch is available, hand off to `/learn <focus>`. Otherwise, do not improvise a parallel learning flow; record an explicit follow-up for the user to run `/learn <focus>`.
 - Preserve/pass at least the exact changed files, `.ai/current-work.md`, `.ai/<slug>-review.md` when present, and the implementation/review summaries from this session. These are the minimum artifacts/context to carry into `/learn`, not the full evidence scope defined in `prompts/learn.md`.
+- Prefer explicit `Learning candidates` already captured in `.ai/current-work.md` as the primary `/learn` source; use review artifacts, changed files, and session context to validate, enrich, or fill gaps.
 - Use the current learning flow terminology:
   - `/learn <focus>` creates pending learnings directly
   - `/learn review` is the curator flow for approval, consolidation, normalization, and AGENTS.md promotion
 - If there is truly no meaningful learning signal, say so explicitly and skip `/learn`.
 
 ### 5. Completion
-- Update `.ai/current-work.md` with final status, linked artifacts, changed files, handoff notes, and the `/learn` follow-up outcome or explicit skip rationale.
+- Update `.ai/current-work.md` with final status, linked artifacts, changed files, handoff notes, refreshed bounded evidence-log sections, and the `/learn` follow-up outcome or explicit skip rationale.
 - Provide a concise final summary with:
   - current-work path
   - spec file path

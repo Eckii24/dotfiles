@@ -68,9 +68,9 @@ Use this for any `/learn` input that is **not** exactly `review`.
 
 Workflow:
 1. Read `.ai/current-work.md` when it exists.
-2. Gather the best available evidence for the requested focus:
-   - `.ai/current-work.md`
-   - `.ai/reviews/` artifacts if present
+2. Gather the best available evidence for the requested focus, preferring explicit current-work evidence first:
+   - `.ai/current-work.md`, especially `Learning candidates`, `Pitfalls & surprises`, `Failed attempts / rejected options`, and `Review findings & fixes`
+   - root-level `.ai/<slug>-review.md` artifacts if present
    - recent `.ai/*.md` spec/plan/review docs relevant to the focus
    - recently changed files (`git diff --name-only`, `git status --short`)
    - any files the user explicitly mentioned
@@ -78,6 +78,7 @@ Workflow:
    - Require 1–5 high-signal candidates.
    - Require full learning bodies, not just summaries.
    - Require exact evidence paths.
+   - Prefer explicit current-work learning candidates first; use other artifacts to validate, enrich, or fill gaps rather than reconstruct everything from scratch.
 4. Write the candidates **directly** to `<project-root>/.ai/learnings/pending/*.md`.
    - Do **not** ask approval before writing pending files.
    - Direct creation is allowed for **pending** learnings only. Do **not** create or edit approved learnings with raw file tools; approved-state changes must go through `/learn review` runtime actions.
@@ -152,7 +153,7 @@ Run the review in three phases, in order.
 
 #### Phase 3 — Normalization check
 1. Re-run `learning_review_queue` after Phases 1/2 so Phase 3 scans the **remaining live learnings**, then use its normalization items to identify issues:
-   - invalid or non-canonical filename slug
+   - invalid filename slug
    - extra/missing frontmatter fields
    - missing or unstructured body sections
 2. If issues exist, present proposed fixes via `questionnaire` before writing.
@@ -187,5 +188,6 @@ For each promotion candidate:
 Keep the final response concise but explicit:
 - created, moved, merged, promoted, normalized, or deleted files with exact paths
 - review decisions taken
+- whether explicit current-work learning candidates were used as the primary source or broader mining was needed
 - any collisions handled
 - any assumptions you had to make
