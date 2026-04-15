@@ -15,7 +15,6 @@ import { normalizeIsoDate, todayIso } from "./contracts.js";
 import { buildLearningInjection } from "./inject.js";
 import { ensureStructuredLearningBody } from "./markdown.js";
 import {
-	cleanupLegacyFiles,
 	ensureLearningsDirs,
 	requireManagedAgentsPath,
 	requireManagedLearningPath,
@@ -160,7 +159,6 @@ function buildCandidateDocument(
 
 export async function refreshRuntimeState(cwd: string, options: { initializeDirs?: boolean } = {}): Promise<LearningRuntimeSnapshot> {
 	const paths = await resolveLearningSystemPaths(cwd);
-	await cleanupLegacyFiles(paths, { mode: "once" });
 	if (options.initializeDirs) await ensureLearningsDirs(paths);
 	const approved = await scanApprovedLearnings(paths);
 	return {

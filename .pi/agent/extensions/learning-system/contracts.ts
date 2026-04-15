@@ -18,7 +18,6 @@ export interface LearningSystemPaths extends LearningsPaths {
 	globalLearningsRoot: string;
 	globalAgentsPath: string;
 	projectAgentsPath: string;
-	legacyCleanupTargets: string[];
 }
 
 export interface ApprovedLearningFrontmatter {

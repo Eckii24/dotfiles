@@ -1,10 +1,8 @@
-import { access, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, realpath } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import type { LearningScope, LearningStatus, LearningSystemPaths } from "./contracts.js";
-
-const BREAKING_CLEANUP_MARKER = ".learning-system-breaking-cleanup-v1";
 
 export interface PathResolutionOptions {
 	agentRoot?: string;
@@ -79,14 +77,6 @@ export async function resolveLearningSystemPaths(cwd: string, options: PathResol
 	const projectDir = join(projectAiDir, "learnings");
 	const globalPendingDir = join(globalDir, "pending");
 	const projectPendingDir = join(projectDir, "pending");
-	const legacyName = (name: string) => `${name}.${"md"}`;
-	const legacyCleanupTargets = Array.from(new Set([
-		join(projectAiDir, legacyName("learning")),
-		join(projectAiDir, legacyName(["global", "learning"].join("-"))),
-		join(projectAiDir, legacyName(["pending", "learnings"].join("-"))),
-		join(projectAiDir, legacyName(["pending", "memory", "proposals"].join("-"))),
-		join(agentRoot, ".ai", legacyName(["global", "learning"].join("-"))),
-	]));
 
 	return {
 		agentRoot,
@@ -100,7 +90,6 @@ export async function resolveLearningSystemPaths(cwd: string, options: PathResol
 		projectPendingDir,
 		globalAgentsPath: join(agentRoot, "AGENTS.md"),
 		projectAgentsPath: join(projectRoot, "AGENTS.md"),
-		legacyCleanupTargets,
 	};
 }
 
@@ -169,43 +158,4 @@ export async function ensureLearningsDirs(paths: LearningSystemPaths): Promise<s
 		if (!existed) changed.push(dir);
 	}
 	return changed;
-}
-
-export async function cleanupLegacyFiles(
-	paths: LearningSystemPaths,
-	options: { mode?: "once" | "force" | "skip" } = {},
-): Promise<string[]> {
-	const mode = options.mode ?? "once";
-	if (mode === "skip") return [];
-
-	const groupedTargets = new Map<string, string[]>();
-	for (const target of paths.legacyCleanupTargets) {
-		const markerPath = join(dirname(target), BREAKING_CLEANUP_MARKER);
-		const existing = groupedTargets.get(markerPath) ?? [];
-		existing.push(target);
-		groupedTargets.set(markerPath, existing);
-	}
-
-	const removed: string[] = [];
-	for (const [markerPath, targets] of groupedTargets) {
-		const markerDir = dirname(markerPath);
-		if (mode === "once" && (await pathExists(markerPath))) continue;
-		const existingTargets = [] as string[];
-		for (const target of targets) {
-			if (await pathExists(target)) existingTargets.push(target);
-		}
-		if (existingTargets.length === 0 && !(await pathExists(markerDir))) continue;
-		for (const target of existingTargets) {
-			try {
-				await rm(target, { force: true });
-				removed.push(target);
-			} catch (error) {
-				const candidate = error as NodeJS.ErrnoException;
-				if (candidate.code !== "ENOENT") throw error;
-			}
-		}
-		await mkdir(markerDir, { recursive: true });
-		await writeFile(markerPath, "learning-system breaking cleanup complete\n", "utf8");
-	}
-	return removed;
 }
