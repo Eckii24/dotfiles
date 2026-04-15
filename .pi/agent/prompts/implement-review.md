@@ -2,55 +2,45 @@
 description: Implement → review → fix → re-review for a tracked feature
 ---
 
-## Tracked Work
-- Follow the conventions in the `project-memory` skill.
-- This prompt produces: `.ai/<slug>-review.md`.
+This workflow assumes tracked feature work and `.ai/` artifacts.
 
-## Current-work discipline
-- Treat `.ai/current-work.md` as a living but bounded evidence log, not just a restart note.
-- When meaningful signal appears, refresh concise entries for `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates`, each with exact evidence paths.
-- Keep those sections tight: roughly 3–5 terse items each; merge, compress, or remove stale/resolved noise instead of appending a transcript.
-
-## Default review policy
-- Do NOT stop after the first review if it returns actionable findings.
-- Treat `Critical Issues (Must Fix)` and `Warnings (Should Fix)` as mandatory fix work for this workflow.
-- Treat `Suggestions (Consider)` as optional: apply them only when they are clearly correct, low-risk, and within scope; otherwise record them in the review artifact or handoff notes.
-- Ask the user via `questionnaire` only when a review finding is ambiguous, changes scope/requirements, or requires a trade-off decision.
-
-## Orchestration boundary
-- The orchestrator owns the top-level implement → review → repair loop.
-- Do not push that orchestration down into `worker` or other sub-agents just to recreate the main loop or other workflow-level follow-up.
-- Scoped subagent-of-subagent delegation is fine when it stays narrow and local to one assigned pass: focused implementation slices, target/app-area reviews, scouts/research helpers, or other small delegated subtasks.
+## Setup
+1. First read `~/.agents/skills/project-memory/SKILL.md`.
+2. If `.ai/current-work.md` exists, read it before delegating.
+3. You own the top-level implement → review → repair loop. Keep sub-agents scoped; do not ask them to orchestrate the loop for you.
+4. `worker` implements only. Do not ask `worker` to perform the formal review, assign review severities, decide whether the work is approved, or replace the separate `code-reviewer` step.
 
 ## Workflow
 Use the `subagent` tool with the `chain` parameter for each implementation/review or repair/review sequence.
 
-1. First, use the `worker` agent to implement: $@
-   - Include `.ai/current-work.md` when it exists.
-   - Require explicit changed-file, artifact, and eval/test paths/results.
-2. Then, use the `code-reviewer` agent to review the implementation from the previous step (`{previous}`).
+1. Run `worker` to implement: $@
    - Pass `.ai/current-work.md` when it exists.
-   - Require eval/test results and current-work-aware findings.
-   - Refresh `.ai/current-work.md` between passes when new pitfalls, rejected approaches, review findings/fixes, or candidate learnings become clear.
-3. If the review returns any `Critical Issues` or `Warnings`:
-   - Create or update `.ai/<slug>-review.md` with the actionable findings before requesting fixes.
+   - Tell `worker` to stop after implementation plus any needed eval/test runs.
+   - Tell `worker` not to review its own work beyond noting concrete blockers or uncertainties.
+   - Require explicit changed-file paths, artifact paths, and eval/test results.
+2. Run `code-reviewer` on the implementation result (`{previous}`).
+   - Pass `.ai/current-work.md` when it exists.
+   - Require explicit file paths and eval/test results in the review output.
+3. If the review reports any `Blocking Issues` or `Important Issues`:
+   - Create or update `.ai/<slug>-review.md` with the actionable findings.
    - Run another `subagent` chain: focused `worker` fix pass → `code-reviewer` verification pass.
    - Pass the exact review artifact path, changed files, and prior eval/test context into the fix pass.
-   - Repeat the fix → review cycle until the latest review has no `Critical Issues` and no `Warnings`, or until user input is required via `questionnaire`.
-4. After meaningful implementation/review work, treat the dedicated canonical `/learn` flow in `prompts/learn.md` as the normal final step.
-   - If direct prompt-to-prompt dispatch is available, hand off to `/learn <focus>`. Otherwise, do not improvise a parallel learning flow; record an explicit follow-up for the user to run `/learn <focus>`.
-   - Preserve/pass at least the exact changed files, `.ai/current-work.md`, `.ai/<slug>-review.md` when present, and the relevant eval/test outcomes. These are the minimum artifacts/context to carry into `/learn`, not the full evidence scope defined in `prompts/learn.md`.
-   - Prefer explicit `Learning candidates` already captured in `.ai/current-work.md` as the primary `/learn` source; use review artifacts, changed files, and session context to validate, enrich, or fill gaps.
-   - Use the current learning flow terminology: `/learn <focus>` creates pending learnings directly, and `/learn review` is the curator flow.
-   - If there is truly no meaningful learning signal, say so explicitly and skip `/learn`.
-5. After the loop, create or update `.ai/current-work.md`:
-   - Link the latest review findings, changed files, `.ai/` artifact paths, eval/test results, refreshed bounded evidence-log sections, and the `/learn` follow-up outcome or explicit skip rationale.
-   - Record any remaining suggestions, assumptions, or follow-up items explicitly.
-   - Make sure `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates` reflect only the highest-signal current state with exact evidence paths.
-   - Leave the current step clear for the next session.
-6. Terminate only when one of these is true:
-   - the latest review has no `Critical Issues` and no `Warnings`
-   - the user explicitly accepts remaining findings
-   - a blocker or ambiguity requires user input via `questionnaire`
+   - Repeat until the latest review has no `Blocking Issues` and no `Important Issues`, the user explicitly accepts the remaining issues, or ambiguity requires `questionnaire`.
+4. Treat `Minor Issues / Suggestions` as optional follow-up work:
+   - Apply them when clearly correct, low-risk, and in scope.
+   - Otherwise record them in `.ai/<slug>-review.md` or `.ai/current-work.md`.
+5. After meaningful implementation/review work:
+   - Hand off to `/learn <focus>` if prompt-to-prompt dispatch is available.
+   - Otherwise record an explicit follow-up for the user to run `/learn <focus>`.
+   - Use explicit `Learning candidates` from `.ai/current-work.md` as the primary source when available.
+6. Before finishing:
+   - Update `.ai/current-work.md` following `project-memory` conventions.
+   - Link changed files, review artifact paths, eval/test results, next step, and any remaining assumptions or follow-ups.
 
-Prefer at least one re-review after every fix pass. Keep the loop bounded and surface persistent issues clearly if they cannot be resolved in one session.
+## Completion
+Stop when one of these is true:
+- the latest review has no `Blocking Issues` and no `Important Issues`
+- the user explicitly accepts the remaining issues
+- a blocker or ambiguity requires `questionnaire`
+
+Prefer at least one re-review after every fix pass.
