@@ -60,9 +60,12 @@
 // - Future identical commands skip the confirmation prompt entirely.
 // - The allow-list is cleared when the session ends.
 //
-// Config files (merged, project takes precedence):
+// Config sources (merged, later entries take precedence):
 // - ~/.pi/agent/guardrails.json
+// - ~/.pi/agent/settings.json#guardrails
 // - <effective cwd>/.pi/guardrails.json
+// - <effective cwd>/.pi/settings.json#guardrails
+// Settings-based sources override legacy guardrails.json within the same scope.
 //
 // Example configs:
 //
@@ -156,12 +159,7 @@ function allowWriteLabel(config: GuardrailsConfig): string {
 
 function configSourceLabel(cwd: string): string {
   const info = getConfigSourceInfo(cwd);
-  const activeSources: string[] = [];
-
-  if (info.hasGlobal) activeSources.push(info.globalPath);
-  if (info.hasProject) activeSources.push(info.projectPath);
-
-  return activeSources.length > 0 ? activeSources.join(" + ") : "defaults only";
+  return info.activeSources.length > 0 ? info.activeSources.join(" + ") : "defaults only";
 }
 
 function scopeLabel(cwd: string): string {

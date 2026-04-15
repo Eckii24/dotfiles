@@ -1,15 +1,20 @@
 /**
  * Guardrails Extension — Config Loading, Merging & Validation
  *
- * Loads config from:
- * - ~/.pi/agent/guardrails.json (global)
- * - <effective cwd>/.pi/guardrails.json (project-local, takes precedence)
+ * Loads config from these sources, in precedence order:
+ * - ~/.pi/agent/guardrails.json (legacy global)
+ * - ~/.pi/agent/settings.json#guardrails (global settings)
+ * - <effective cwd>/.pi/guardrails.json (legacy project-local)
+ * - <effective cwd>/.pi/settings.json#guardrails (project settings)
+ *
+ * Settings-based sources override legacy guardrails.json sources within the same
+ * scope. Project sources still take precedence over global sources.
  *
  * Validates config shape on load, reports errors, falls back to defaults.
  *
  * To make reload behavior robust, configs are cached by file mtimes. Callers can
- * safely call `loadConfig(cwd)` frequently; the file is only re-read when one of
- * the config files changes.
+ * safely call `loadConfig(cwd)` frequently; files are only re-read when one of
+ * the relevant config files changes.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -27,17 +32,33 @@ export const DEFAULT_CONFIG: GuardrailsConfig = {
 export interface GuardrailsConfigPaths {
   globalPath: string;
   projectPath: string;
+  globalSettingsPath: string;
+  projectSettingsPath: string;
 }
 
 export interface GuardrailsConfigSourceInfo extends GuardrailsConfigPaths {
   hasGlobal: boolean;
   hasProject: boolean;
+  hasGlobalSettings: boolean;
+  hasProjectSettings: boolean;
+  activeSources: string[];
 }
 
 interface CachedConfig {
   globalMtimeMs?: number;
   projectMtimeMs?: number;
+  globalSettingsMtimeMs?: number;
+  projectSettingsMtimeMs?: number;
   config: GuardrailsConfig;
+}
+
+type JsonObject = Record<string, unknown>;
+type ConfigSourceKind = "legacy" | "settings";
+
+interface LoadedSource {
+  label: string;
+  active: boolean;
+  config: Partial<GuardrailsConfig>;
 }
 
 const configCache = new Map<string, CachedConfig>();
@@ -47,16 +68,8 @@ export function getConfigPaths(cwd: string): GuardrailsConfigPaths {
   return {
     globalPath: join(getAgentDir(), "guardrails.json"),
     projectPath: join(effectiveCwd, ".pi", "guardrails.json"),
-  };
-}
-
-export function getConfigSourceInfo(cwd: string): GuardrailsConfigSourceInfo {
-  const { globalPath, projectPath } = getConfigPaths(cwd);
-  return {
-    globalPath,
-    projectPath,
-    hasGlobal: existsSync(globalPath),
-    hasProject: existsSync(projectPath),
+    globalSettingsPath: join(getAgentDir(), "settings.json"),
+    projectSettingsPath: join(effectiveCwd, ".pi", "settings.json"),
   };
 }
 
@@ -69,19 +82,85 @@ function getFileMtimeMs(path: string): number | undefined {
   }
 }
 
-function loadJsonFile(path: string): Partial<GuardrailsConfig> {
-  if (!existsSync(path)) return {};
+function loadJsonObject(path: string): JsonObject | undefined {
+  if (!existsSync(path)) return undefined;
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8"));
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       console.error(`[guardrails] Warning: ${path} must be a JSON object, ignoring`);
-      return {};
+      return undefined;
     }
-    return raw;
+    return raw as JsonObject;
   } catch (e) {
     console.error(`[guardrails] Warning: Could not parse ${path}: ${e}`);
-    return {};
+    return undefined;
   }
+}
+
+function loadSource(path: string, kind: ConfigSourceKind): LoadedSource {
+  const raw = loadJsonObject(path);
+  if (!raw) {
+    return {
+      label: kind === "settings" ? `${path}#guardrails` : path,
+      active: false,
+      config: {},
+    };
+  }
+
+  if (kind === "legacy") {
+    return {
+      label: path,
+      active: true,
+      config: raw as Partial<GuardrailsConfig>,
+    };
+  }
+
+  const candidate = raw.guardrails;
+  const label = `${path}#guardrails`;
+  if (candidate === undefined) {
+    return {
+      label,
+      active: false,
+      config: {},
+    };
+  }
+
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+    console.error(`[guardrails] Warning: ${label} must be a JSON object, ignoring`);
+    return {
+      label,
+      active: false,
+      config: {},
+    };
+  }
+
+  return {
+    label,
+    active: true,
+    config: candidate as Partial<GuardrailsConfig>,
+  };
+}
+
+export function getConfigSourceInfo(cwd: string): GuardrailsConfigSourceInfo {
+  const { globalPath, projectPath, globalSettingsPath, projectSettingsPath } = getConfigPaths(cwd);
+  const globalLegacy = loadSource(globalPath, "legacy");
+  const globalSettings = loadSource(globalSettingsPath, "settings");
+  const projectLegacy = loadSource(projectPath, "legacy");
+  const projectSettings = loadSource(projectSettingsPath, "settings");
+
+  return {
+    globalPath,
+    projectPath,
+    globalSettingsPath,
+    projectSettingsPath,
+    hasGlobal: globalLegacy.active,
+    hasProject: projectLegacy.active,
+    hasGlobalSettings: globalSettings.active,
+    hasProjectSettings: projectSettings.active,
+    activeSources: [globalLegacy, globalSettings, projectLegacy, projectSettings]
+      .filter((source) => source.active)
+      .map((source) => source.label),
+  };
 }
 
 // ─── Validation ───
@@ -204,28 +283,44 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
 // ─── Public ───
 
 export function loadConfig(cwd: string, options: { force?: boolean } = {}): GuardrailsConfig {
-  const { globalPath, projectPath } = getConfigPaths(cwd);
-  const cacheKey = `${globalPath}::${projectPath}`;
+  const { globalPath, projectPath, globalSettingsPath, projectSettingsPath } = getConfigPaths(cwd);
+  const cacheKey = `${globalPath}::${projectPath}::${globalSettingsPath}::${projectSettingsPath}`;
   const globalMtimeMs = getFileMtimeMs(globalPath);
   const projectMtimeMs = getFileMtimeMs(projectPath);
+  const globalSettingsMtimeMs = getFileMtimeMs(globalSettingsPath);
+  const projectSettingsMtimeMs = getFileMtimeMs(projectSettingsPath);
   const cached = configCache.get(cacheKey);
 
   if (
     !options.force &&
     cached &&
     cached.globalMtimeMs === globalMtimeMs &&
-    cached.projectMtimeMs === projectMtimeMs
+    cached.projectMtimeMs === projectMtimeMs &&
+    cached.globalSettingsMtimeMs === globalSettingsMtimeMs &&
+    cached.projectSettingsMtimeMs === projectSettingsMtimeMs
   ) {
     return cached.config;
   }
 
-  const globalRaw = loadJsonFile(globalPath);
-  const projectRaw = loadJsonFile(projectPath);
+  const sources = [
+    loadSource(globalPath, "legacy"),
+    loadSource(globalSettingsPath, "settings"),
+    loadSource(projectPath, "legacy"),
+    loadSource(projectSettingsPath, "settings"),
+  ];
 
-  const { config: globalConfig } = validateConfig(globalRaw, globalPath);
-  const { config: projectConfig } = validateConfig(projectRaw, projectPath);
+  const config = sources.reduce((current, source) => {
+    if (!source.active) return current;
+    const { config: validated } = validateConfig(source.config, source.label);
+    return mergeConfigs(current, validated);
+  }, DEFAULT_CONFIG);
 
-  const config = mergeConfigs(mergeConfigs(DEFAULT_CONFIG, globalConfig), projectConfig);
-  configCache.set(cacheKey, { globalMtimeMs, projectMtimeMs, config });
+  configCache.set(cacheKey, {
+    globalMtimeMs,
+    projectMtimeMs,
+    globalSettingsMtimeMs,
+    projectSettingsMtimeMs,
+    config,
+  });
   return config;
 }

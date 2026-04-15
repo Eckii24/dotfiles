@@ -3,5 +3,53 @@
   "defaultThinkingLevel": "high",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.4",
-  "packages": []
+  "packages": [],
+  "guardrails": {
+    "timeout": 300000,
+    "paths": {
+      "denyRead": [
+        "**/.env",
+        "**/.env.*",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "**/*.pem",
+        "**/*.key",
+        "**/credentials.json",
+        "**/secrets.json",
+        "**/*secrets.zsh"
+      ],
+      "allowWrite": [
+        "./**",
+        "/tmp/**",
+        "**/.ai/**",
+        "~/.agents/**",
+        "~/.pi/**"
+      ],
+      "denyWrite": [
+        "**/.env",
+        "**/.env.*",
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/*.pem",
+        "**/*.key"
+      ]
+    },
+    "bash": {
+      "deny": [
+        "rm",
+        "sudo",
+        "chmod",
+        "chown",
+        "mkfs",
+        "dd",
+        "shutdown",
+        "reboot",
+        "poweroff",
+        "halt",
+        "kill",
+        "killall",
+        "pkill"
+      ]
+    }
+  }
 }
