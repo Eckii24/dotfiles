@@ -26,7 +26,8 @@ OPTIONS:
 DESCRIPTION:
     Reads the OAuth token from ~/.config/github-copilot/apps.json and
     calls the GitHub Copilot quota API to display used / remaining /
-    total premium requests, a progress bar, and the next reset date.
+    total premium requests, a progress bar, a simple linear month-end
+    forecast, and the next reset date.
 EOF
     }
 
@@ -136,10 +137,24 @@ EOF
     reset_date=$(echo "$response_body"  | jq -r '.quota_reset_date // .quota_reset_date_utc // "unknown"')
 
     local used=0 pct=0
+    local current_day=0 days_in_month=0
+    local projected_used=0 projected_pct=0 projected_delta=0
     if [[ "$unlimited" != "true" ]]; then
         used=$(( entitlement - remaining ))
         [[ $used -lt 0 ]] && used=0
         [[ $entitlement -gt 0 ]] && pct=$(( used * 100 / entitlement ))
+
+        current_day=$(( 10#$(date "+%d") ))
+        if date -v1d >/dev/null 2>&1; then
+            days_in_month=$(( 10#$(date -v1d -v+1m -v-1d "+%d") ))
+        else
+            days_in_month=$(( 10#$(date -d "$(date "+%Y-%m-01") +1 month -1 day" "+%d") ))
+        fi
+        if [[ $current_day -gt 0 ]]; then
+            projected_used=$(( (used * days_in_month + (current_day / 2)) / current_day ))
+            [[ $entitlement -gt 0 ]] && projected_pct=$(( projected_used * 100 / entitlement ))
+            projection_delta=$(( projected_used - entitlement ))
+        fi
     fi
 
     # ---------------------------------------------------------------------------
@@ -161,10 +176,15 @@ EOF
     local c_reset="\033[0m"
     local c_label="\033[1m"           # bold for labels
     local c_dim="\033[2m"
-    local c_usage
+    local c_usage c_projection
     if   [[ $pct -ge 90 ]]; then c_usage="\033[0;31m"   # red
     elif [[ $pct -ge 70 ]]; then c_usage="\033[0;33m"   # yellow
     else                          c_usage="\033[0;32m"   # green
+    fi
+
+    if   [[ $projected_pct -ge 100 ]]; then c_projection="\033[0;31m"
+    elif [[ $projected_pct -ge 90 ]]; then c_projection="\033[0;33m"
+    else                                    c_projection="\033[0;32m"
     fi
 
     # ---------------------------------------------------------------------------
@@ -182,6 +202,12 @@ EOF
         printf "  %-14s ${c_usage}%d${c_reset} requests\n"      "Remaining:" "$remaining"
         printf "  %-14s [${c_usage}%s${c_reset}] ${c_usage}%d%%${c_reset}\n" "Progress:" "$bar" "$pct"
         printf "  %-14s %s\n"                                    "Resets on:" "$reset_date"
+
+        if [[ $projection_delta -gt 0 ]]; then
+            printf "  %-14s ${c_projection}%d${c_reset} requests ${c_dim}(%s${c_projection}+%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "over: " "$projection_delta"
+        else
+            printf "  %-14s ${c_projection}%d${c_reset} requests ${c_dim}(%s${c_projection}%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "left: " "$(( -projection_delta ))"
+        fi
     fi
 
     echo ""
