@@ -15,6 +15,7 @@ alias allsync='wikisync && tasksync'
 # AI related stuff
 alias ai='OM CC_LAYOUT_OVERRIDE=buffer nvim +"CodeCompanionChat Toggle"'
 alias db='OM nvim +"DBUI"'
+alias ado-deployments='OM ado-deployments'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
