@@ -240,7 +240,7 @@ function buildIterationControlPrompt(options: {
 		"The same user task will be sent repeatedly until it is finished or the loop limit is reached.",
 		sessionResetNote,
 		`If the task is fully complete and no further Ralph iteration is needed, include the exact marker ${RALPH_DONE_MARKER} anywhere in your final response.`,
-		`Do not emit ${RALPH_DONE_MARKER} unless you are confident the task is actually complete.`,
+		`Do not emit ${RALPH_DONE_MARKER} (not even the string in another context!) unless you are confident the task is actually complete.`,
 	].join("\n");
 }
 
