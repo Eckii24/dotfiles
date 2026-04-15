@@ -2,9 +2,13 @@
 - If you have open questions, always use the `questionnaire` tool before you start any implementation.
 - If you still make assumptions, write them down in the implementation and explain why you made those assumptions.
 
-# Project Memory & Tracked Work
+# Memory Model & Tracked Work
 - If `.ai/current-work.md` exists, read it before substantial repo work and continue from it.
-- For tracked work conventions (lifecycle, slugs, artifacts, archive) and durable cross-session memory (conventions, pitfalls, decisions), use the `project-memory` skill.
+- Treat `.ai/current-work.md` as the active feature anchor and restart point.
+- Treat `.ai/learnings/*.md` and `~/.agents/learnings/*.md` as curated reusable learnings. Pending learnings may be created directly; approved-state changes and AGENTS.md promotions must go through `/learn review`.
+- Treat `AGENTS.md` as compact durable operating guidance, not as a scratchpad.
+- When a feature ends: archive feature artifacts, keep reusable context as learnings, and promote only the compact durable rule into `AGENTS.md`.
+- Use the `project-memory` skill when you need the detailed tracked-work lifecycle, archive, and handoff conventions.
 
 # Sub Agents
 - Use sub-agents for context management by delegating tasks.

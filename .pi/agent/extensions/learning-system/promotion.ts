@@ -27,7 +27,14 @@ function parseHeadings(text: string): HeadingMatch[] {
 
 function firstSentence(value: string | undefined): string | undefined {
 	if (!value) return undefined;
-	const flattened = value
+	const bulletLines = value
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => /^[-*]\s+/.test(line))
+		.map((line) => line.replace(/^[-*]\s+/, "").trim())
+		.filter(Boolean);
+	const source = bulletLines[0] || value;
+	const flattened = source
 		.replace(/^[-*]\s+/gm, "")
 		.replace(/\s+/g, " ")
 		.trim();
@@ -45,8 +52,9 @@ function normalizeConditionPhrase(prefix: string, value: string | undefined): st
 	if (!sentence) return undefined;
 	const normalized = lowerFirst(
 		sentence
-			.replace(/^(apply|use|keep|prefer|validate|delegate|review)\s+when\s+/i, "when ")
-			.replace(/^(when|whenever|if)\s+/i, "")
+			.replace(/^(apply|use|keep|prefer|validate|delegate|review)\s+when\b[:\s-]*/i, "")
+			.replace(/^do\s+not\s+apply\s+when\b[:\s-]*/i, "")
+			.replace(/^(when|whenever|if)\b[:\s-]*/i, "")
 			.replace(/^(the situations? where|situations? where|cases? where)\s+/i, "")
 			.trim(),
 	);
@@ -66,20 +74,9 @@ export function compactLearning(document: LearningDocument<ApprovedLearningFront
 	return `${parts.join(". ")}.`.replace(/\.\./g, ".");
 }
 
-function chooseSectionHeading(document: LearningDocument<ApprovedLearningFrontmatter>, headings: HeadingMatch[]): string {
-	const haystack = `${document.frontmatter.summary}\n${document.body}`.toLowerCase();
-	const preferred = [
-		{ heading: "Sub Agents", matches: ["sub-agent", "subagent", "delegate"] },
-		{ heading: "Questions", matches: ["questionnaire", "question"] },
-		{ heading: "Preferences", matches: ["prefer", "concise", "labels", "descriptions"] },
-		{ heading: "Project Memory & Tracked Work", matches: ["current-work", "tracked work", "artifact", ".ai/"] },
-	];
-	for (const candidate of preferred) {
-		if (!candidate.matches.some((term) => haystack.includes(term))) continue;
-		const heading = headings.find((entry) => entry.title.toLowerCase() === candidate.heading.toLowerCase());
-		if (heading) return heading.title;
-	}
-	return "Learnings";
+function defaultSectionHeading(headings: HeadingMatch[]): string {
+	const existing = headings.find((entry) => entry.title.toLowerCase() === "learnings");
+	return existing?.title ?? "Learnings";
 }
 
 export function buildPromotionConfirmationToken(input: {
@@ -99,7 +96,7 @@ export function buildPromotionPlacement(
 ): PromotionPlacement {
 	const headings = parseHeadings(agentsText);
 	const compactedText = overrides.compactedText?.trim() || compactLearning(document);
-	const sectionHeading = overrides.sectionHeading?.trim() || chooseSectionHeading(document, headings);
+	const sectionHeading = overrides.sectionHeading?.trim() || defaultSectionHeading(headings);
 	const alreadyPresent = normalizeForDedupe(agentsText).includes(normalizeForDedupe(compactedText));
 	return {
 		targetPath,

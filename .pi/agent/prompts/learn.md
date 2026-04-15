@@ -80,6 +80,7 @@ Workflow:
    - Require exact evidence paths.
 4. Write the candidates **directly** to `<project-root>/.ai/learnings/pending/*.md`.
    - Do **not** ask approval before writing pending files.
+   - Direct creation is allowed for **pending** learnings only. Do **not** create or edit approved learnings with raw file tools; approved-state changes must go through `/learn review` runtime actions.
    - Prefer `learning_write_pending` so the live runtime decides slugging, directory creation, body normalization, and collisions.
    - If `learning_write_pending` reports a slug collision, ask the user via `questionnaire` whether to Merge, Replace, or Skip, then apply that choice with `learning_resolve_pending_collision`.
    - Only fall back to raw file tools if the runtime tool is unavailable.
@@ -110,7 +111,7 @@ Run the review in three phases, in order.
    - Reject
 5. Apply decisions with `learning_apply_review_action`:
    - Keep as project/global learning → `approve_pending` into the chosen scope
-   - Promote into AGENTS.md → run the promotion flow below, then apply the confirmed `promote` action **with the `confirmationToken` returned by `learning_promotion_preview`**
+   - Promote into AGENTS.md → run the promotion flow below, then apply the `promote` action with the latest `confirmationToken` returned by `learning_promotion_preview`
    - Reject → `reject_pending`
 6. If `learning_apply_review_action` returns `status: "collision"` (for example, the chosen target scope already has the same slug):
    - read the source learning and the collided file side by side
@@ -140,7 +141,7 @@ Run the review in three phases, in order.
 6. Apply decisions with `learning_apply_review_action`:
    - Keep → `keep`
    - Promote to global learning → `move_to_scope` with `toScope: global`
-   - Promote into AGENTS.md → run promotion flow, then apply the confirmed `promote` action **with the `confirmationToken` returned by `learning_promotion_preview`**
+   - Promote into AGENTS.md → run promotion flow, then apply the `promote` action with the latest `confirmationToken` returned by `learning_promotion_preview`
    - Remove → `remove`
    - Consolidate with another → choose the merge target, then use `consolidate`
 7. If any review action returns `status: "collision"`:
@@ -164,20 +165,23 @@ Run the review in three phases, in order.
 Promotion is only available from `/learn review`.
 
 For each promotion candidate:
-1. Use `learning_promotion_preview` for the candidate and target scope:
+1. Determine the target AGENTS file from the requested scope:
    - project → `<project-root>/AGENTS.md`
    - global → `~/.pi/agent/AGENTS.md`
-2. The preview result is the source of truth for:
+2. Read the target `AGENTS.md` and choose the best section **semantically**. Prefer an existing heading when it is a clear fit. If no existing heading fits well, use `Learnings` or another short new heading.
+3. Use `learning_promotion_preview` for the candidate and target scope, passing the chosen `sectionHeading` when you want a placement other than the default.
+4. The preview result is the source of truth for:
    - the compacted durable text
-   - the proposed AGENTS.md section
+   - the final AGENTS.md section
    - duplicate detection
-   - the `confirmationToken` required for the final write
-3. Show the preview text and proposed section in `questionnaire`:
+   - the preview-consistency `confirmationToken` required for the final write
+5. Show the preview text and proposed section in `questionnaire`:
    - Confirm
    - Edit placement
    - Cancel
-4. If the user edits placement or compacted text, call `learning_promotion_preview` again with those overrides so you get a fresh preview and a fresh `confirmationToken` for the final placement.
-5. Only after confirmation, apply `learning_apply_review_action` with `action: "promote"`, passing the confirmed placement/text and the matching `confirmationToken`.
+6. The prompt layer owns the explicit approval step. Do not call `learning_apply_review_action(action: "promote")` unless the user just chose `Confirm` in `questionnaire`.
+7. If the user edits placement or compacted text, call `learning_promotion_preview` again with those overrides so you get a fresh preview and a fresh `confirmationToken` for the final placement.
+8. After the user confirms, apply `learning_apply_review_action` with `action: "promote"`, passing the confirmed placement/text and the matching `confirmationToken`.
 
 ## Output expectations
 Keep the final response concise but explicit:

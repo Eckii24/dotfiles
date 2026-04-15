@@ -41,6 +41,11 @@ The extension does all of the following:
 
 This means the prompt layer does **not** manually invent its own storage or file naming rules. It delegates to the runtime.
 
+Operational boundary:
+
+- direct file creation is acceptable only for **pending** learnings when the runtime tool is unavailable
+- approved learnings should enter or change state only through the `/learn review` runtime actions
+
 ---
 
 ## High-level architecture
@@ -107,9 +112,9 @@ Code: `extensions/learning-system/promotion.ts`
 This layer:
 
 - compacts a full learning into a short durable directive
-- chooses the best AGENTS section when possible
+- accepts a caller-chosen AGENTS section and otherwise defaults placement to `Learnings`
 - detects duplicate directives in normalized form
-- creates a confirmation token for promotion safety
+- creates a preview-consistency token for promotion safety
 - inserts the final bullet into `AGENTS.md`
 
 ### 5. Runtime API and prompt integration
@@ -649,15 +654,16 @@ Promotion is the final “turn this learning into durable operating guidance” 
 1. The prompt calls `learning_promotion_preview`.
 2. The runtime reads the learning file.
 3. The learning is compacted into a short directive sentence.
-4. The runtime chooses the best section heading when possible.
-5. A confirmation token is generated.
+4. The prompt/user chooses the target AGENTS section semantically; the runtime uses that section or defaults to `Learnings`.
+5. A preview-consistency token is generated.
 6. The prompt shows the preview to the user.
-7. Only after confirmation does the prompt call `learning_apply_review_action(action: "promote")` with the matching token.
-8. The runtime writes to `AGENTS.md` and deletes the source learning file.
+7. The prompt is responsible for the explicit user-approval step via `questionnaire`.
+8. After the user confirms, the prompt calls `learning_apply_review_action(action: "promote")` with the matching token.
+9. The runtime writes to `AGENTS.md` and deletes the source learning file.
 
 ### Why the confirmation token exists
 
-To prevent a stale preview from being applied after the user edits placement or text. If the preview changes, a new token is required.
+The token is a preview-consistency guard, not an independent proof of user approval. Its job is to prevent a stale preview from being applied after the user edits placement or text. If the preview changes, a new token is required.
 
 ### How compaction works
 
@@ -674,15 +680,16 @@ Result style example:
 Validate memory-derived claims against live workspace files before relying on them. Apply when a decision depends on remembered repo facts. Do not apply when the user already pointed at the live source file.
 ```
 
-### Section selection heuristics
+### Section placement
 
-`chooseSectionHeading()` prefers these AGENTS sections when the content matches:
+Section choice is prompt-owned, not keyword-matched in runtime code.
 
-- `Sub Agents`
-- `Questions`
-- `Preferences`
-- `Project Memory & Tracked Work`
-- fallback: `Learnings`
+The recommended flow is:
+
+- read the target `AGENTS.md`
+- choose the best existing section semantically
+- pass `sectionHeading` into `learning_promotion_preview` when needed
+- fall back to `Learnings` if no existing section is a clear fit
 
 ### Duplicate detection
 
@@ -707,7 +714,7 @@ These tools are the public runtime interface used by prompt flows.
 | `learning_resolve_pending_collision` | Resolve a creation-time collision via merge, replace, or skip |
 | `learning_resolve_review_collision` | Resolve a review-time collision via merge, replace, skip, or keep-current-filename |
 | `learning_review_queue` | Return pending items, approved items, and normalization proposals in live review order |
-| `learning_promotion_preview` | Build the AGENTS preview, selected section, dedupe signal, and confirmation token |
+| `learning_promotion_preview` | Build the AGENTS preview, selected section, dedupe signal, and preview-consistency token |
 | `learning_apply_review_action` | Apply approve/reject/keep/move/promote/remove/consolidate/normalize actions |
 
 ### Safety checks inside the runtime
@@ -796,7 +803,7 @@ These are the rules the whole system is built around.
 5. **Bodies should stay structured**
    - Source: `extensions/learning-system/markdown.ts`
 
-6. **Promotion requires a fresh confirmation token**
+6. **Promotion requires a fresh preview-consistency token**
    - Source: `extensions/learning-system/runtime.ts`, `extensions/learning-system/promotion.ts`
 
 7. **AGENTS writes are restricted to managed targets**
@@ -886,8 +893,8 @@ That command is useful for debugging path resolution and queue state.
    - section heading
    - compacted text
    - dedupe status
-   - confirmation token
-6. User confirms
+   - preview-consistency token
+6. The prompt obtains explicit user confirmation via `questionnaire`
 7. The prompt calls `learning_apply_review_action(action: "promote", confirmationToken: ...)`
 8. The runtime writes the AGENTS bullet and deletes the learning file
 9. The extension refreshes the injected learning refs
