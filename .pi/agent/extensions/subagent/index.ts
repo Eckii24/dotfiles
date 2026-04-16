@@ -1,402 +1,28 @@
-/**
- * Subagent Tool - Delegate tasks to specialized agents
- *
- * Spawns a separate `pi` process for each subagent invocation,
- * giving it an isolated context window.
- *
- * Supports three modes:
- *   - Single: { agent: "name", task: "..." }
- *   - Parallel: { tasks: [{ agent: "name", task: "..." }, ...] }
- *   - Chain: { chain: [{ agent: "name", task: "... {previous} ..." }, ...] }
- *
- * Uses JSON mode to capture structured output from subagents.
- */
-
-import { spawn } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { Message } from "@mariozechner/pi-ai";
 import { StringEnum } from "@mariozechner/pi-ai";
-import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "@mariozechner/pi-coding-agent";
-import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import type { Message, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { type AgentConfig, type AgentScope, discoverAgents, formatAgentsForPrompt } from "./agents.js";
+import { SUBAGENT_CONTROL_SOCKET_ENV, startSubagentControlServer, type SubagentControlServerHandle } from "./run-control-proxy.js";
+import { renderSubagentResult } from "./render-inline-tree.js";
+import { buildDefaultRootSummary, getFinalOutput, toInlinePreview, toSubagentToolDetails, type LiveRunTarget, type RootRunSnapshot } from "./run-model.js";
+import { SubagentRunStore } from "./run-store.js";
+import { startRpcRunTransport } from "./run-transport-rpc.js";
+import type { RunTransportHandle } from "./run-transport.js";
+import { SubagentUIController } from "./ui/controller.js";
+import { openRunNodeExecutionOverlay } from "./ui/detail-overlay.js";
+import { STATUS_OVERLAY_RESERVED_WIDGET_LINES, openStatusOverlay } from "./ui/status-overlay.js";
+import { openSteerCompose } from "./ui/steer-compose.js";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
-const COLLAPSED_ITEM_COUNT = 10;
-const SUBAGENT_ENV = "PI_SUBAGENT";
+const IS_RPC_SUBAGENT_PROCESS = process.env.PI_SUBAGENT === "1";
 
-function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1000000) return `${Math.round(count / 1000)}k`;
-	return `${(count / 1000000).toFixed(1)}M`;
-}
-
-function formatUsageStats(
-	usage: {
-		input: number;
-		output: number;
-		cacheRead: number;
-		cacheWrite: number;
-		cost: number;
-		contextTokens?: number;
-		turns?: number;
-	},
-	model?: string,
-): string {
-	const parts: string[] = [];
-	if (usage.turns) parts.push(`${usage.turns} turn${usage.turns > 1 ? "s" : ""}`);
-	if (usage.input) parts.push(`↑${formatTokens(usage.input)}`);
-	if (usage.output) parts.push(`↓${formatTokens(usage.output)}`);
-	if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
-	if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
-	if (usage.cost) parts.push(`$${usage.cost.toFixed(4)}`);
-	if (usage.contextTokens && usage.contextTokens > 0) {
-		parts.push(`ctx:${formatTokens(usage.contextTokens)}`);
-	}
-	if (model) parts.push(model);
-	return parts.join(" ");
-}
-
-function formatToolCall(
-	toolName: string,
-	args: Record<string, unknown>,
-	themeFg: (color: any, text: string) => string,
-): string {
-	const shortenPath = (p: string) => {
-		const home = os.homedir();
-		return p.startsWith(home) ? `~${p.slice(home.length)}` : p;
-	};
-
-	switch (toolName) {
-		case "bash": {
-			const command = (args.command as string) || "...";
-			return themeFg("muted", "$ ") + themeFg("toolOutput", command);
-		}
-		case "read": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			const filePath = shortenPath(rawPath);
-			const offset = args.offset as number | undefined;
-			const limit = args.limit as number | undefined;
-			let text = themeFg("accent", filePath);
-			if (offset !== undefined || limit !== undefined) {
-				const startLine = offset ?? 1;
-				const endLine = limit !== undefined ? startLine + limit - 1 : "";
-				text += themeFg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
-			}
-			return themeFg("muted", "read ") + text;
-		}
-		case "write": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			const filePath = shortenPath(rawPath);
-			const content = (args.content || "") as string;
-			const lines = content.split("\n").length;
-			let text = themeFg("muted", "write ") + themeFg("accent", filePath);
-			if (lines > 1) text += themeFg("dim", ` (${lines} lines)`);
-			return text;
-		}
-		case "edit": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			return themeFg("muted", "edit ") + themeFg("accent", shortenPath(rawPath));
-		}
-		case "ls": {
-			const rawPath = (args.path || ".") as string;
-			return themeFg("muted", "ls ") + themeFg("accent", shortenPath(rawPath));
-		}
-		case "find": {
-			const pattern = (args.pattern || "*") as string;
-			const rawPath = (args.path || ".") as string;
-			return themeFg("muted", "find ") + themeFg("accent", pattern) + themeFg("dim", ` in ${shortenPath(rawPath)}`);
-		}
-		case "grep": {
-			const pattern = (args.pattern || "") as string;
-			const rawPath = (args.path || ".") as string;
-			return (
-				themeFg("muted", "grep ") +
-				themeFg("accent", `/${pattern}/`) +
-				themeFg("dim", ` in ${shortenPath(rawPath)}`)
-			);
-		}
-		default: {
-			const argsStr = JSON.stringify(args);
-			return themeFg("accent", toolName) + themeFg("dim", ` ${argsStr}`);
-		}
-	}
-}
-
-interface UsageStats {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	cost: number;
-	contextTokens: number;
-	turns: number;
-}
-
-interface SingleResult {
-	agent: string;
-	agentSource: "user" | "project" | "unknown";
-	task: string;
-	exitCode: number;
-	messages: Message[];
-	stderr: string;
-	usage: UsageStats;
-	model?: string;
-	stopReason?: string;
-	errorMessage?: string;
-	step?: number;
-}
-
-interface SubagentDetails {
-	mode: "single" | "parallel" | "chain";
-	agentScope: AgentScope;
-	projectAgentsDir: string | null;
-	results: SingleResult[];
-}
-
-function getFinalOutput(messages: Message[]): string {
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const msg = messages[i];
-		if (msg.role === "assistant") {
-			for (const part of msg.content) {
-				if (part.type === "text") return part.text;
-			}
-		}
-	}
-	return "";
-}
-
-type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
-
-function getDisplayItems(messages: Message[]): DisplayItem[] {
-	const items: DisplayItem[] = [];
-	for (const msg of messages) {
-		if (msg.role === "assistant") {
-			for (const part of msg.content) {
-				if (part.type === "text") items.push({ type: "text", text: part.text });
-				else if (part.type === "toolCall") items.push({ type: "toolCall", name: part.name, args: part.arguments });
-			}
-		}
-	}
-	return items;
-}
-
-async function mapWithConcurrencyLimit<TIn, TOut>(
-	items: TIn[],
-	concurrency: number,
-	fn: (item: TIn, index: number) => Promise<TOut>,
-): Promise<TOut[]> {
-	if (items.length === 0) return [];
-	const limit = Math.max(1, Math.min(concurrency, items.length));
-	const results: TOut[] = new Array(items.length);
-	let nextIndex = 0;
-	const workers = new Array(limit).fill(null).map(async () => {
-		while (true) {
-			const current = nextIndex++;
-			if (current >= items.length) return;
-			results[current] = await fn(items[current], current);
-		}
-	});
-	await Promise.all(workers);
-	return results;
-}
-
-async function writePromptToTempFile(agentName: string, prompt: string): Promise<{ dir: string; filePath: string }> {
-	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pi-subagent-"));
-	const safeName = agentName.replace(/[^\w.-]+/g, "_");
-	const filePath = path.join(tmpDir, `prompt-${safeName}.md`);
-	await withFileMutationQueue(filePath, async () => {
-		await fs.promises.writeFile(filePath, prompt, { encoding: "utf-8", mode: 0o600 });
-	});
-	return { dir: tmpDir, filePath };
-}
-
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
-	const currentScript = process.argv[1];
-	if (currentScript && fs.existsSync(currentScript)) {
-		return { command: process.execPath, args: [currentScript, ...args] };
-	}
-
-	const execName = path.basename(process.execPath).toLowerCase();
-	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
-	if (!isGenericRuntime) {
-		return { command: process.execPath, args };
-	}
-
-	return { command: "pi", args };
-}
-
-type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
-
-async function runSingleAgent(
-	defaultCwd: string,
-	agents: AgentConfig[],
-	agentName: string,
-	task: string,
-	cwd: string | undefined,
-	step: number | undefined,
-	signal: AbortSignal | undefined,
-	onUpdate: OnUpdateCallback | undefined,
-	makeDetails: (results: SingleResult[]) => SubagentDetails,
-): Promise<SingleResult> {
-	const agent = agents.find((a) => a.name === agentName);
-
-	if (!agent) {
-		const available = agents.map((a) => `"${a.name}"`).join(", ") || "none";
-		return {
-			agent: agentName,
-			agentSource: "unknown",
-			task,
-			exitCode: 1,
-			messages: [],
-			stderr: `Unknown agent: "${agentName}". Available agents: ${available}.`,
-			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-			step,
-		};
-	}
-
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
-	if (agent.model) args.push("--model", agent.model);
-	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
-
-	let tmpPromptDir: string | null = null;
-	let tmpPromptPath: string | null = null;
-
-	const currentResult: SingleResult = {
-		agent: agentName,
-		agentSource: agent.source,
-		task,
-		exitCode: 0,
-		messages: [],
-		stderr: "",
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-		model: agent.model,
-		step,
-	};
-
-	const emitUpdate = () => {
-		if (onUpdate) {
-			onUpdate({
-				content: [{ type: "text", text: getFinalOutput(currentResult.messages) || "(running...)" }],
-				details: makeDetails([currentResult]),
-			});
-		}
-	};
-
-	try {
-		if (agent.systemPrompt.trim()) {
-			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
-			tmpPromptDir = tmp.dir;
-			tmpPromptPath = tmp.filePath;
-			args.push("--append-system-prompt", tmpPromptPath);
-		}
-
-		args.push(`Task: ${task}`);
-		let wasAborted = false;
-
-		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
-			const proc = spawn(invocation.command, invocation.args, {
-				cwd: cwd ?? defaultCwd,
-				shell: false,
-				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, [SUBAGENT_ENV]: "1" },
-			});
-			let buffer = "";
-
-			const processLine = (line: string) => {
-				if (!line.trim()) return;
-				let event: any;
-				try {
-					event = JSON.parse(line);
-				} catch {
-					return;
-				}
-
-				if (event.type === "message_end" && event.message) {
-					const msg = event.message as Message;
-					currentResult.messages.push(msg);
-
-					if (msg.role === "assistant") {
-						currentResult.usage.turns++;
-						const usage = msg.usage;
-						if (usage) {
-							currentResult.usage.input += usage.input || 0;
-							currentResult.usage.output += usage.output || 0;
-							currentResult.usage.cacheRead += usage.cacheRead || 0;
-							currentResult.usage.cacheWrite += usage.cacheWrite || 0;
-							currentResult.usage.cost += usage.cost?.total || 0;
-							currentResult.usage.contextTokens = usage.totalTokens || 0;
-						}
-						if (!currentResult.model && msg.model) currentResult.model = msg.model;
-						if (msg.stopReason) currentResult.stopReason = msg.stopReason;
-						if (msg.errorMessage) currentResult.errorMessage = msg.errorMessage;
-					}
-					emitUpdate();
-				}
-
-				if (event.type === "tool_result_end" && event.message) {
-					currentResult.messages.push(event.message as Message);
-					emitUpdate();
-				}
-			};
-
-			proc.stdout.on("data", (data) => {
-				buffer += data.toString();
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-				for (const line of lines) processLine(line);
-			});
-
-			proc.stderr.on("data", (data) => {
-				currentResult.stderr += data.toString();
-			});
-
-			proc.on("close", (code) => {
-				if (buffer.trim()) processLine(buffer);
-				resolve(code ?? 0);
-			});
-
-			proc.on("error", () => {
-				resolve(1);
-			});
-
-			if (signal) {
-				const killProc = () => {
-					wasAborted = true;
-					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
-					}, 5000);
-				};
-				if (signal.aborted) killProc();
-				else signal.addEventListener("abort", killProc, { once: true });
-			}
-		});
-
-		currentResult.exitCode = exitCode;
-		if (wasAborted) throw new Error("Subagent was aborted");
-		return currentResult;
-	} finally {
-		if (tmpPromptPath)
-			try {
-				fs.unlinkSync(tmpPromptPath);
-			} catch {
-				/* ignore */
-			}
-		if (tmpPromptDir)
-			try {
-				fs.rmdirSync(tmpPromptDir);
-			} catch {
-				/* ignore */
-			}
-	}
-}
+type SubagentToolDetails = ReturnType<typeof toSubagentToolDetails>;
+type OnUpdateCallback = (partial: AgentToolResult<SubagentToolDetails>) => void;
 
 const TaskItem = Type.Object({
 	agent: Type.String({ description: "Name of the agent to invoke" }),
@@ -428,15 +54,445 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
-	// Inject available subagents into the system prompt (name + description),
-	// similar to how skills are listed for progressive disclosure.
+	const store = new SubagentRunStore();
+	const controller = new SubagentUIController(store);
+	const activeTransports = new Map<string, Map<string, RunTransportHandle>>();
+	let controlServer: SubagentControlServerHandle | undefined;
+
+	const getTransportForLiveTarget = (target: LiveRunTarget): RunTransportHandle | undefined =>
+		activeTransports.get(target.transportRootRunId)?.get(target.transportLeafRunId);
+
+	const sendSteeringToLiveTarget = async (target: LiveRunTarget, message: string, delivery: "steer" | "followUp" = "steer") => {
+		const transport = getTransportForLiveTarget(target);
+		if (!transport) throw new Error("No matching live child transport is currently registered for this target.");
+		if (target.proxied) {
+			await transport.proxySteer({
+				targetRootRunId: target.targetRootRunId,
+				targetLeafRunId: target.targetLeafRunId,
+			}, message, delivery);
+			return;
+		}
+		await transport.steer(message, delivery);
+	};
+
+	const abortLiveTarget = async (target: LiveRunTarget) => {
+		const transport = getTransportForLiveTarget(target);
+		if (!transport) throw new Error("No matching live child transport is currently registered for this target.");
+		if (target.proxied) {
+			await transport.proxyAbort({
+				targetRootRunId: target.targetRootRunId,
+				targetLeafRunId: target.targetLeafRunId,
+			});
+			return;
+		}
+		await transport.abort();
+	};
+
+	const resolveNodeLiveTarget = (targetRootRunId: string, targetLeafRunId: string): { node: NonNullable<ReturnType<typeof store.findRunNodeByTarget>>; liveTarget: LiveRunTarget } => {
+		const node = store.findRunNodeByTarget(targetRootRunId, targetLeafRunId);
+		const liveTarget = node?.liveTarget;
+		if (!node?.leaf || !liveTarget) {
+			throw new Error(`No reachable live nested control path is registered for ${targetRootRunId}/${targetLeafRunId}.`);
+		}
+		if (!getTransportForLiveTarget(liveTarget)) {
+			throw new Error(`The transport path for ${node.title} is no longer live.`);
+		}
+		return { node, liveTarget };
+	};
+
+	const maybeRecordLocalSteering = (
+		target: LiveRunTarget,
+		entry: { id: string; text: string; delivery: "steer"; status: "queued" | "sent" | "failed"; error?: string },
+	) => {
+		if (target.proxied) return;
+		store.recordSteeringRequest(target.transportRootRunId, target.transportLeafRunId, entry);
+	};
+
+	const setTransport = (rootRunId: string, leafRunId: string, transport: RunTransportHandle | undefined) => {
+		let leafMap = activeTransports.get(rootRunId);
+		if (!transport) {
+			leafMap?.delete(leafRunId);
+			if (leafMap && leafMap.size === 0) activeTransports.delete(rootRunId);
+			store.setLiveTransport(rootRunId, leafRunId, false);
+			return;
+		}
+		if (!leafMap) {
+			leafMap = new Map();
+			activeTransports.set(rootRunId, leafMap);
+		}
+		leafMap.set(leafRunId, transport);
+		store.setLiveTransport(rootRunId, leafRunId, true);
+	};
+
+	const attachContext = (ctx: ExtensionContext) => {
+		if (ctx.hasUI && !IS_RPC_SUBAGENT_PROCESS) controller.attachContext(ctx);
+	};
+
+	const startControlServerIfNeeded = async () => {
+		const socketPath = process.env[SUBAGENT_CONTROL_SOCKET_ENV];
+		if (!IS_RPC_SUBAGENT_PROCESS || !socketPath || controlServer) return;
+		controlServer = await startSubagentControlServer(socketPath, async (command) => {
+			const { liveTarget } = resolveNodeLiveTarget(command.targetRootRunId, command.targetLeafRunId);
+			if (command.type === "proxy_steer") {
+				const steerId = randomUUID();
+				maybeRecordLocalSteering(liveTarget, {
+					id: steerId,
+					text: command.message,
+					delivery: "steer",
+					status: "queued",
+				});
+				try {
+					await sendSteeringToLiveTarget(liveTarget, command.message, command.delivery);
+					maybeRecordLocalSteering(liveTarget, {
+						id: steerId,
+						text: command.message,
+						delivery: "steer",
+						status: "sent",
+					});
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					maybeRecordLocalSteering(liveTarget, {
+						id: steerId,
+						text: command.message,
+						delivery: "steer",
+						status: "failed",
+						error: errorMessage,
+					});
+					throw error;
+				}
+				return;
+			}
+			await abortLiveTarget(liveTarget);
+		});
+	};
+
+	const disposeAllTransports = async () => {
+		const transports = Array.from(activeTransports.entries()).flatMap(([rootRunId, leafMap]) =>
+			Array.from(leafMap.entries()).map(([leafRunId, transport]) => ({ rootRunId, leafRunId, transport }))
+		);
+		activeTransports.clear();
+		for (const { rootRunId, leafRunId } of transports) {
+			store.setLiveTransport(rootRunId, leafRunId, false);
+		}
+		await Promise.all(
+			transports.map(async ({ transport }) => {
+				try {
+					await transport.abort();
+				} catch {
+					// ignore
+				}
+				await transport.dispose();
+			}),
+		);
+	};
+
+	const buildAdHocToolResult = (
+		mode: RootRunSnapshot["mode"],
+		agentScope: AgentScope,
+		projectAgentsDir: string | null,
+		text: string,
+		isError = false,
+	): AgentToolResult<SubagentToolDetails> => ({
+		content: [{ type: "text", text }],
+		details: toSubagentToolDetails({
+			id: `adhoc-${randomUUID()}`,
+			mode,
+			status: isError ? "failed" : "succeeded",
+			agentScope,
+			projectAgentsDir,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+			startedAt: Date.now(),
+			endedAt: Date.now(),
+			children: [],
+			summaryText: text,
+		}),
+		isError,
+	});
+
+	const buildToolResult = (rootRunId: string, text: string, isError = false): AgentToolResult<SubagentToolDetails> => {
+		const run = store.getRootRun(rootRunId);
+		return run
+			? {
+					content: [{ type: "text", text }],
+					details: toSubagentToolDetails(run),
+					isError,
+			  }
+			: buildAdHocToolResult("single", "user", null, text, isError);
+	};
+
+	const emitUpdate = (rootRunId: string, onUpdate: OnUpdateCallback | undefined, fallbackText?: string) => {
+		if (!onUpdate) return;
+		const run = store.getRootRun(rootRunId);
+		if (!run) return;
+		onUpdate(buildToolResult(rootRunId, fallbackText ?? buildDefaultRootSummary(run)));
+	};
+
+	const confirmProjectAgentsIfNeeded = async (
+		ctx: ExtensionContext,
+		agents: AgentConfig[],
+		discovery: ReturnType<typeof discoverAgents>,
+		requestedNames: Iterable<string>,
+		confirmProjectAgents: boolean,
+	): Promise<boolean> => {
+		if (!ctx.hasUI || !confirmProjectAgents) return true;
+		const projectAgentsRequested = Array.from(new Set(requestedNames))
+			.map((name) => agents.find((agent) => agent.name === name))
+			.filter((agent): agent is AgentConfig => agent?.source === "project");
+		if (projectAgentsRequested.length === 0) return true;
+
+		const names = projectAgentsRequested.map((agent) => agent.name).join(", ");
+		const dir = discovery.projectAgentsDir ?? "(unknown)";
+		return ctx.ui.confirm(
+			"Run project-local agents?",
+			`Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
+		);
+	};
+
+	const handleTransportEvent = (rootRunId: string, leafRunId: string, event: any) => {
+		switch (event.type) {
+			case "assistant_message_update":
+				store.upsertAssistantMessage(rootRunId, leafRunId, event.message as Message);
+				break;
+			case "assistant_message":
+				store.upsertAssistantMessage(rootRunId, leafRunId, event.message as Message);
+				break;
+			case "tool_result_message":
+				store.upsertToolResultMessage(rootRunId, leafRunId, event.message as ToolResultMessage<any>);
+				break;
+			case "tool_execution_start":
+				store.updateToolExecution(rootRunId, leafRunId, event.toolName);
+				break;
+			case "tool_execution_update": {
+				const partialText = (event.partialResult?.content ?? [])
+					.filter((part: any) => part.type === "text")
+					.map((part: any) => part.text)
+					.join("\n")
+					.trim();
+				store.upsertToolResultMessage(rootRunId, leafRunId, {
+					role: "toolResult",
+					toolCallId: event.toolCallId,
+					toolName: event.toolName,
+					content: event.partialResult?.content ?? [],
+					details: event.partialResult?.details,
+					isError: false,
+					timestamp: Date.now(),
+				});
+				store.updateToolExecution(rootRunId, leafRunId, event.toolName, partialText ? toInlinePreview(partialText, 120) : undefined);
+				break;
+			}
+			case "tool_execution_end": {
+				const finalText = (event.result?.content ?? [])
+					.filter((part: any) => part.type === "text")
+					.map((part: any) => part.text)
+					.join("\n")
+					.trim();
+				store.upsertToolResultMessage(rootRunId, leafRunId, {
+					role: "toolResult",
+					toolCallId: event.toolCallId,
+					toolName: event.toolName,
+					content: event.result?.content ?? [],
+					details: event.result?.details,
+					isError: Boolean(event.isError),
+					timestamp: Date.now(),
+				});
+				store.updateToolExecution(rootRunId, leafRunId, event.toolName, finalText ? toInlinePreview(finalText, 120) : undefined);
+				break;
+			}
+			case "queue_update":
+				store.setLeafQueue(rootRunId, leafRunId, event.steering ?? [], event.followUp ?? []);
+				break;
+		}
+	};
+
+	const runLeafAgent = async (
+		ctx: ExtensionContext,
+		options: {
+			rootRunId: string;
+			leafRunId: string;
+			agents: AgentConfig[];
+			agentName: string;
+			task: string;
+			cwd?: string;
+			onUpdate?: OnUpdateCallback;
+		},
+	) => {
+		const agent = options.agents.find((candidate) => candidate.name === options.agentName);
+		if (!agent) {
+			const available = options.agents.map((candidate) => `"${candidate.name}"`).join(", ") || "none";
+			store.finishLeafRun({
+				rootRunId: options.rootRunId,
+				leafRunId: options.leafRunId,
+				exitCode: 1,
+				stderr: `Unknown agent: "${options.agentName}". Available agents: ${available}.`,
+				errorMessage: `Unknown agent: "${options.agentName}". Available agents: ${available}.`,
+			});
+			emitUpdate(options.rootRunId, options.onUpdate);
+			return store.getRootRun(options.rootRunId)?.children.find((child) => child.id === options.leafRunId);
+		}
+
+		store.markLeafRunning(options.rootRunId, options.leafRunId, { controllable: true });
+		emitUpdate(options.rootRunId, options.onUpdate);
+
+		let transport: RunTransportHandle | undefined;
+		try {
+			transport = await startRpcRunTransport({
+				defaultCwd: ctx.cwd,
+				agent,
+				task: options.task,
+				cwd: options.cwd,
+				signal: ctx.signal,
+				uiBridge: ctx.hasUI ? { hasUI: true, ui: ctx.ui } : undefined,
+				onEvent: (event) => {
+					handleTransportEvent(options.rootRunId, options.leafRunId, event);
+					emitUpdate(options.rootRunId, options.onUpdate);
+				},
+			});
+			setTransport(options.rootRunId, options.leafRunId, transport);
+			const completion = await transport.completion;
+			store.finishLeafRun({
+				rootRunId: options.rootRunId,
+				leafRunId: options.leafRunId,
+				exitCode: completion.exitCode,
+				stderr: completion.stderr,
+				aborted: completion.aborted,
+				errorMessage: completion.errorMessage,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const aborted = ctx.signal.aborted;
+			store.finishLeafRun({
+				rootRunId: options.rootRunId,
+				leafRunId: options.leafRunId,
+				exitCode: aborted ? 130 : 1,
+				stderr: aborted ? "" : message,
+				stopReason: aborted ? "aborted" : undefined,
+				aborted,
+				errorMessage: aborted ? undefined : message,
+			});
+		} finally {
+			setTransport(options.rootRunId, options.leafRunId, undefined);
+			await transport?.dispose();
+			emitUpdate(options.rootRunId, options.onUpdate);
+		}
+
+		return store.getRootRun(options.rootRunId)?.children.find((child) => child.id === options.leafRunId);
+	};
+
+	pi.on("session_start", async (_event, ctx) => {
+		attachContext(ctx);
+		await startControlServerIfNeeded();
+	});
+
+	pi.on("session_shutdown", async () => {
+		if (!IS_RPC_SUBAGENT_PROCESS) {
+			controller.clearModalReservation();
+			controller.clearWidget();
+		}
+		await controlServer?.close().catch(() => {
+			// ignore
+		});
+		controlServer = undefined;
+		await disposeAllTransports();
+	});
+
 	pi.on("before_agent_start", async (event, ctx) => {
-		const discovery = discoverAgents(ctx.cwd, "both");
+		attachContext(ctx);
+		await startControlServerIfNeeded();
+		const discovery = discoverAgents(ctx.cwd, "user");
 		if (discovery.agents.length === 0) return undefined;
 		const agentsBlock = formatAgentsForPrompt(discovery.agents);
-		return {
-			systemPrompt: event.systemPrompt + agentsBlock,
-		};
+		return { systemPrompt: event.systemPrompt + agentsBlock };
+	});
+
+	pi.registerCommand("subagents", {
+		description: "Inspect active and recent local subagent runs",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			attachContext(ctx);
+			if (!ctx.hasUI) return;
+			if (controller.getActiveRuns().length === 0 && controller.getRecentRuns().length === 0) {
+				ctx.ui.notify("No local subagent runs yet.", "info");
+				return;
+			}
+
+			controller.suspendWidget();
+			controller.reserveModalArea(STATUS_OVERLAY_RESERVED_WIDGET_LINES);
+			try {
+				while (true) {
+					const action = await openStatusOverlay(ctx, controller);
+					if (action.action === "close") return;
+
+					const inspectNode = controller.getAnyNode(action.nodeId);
+					if (action.action === "inspect") {
+						if (!inspectNode) {
+							ctx.ui.notify("The selected node is no longer available.", "warning");
+							continue;
+						}
+						await openRunNodeExecutionOverlay(ctx, controller, action.nodeId, inspectNode);
+						continue;
+					}
+
+					const node = controller.getNode(action.nodeId) ?? inspectNode;
+					if (!node) {
+						ctx.ui.notify("The selected node is no longer available.", "warning");
+						continue;
+					}
+					const liveTarget = node.liveTarget;
+					if (!node.leaf || !liveTarget) {
+						ctx.ui.notify("The selected node is inspect-only or no longer live.", "warning");
+						continue;
+					}
+					if (!getTransportForLiveTarget(liveTarget)) {
+						ctx.ui.notify(`The live control path for ${node.title} is no longer available.`, "warning");
+						continue;
+					}
+
+					if (action.action === "steer") {
+						const message = await openSteerCompose(ctx, node, node.leaf);
+						if (!message) continue;
+						const steerId = randomUUID();
+						maybeRecordLocalSteering(liveTarget, {
+							id: steerId,
+							text: message,
+							delivery: "steer",
+							status: "queued",
+						});
+						try {
+							await sendSteeringToLiveTarget(liveTarget, message);
+							maybeRecordLocalSteering(liveTarget, {
+								id: steerId,
+								text: message,
+								delivery: "steer",
+								status: "sent",
+							});
+							ctx.ui.notify(`Steering sent to ${node.leaf.agent} (${node.breadcrumb.join(" › ")}).`, "info");
+						} catch (error) {
+							const errorMessage = error instanceof Error ? error.message : String(error);
+							maybeRecordLocalSteering(liveTarget, {
+								id: steerId,
+								text: message,
+								delivery: "steer",
+								status: "failed",
+								error: errorMessage,
+							});
+							ctx.ui.notify(`Steering ${node.leaf.agent} failed: ${errorMessage}`, "error");
+						}
+						continue;
+					}
+
+					try {
+						await abortLiveTarget(liveTarget);
+						ctx.ui.notify(`Abort requested for ${node.leaf.agent} (${node.breadcrumb.join(" › ")}).`, "warning");
+					} catch (error) {
+						const errorMessage = error instanceof Error ? error.message : String(error);
+						ctx.ui.notify(`Abort ${node.leaf.agent} failed: ${errorMessage}`, "warning");
+					}
+				}
+			} finally {
+				controller.clearModalReservation();
+				controller.resumeWidget();
+			}
+		},
 	});
 
 	pi.registerTool({
@@ -450,7 +506,8 @@ export default function (pi: ExtensionAPI) {
 		].join(" "),
 		parameters: SubagentParams,
 
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, _signal, onUpdate, ctx) {
+			attachContext(ctx);
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const agents = discovery.agents;
@@ -461,225 +518,186 @@ export default function (pi: ExtensionAPI) {
 			const hasSingle = Boolean(params.agent && params.task);
 			const modeCount = Number(hasChain) + Number(hasTasks) + Number(hasSingle);
 
-			const makeDetails =
-				(mode: "single" | "parallel" | "chain") =>
-				(results: SingleResult[]): SubagentDetails => ({
-					mode,
-					agentScope,
-					projectAgentsDir: discovery.projectAgentsDir,
-					results,
-				});
-
 			if (modeCount !== 1) {
-				const available = agents.map((a) => `${a.name} (${a.source})`).join(", ") || "none";
+				const available = agents.map((agent) => `${agent.name} (${agent.source})`).join(", ") || "none";
 				return {
-					content: [
-						{
-							type: "text",
-							text: `Invalid parameters. Provide exactly one mode.\nAvailable agents: ${available}`,
-						},
-					],
-					details: makeDetails("single")([]),
+					content: [{ type: "text", text: `Invalid parameters. Provide exactly one mode.\nAvailable agents: ${available}` }],
+					details: toSubagentToolDetails({
+						id: `invalid-${toolCallId}`,
+						toolCallId,
+						mode: hasChain ? "chain" : hasTasks ? "parallel" : "single",
+						status: "failed",
+						agentScope,
+						projectAgentsDir: discovery.projectAgentsDir,
+						createdAt: Date.now(),
+						updatedAt: Date.now(),
+						startedAt: Date.now(),
+						children: [],
+					}),
 				};
 			}
 
-			if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {
-				const requestedAgentNames = new Set<string>();
-				if (params.chain) for (const step of params.chain) requestedAgentNames.add(step.agent);
-				if (params.tasks) for (const t of params.tasks) requestedAgentNames.add(t.agent);
-				if (params.agent) requestedAgentNames.add(params.agent);
-
-				const projectAgentsRequested = Array.from(requestedAgentNames)
-					.map((name) => agents.find((a) => a.name === name))
-					.filter((a): a is AgentConfig => a?.source === "project");
-
-				if (projectAgentsRequested.length > 0) {
-					const names = projectAgentsRequested.map((a) => a.name).join(", ");
-					const dir = discovery.projectAgentsDir ?? "(unknown)";
-					const ok = await ctx.ui.confirm(
-						"Run project-local agents?",
-						`Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
-					);
-					if (!ok)
-						return {
-							content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
-							details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]),
-						};
-				}
+			const requestedAgents = [
+				...(params.chain?.map((step) => step.agent) ?? []),
+				...(params.tasks?.map((task) => task.agent) ?? []),
+				...(params.agent ? [params.agent] : []),
+			];
+			if ((agentScope === "project" || agentScope === "both") && !(await confirmProjectAgentsIfNeeded(ctx, agents, discovery, requestedAgents, confirmProjectAgents))) {
+				const mode = hasChain ? "chain" : hasTasks ? "parallel" : "single";
+				return buildAdHocToolResult(mode, agentScope, discovery.projectAgentsDir, "Canceled: project-local agents not approved.", true);
 			}
 
 			if (params.chain && params.chain.length > 0) {
-				const results: SingleResult[] = [];
+				const rootRunId = `subagent-${randomUUID()}`;
+				store.createRootRun({
+					id: rootRunId,
+					toolCallId,
+					mode: "chain",
+					agentScope,
+					projectAgentsDir: discovery.projectAgentsDir,
+				});
+				const leafIds = params.chain.map((step, index) => {
+					const leafId = `${rootRunId}:step:${index + 1}`;
+					const agent = agents.find((candidate) => candidate.name === step.agent);
+					store.queueLeafRun({
+						rootRunId,
+						leafRunId: leafId,
+						agent: step.agent,
+						agentSource: agent?.source ?? "unknown",
+						task: step.task,
+						step: index + 1,
+					});
+					return leafId;
+				});
+				emitUpdate(rootRunId, onUpdate);
+
 				let previousOutput = "";
-
 				for (let i = 0; i < params.chain.length; i++) {
-					const step = params.chain[i];
+					const step = params.chain[i]!;
+					const leafId = leafIds[i]!;
 					const taskWithContext = step.task.replace(/\{previous\}/g, previousOutput);
-
-					// Create update callback that includes all previous results
-					const chainUpdate: OnUpdateCallback | undefined = onUpdate
-						? (partial) => {
-								// Combine completed results with current streaming result
-								const currentResult = partial.details?.results[0];
-								if (currentResult) {
-									const allResults = [...results, currentResult];
-									onUpdate({
-										content: partial.content,
-										details: makeDetails("chain")(allResults),
-									});
-								}
-							}
-						: undefined;
-
-					const result = await runSingleAgent(
-						ctx.cwd,
+					const run = await runLeafAgent(ctx, {
+						rootRunId,
+						leafRunId: leafId,
 						agents,
-						step.agent,
-						taskWithContext,
-						step.cwd,
-						i + 1,
-						signal,
-						chainUpdate,
-						makeDetails("chain"),
-					);
-					results.push(result);
+						agentName: step.agent,
+						task: taskWithContext,
+						cwd: step.cwd,
+						onUpdate,
+					});
 
-					const isError =
-						result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
+					const isError = !run || (run.status !== "succeeded" && run.status !== "running");
 					if (isError) {
-						const errorMsg =
-							result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";
-						return {
-							content: [{ type: "text", text: `Chain stopped at step ${i + 1} (${step.agent}): ${errorMsg}` }],
-							details: makeDetails("chain")(results),
-							isError: true,
-						};
+						for (let j = i + 1; j < leafIds.length; j++) {
+							store.markLeafSkipped(rootRunId, leafIds[j]!, `skipped after step ${i + 1} failed`);
+						}
+						const errorText = run?.errorMessage || run?.stderr || run?.finalOutput || "(no output)";
+						store.setRootSummary(rootRunId, `Chain stopped at step ${i + 1} (${step.agent}): ${errorText}`);
+						return buildToolResult(rootRunId, `Chain stopped at step ${i + 1} (${step.agent}): ${errorText}`, true);
 					}
-					previousOutput = getFinalOutput(result.messages);
+					previousOutput = run.finalOutput || getFinalOutput(run.messages);
 				}
-				return {
-					content: [{ type: "text", text: getFinalOutput(results[results.length - 1].messages) || "(no output)" }],
-					details: makeDetails("chain")(results),
-				};
+
+				const finalRun = store.getRootRun(rootRunId)!;
+				const finalOutput = finalRun.children.at(-1)?.finalOutput || "(no output)";
+				store.setRootSummary(rootRunId, finalOutput);
+				return buildToolResult(rootRunId, finalOutput);
 			}
 
 			if (params.tasks && params.tasks.length > 0) {
-				if (params.tasks.length > MAX_PARALLEL_TASKS)
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Too many parallel tasks (${params.tasks.length}). Max is ${MAX_PARALLEL_TASKS}.`,
-							},
-						],
-						details: makeDetails("parallel")([]),
-					};
-
-				// Track all results for streaming updates
-				const allResults: SingleResult[] = new Array(params.tasks.length);
-
-				// Initialize placeholder results
-				for (let i = 0; i < params.tasks.length; i++) {
-					allResults[i] = {
-						agent: params.tasks[i].agent,
-						agentSource: "unknown",
-						task: params.tasks[i].task,
-						exitCode: -1, // -1 = still running
-						messages: [],
-						stderr: "",
-						usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-					};
+				if (params.tasks.length > MAX_PARALLEL_TASKS) {
+					const text = `Too many parallel tasks (${params.tasks.length}). Max is ${MAX_PARALLEL_TASKS}.`;
+					return buildAdHocToolResult("parallel", agentScope, discovery.projectAgentsDir, text, true);
 				}
 
-				const emitParallelUpdate = () => {
-					if (onUpdate) {
-						const running = allResults.filter((r) => r.exitCode === -1).length;
-						const done = allResults.filter((r) => r.exitCode !== -1).length;
-						onUpdate({
-							content: [
-								{ type: "text", text: `Parallel: ${done}/${allResults.length} done, ${running} running...` },
-							],
-							details: makeDetails("parallel")([...allResults]),
-						});
-					}
-				};
+				const rootRunId = `subagent-${randomUUID()}`;
+				store.createRootRun({
+					id: rootRunId,
+					toolCallId,
+					mode: "parallel",
+					agentScope,
+					projectAgentsDir: discovery.projectAgentsDir,
+				});
+				const leafIds = params.tasks.map((task, index) => {
+					const leafId = `${rootRunId}:task:${index + 1}`;
+					const agent = agents.find((candidate) => candidate.name === task.agent);
+					store.queueLeafRun({
+						rootRunId,
+						leafRunId: leafId,
+						agent: task.agent,
+						agentSource: agent?.source ?? "unknown",
+						task: task.task,
+					});
+					return leafId;
+				});
+				emitUpdate(rootRunId, onUpdate);
 
-				const results = await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (t, index) => {
-					const result = await runSingleAgent(
-						ctx.cwd,
+				await mapWithConcurrencyLimit(params.tasks, MAX_CONCURRENCY, async (task, index) => {
+					await runLeafAgent(ctx, {
+						rootRunId,
+						leafRunId: leafIds[index]!,
 						agents,
-						t.agent,
-						t.task,
-						t.cwd,
-						undefined,
-						signal,
-						// Per-task update callback
-						(partial) => {
-							if (partial.details?.results[0]) {
-								allResults[index] = partial.details.results[0];
-								emitParallelUpdate();
-							}
-						},
-						makeDetails("parallel"),
-					);
-					allResults[index] = result;
-					emitParallelUpdate();
-					return result;
+						agentName: task.agent,
+						task: task.task,
+						cwd: task.cwd,
+						onUpdate,
+					});
 				});
 
-				const successCount = results.filter((r) => r.exitCode === 0).length;
-				const summaries = results.map((r) => {
-					const output = getFinalOutput(r.messages);
-					const preview = output.slice(0, 100) + (output.length > 100 ? "..." : "");
-					return `[${r.agent}] ${r.exitCode === 0 ? "completed" : "failed"}: ${preview || "(no output)"}`;
+				const finalRun = store.getRootRun(rootRunId)!;
+				const successCount = finalRun.children.filter((child) => child.status === "succeeded").length;
+				const summaries = finalRun.children.map((child) => {
+					const preview = toInlinePreview(child.finalOutput || child.errorMessage || child.stderr || "(no output)", 100);
+					return `[${child.agent}] ${child.status === "succeeded" ? "completed" : child.status}: ${preview || "(no output)"}`;
 				});
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Parallel: ${successCount}/${results.length} succeeded\n\n${summaries.join("\n\n")}`,
-						},
-					],
-					details: makeDetails("parallel")(results),
-				};
+				const text = `Parallel: ${successCount}/${finalRun.children.length} succeeded\n\n${summaries.join("\n\n")}`;
+				store.setRootSummary(rootRunId, text);
+				return buildToolResult(rootRunId, text, successCount !== finalRun.children.length);
 			}
 
 			if (params.agent && params.task) {
-				const result = await runSingleAgent(
-					ctx.cwd,
+				const rootRunId = `subagent-${randomUUID()}`;
+				store.createRootRun({
+					id: rootRunId,
+					toolCallId,
+					mode: "single",
+					agentScope,
+					projectAgentsDir: discovery.projectAgentsDir,
+				});
+				const agent = agents.find((candidate) => candidate.name === params.agent);
+				const leafRunId = `${rootRunId}:single`;
+				store.queueLeafRun({
+					rootRunId,
+					leafRunId,
+					agent: params.agent,
+					agentSource: agent?.source ?? "unknown",
+					task: params.task,
+					status: "running",
+					controllable: true,
+				});
+				emitUpdate(rootRunId, onUpdate);
+				const result = await runLeafAgent(ctx, {
+					rootRunId,
+					leafRunId,
 					agents,
-					params.agent,
-					params.task,
-					params.cwd,
-					undefined,
-					signal,
+					agentName: params.agent,
+					task: params.task,
+					cwd: params.cwd,
 					onUpdate,
-					makeDetails("single"),
-				);
-				const isError = result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
-				if (isError) {
-					const errorMsg =
-						result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";
-					return {
-						content: [{ type: "text", text: `Agent ${result.stopReason || "failed"}: ${errorMsg}` }],
-						details: makeDetails("single")([result]),
-						isError: true,
-					};
-				}
-				return {
-					content: [{ type: "text", text: getFinalOutput(result.messages) || "(no output)" }],
-					details: makeDetails("single")([result]),
-				};
+				});
+				const isError = !result || result.status !== "succeeded";
+				const text = isError
+					? `Agent ${result?.stopReason || "failed"}: ${result?.errorMessage || result?.stderr || result?.finalOutput || "(no output)"}`
+					: result.finalOutput || "(no output)";
+				store.setRootSummary(rootRunId, text);
+				return buildToolResult(rootRunId, text, isError);
 			}
 
-			const available = agents.map((a) => `${a.name} (${a.source})`).join(", ") || "none";
-			return {
-				content: [{ type: "text", text: `Invalid parameters. Available agents: ${available}` }],
-				details: makeDetails("single")([]),
-			};
+			const available = agents.map((agent) => `${agent.name} (${agent.source})`).join(", ") || "none";
+			return buildAdHocToolResult("single", agentScope, discovery.projectAgentsDir, `Invalid parameters. Available agents: ${available}`, true);
 		},
 
-		renderCall(args, theme, _context) {
+		renderCall(args, theme) {
 			const scope: AgentScope = args.agentScope ?? "user";
 			if (args.chain && args.chain.length > 0) {
 				let text =
@@ -688,14 +706,8 @@ export default function (pi: ExtensionAPI) {
 					theme.fg("muted", ` [${scope}]`);
 				for (let i = 0; i < Math.min(args.chain.length, 3); i++) {
 					const step = args.chain[i];
-					// Clean up {previous} placeholder for display
 					const cleanTask = step.task.replace(/\{previous\}/g, "").trim();
-					text +=
-						"\n  " +
-						theme.fg("muted", `${i + 1}.`) +
-						" " +
-						theme.fg("accent", step.agent) +
-						theme.fg("dim", ` ${cleanTask}`);
+					text += `\n  ${theme.fg("muted", `${i + 1}.`)} ${theme.fg("accent", step.agent)}${theme.fg("dim", ` ${cleanTask}`)}`;
 				}
 				if (args.chain.length > 3) text += `\n  ${theme.fg("muted", `... +${args.chain.length - 3} more`)}`;
 				return new Text(text, 0, 0);
@@ -705,291 +717,40 @@ export default function (pi: ExtensionAPI) {
 					theme.fg("toolTitle", theme.bold("subagent ")) +
 					theme.fg("accent", `parallel (${args.tasks.length} tasks)`) +
 					theme.fg("muted", ` [${scope}]`);
-				for (const t of args.tasks.slice(0, 3)) {
-					text += `\n  ${theme.fg("accent", t.agent)}${theme.fg("dim", ` ${t.task}`)}`;
+				for (const task of args.tasks.slice(0, 3)) {
+					text += `\n  ${theme.fg("accent", task.agent)}${theme.fg("dim", ` ${task.task}`)}`;
 				}
 				if (args.tasks.length > 3) text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
 				return new Text(text, 0, 0);
 			}
 			const agentName = args.agent || "...";
 			const task = args.task || "...";
-			let text =
-				theme.fg("toolTitle", theme.bold("subagent ")) +
-				theme.fg("accent", agentName) +
-				theme.fg("muted", ` [${scope}]`);
+			let text = theme.fg("toolTitle", theme.bold("subagent ")) + theme.fg("accent", agentName) + theme.fg("muted", ` [${scope}]`);
 			text += `\n  ${theme.fg("dim", task)}`;
 			return new Text(text, 0, 0);
 		},
 
-		renderResult(result, { expanded }, theme, _context) {
-			const details = result.details as SubagentDetails | undefined;
-			if (!details || details.results.length === 0) {
-				const text = result.content[0];
-				return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
-			}
-
-			const mdTheme = getMarkdownTheme();
-
-			const renderDisplayItems = (items: DisplayItem[], limit?: number) => {
-				const toShow = limit ? items.slice(-limit) : items;
-				const skipped = limit && items.length > limit ? items.length - limit : 0;
-				let text = "";
-				if (skipped > 0) text += theme.fg("muted", `... ${skipped} earlier items\n`);
-				for (const item of toShow) {
-					if (item.type === "text") {
-						const preview = expanded ? item.text : item.text.split("\n").slice(0, 3).join("\n");
-						text += `${theme.fg("toolOutput", preview)}\n`;
-					} else {
-						text += `${theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme))}\n`;
-					}
-				}
-				return text.trimEnd();
-			};
-
-			if (details.mode === "single" && details.results.length === 1) {
-				const r = details.results[0];
-				const isError = r.exitCode !== 0 || r.stopReason === "error" || r.stopReason === "aborted";
-				const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-				const displayItems = getDisplayItems(r.messages);
-				const finalOutput = getFinalOutput(r.messages);
-
-				if (expanded) {
-					const container = new Container();
-					let header = `${icon} ${theme.fg("toolTitle", theme.bold(r.agent))}${theme.fg("muted", ` (${r.agentSource})`)}`;
-					if (isError && r.stopReason) header += ` ${theme.fg("error", `[${r.stopReason}]`)}`;
-					container.addChild(new Text(header, 0, 0));
-					if (isError && r.errorMessage)
-						container.addChild(new Text(theme.fg("error", `Error: ${r.errorMessage}`), 0, 0));
-					container.addChild(new Spacer(1));
-					container.addChild(new Text(theme.fg("muted", "─── Task ───"), 0, 0));
-					container.addChild(new Text(theme.fg("dim", r.task), 0, 0));
-					container.addChild(new Spacer(1));
-					container.addChild(new Text(theme.fg("muted", "─── Output ───"), 0, 0));
-					if (displayItems.length === 0 && !finalOutput) {
-						container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
-					} else {
-						for (const item of displayItems) {
-							if (item.type === "toolCall")
-								container.addChild(
-									new Text(
-										theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)),
-										0,
-										0,
-									),
-								);
-						}
-						if (finalOutput) {
-							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
-						}
-					}
-					const usageStr = formatUsageStats(r.usage, r.model);
-					if (usageStr) {
-						container.addChild(new Spacer(1));
-						container.addChild(new Text(theme.fg("dim", usageStr), 0, 0));
-					}
-					return container;
-				}
-
-				let text = `${icon} ${theme.fg("toolTitle", theme.bold(r.agent))}${theme.fg("muted", ` (${r.agentSource})`)}`;
-				if (isError && r.stopReason) text += ` ${theme.fg("error", `[${r.stopReason}]`)}`;
-				if (isError && r.errorMessage) text += `\n${theme.fg("error", `Error: ${r.errorMessage}`)}`;
-				else if (displayItems.length === 0) text += `\n${theme.fg("muted", "(no output)")}`;
-				else {
-					text += `\n${renderDisplayItems(displayItems, COLLAPSED_ITEM_COUNT)}`;
-					if (displayItems.length > COLLAPSED_ITEM_COUNT) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
-				}
-				const usageStr = formatUsageStats(r.usage, r.model);
-				if (usageStr) text += `\n${theme.fg("dim", usageStr)}`;
-				return new Text(text, 0, 0);
-			}
-
-			const aggregateUsage = (results: SingleResult[]) => {
-				const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
-				for (const r of results) {
-					total.input += r.usage.input;
-					total.output += r.usage.output;
-					total.cacheRead += r.usage.cacheRead;
-					total.cacheWrite += r.usage.cacheWrite;
-					total.cost += r.usage.cost;
-					total.turns += r.usage.turns;
-				}
-				return total;
-			};
-
-			if (details.mode === "chain") {
-				const successCount = details.results.filter((r) => r.exitCode === 0).length;
-				const icon = successCount === details.results.length ? theme.fg("success", "✓") : theme.fg("error", "✗");
-
-				if (expanded) {
-					const container = new Container();
-					container.addChild(
-						new Text(
-							icon +
-								" " +
-								theme.fg("toolTitle", theme.bold("chain ")) +
-								theme.fg("accent", `${successCount}/${details.results.length} steps`),
-							0,
-							0,
-						),
-					);
-
-					for (const r of details.results) {
-						const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-						const displayItems = getDisplayItems(r.messages);
-						const finalOutput = getFinalOutput(r.messages);
-
-						container.addChild(new Spacer(1));
-						container.addChild(
-							new Text(
-								`${theme.fg("muted", `─── Step ${r.step}: `) + theme.fg("accent", r.agent)} ${rIcon}`,
-								0,
-								0,
-							),
-						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0));
-
-						// Show tool calls
-						for (const item of displayItems) {
-							if (item.type === "toolCall") {
-								container.addChild(
-									new Text(
-										theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)),
-										0,
-										0,
-									),
-								);
-							}
-						}
-
-						// Show final output as markdown
-						if (finalOutput) {
-							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
-						}
-
-						const stepUsage = formatUsageStats(r.usage, r.model);
-						if (stepUsage) container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
-					}
-
-					const usageStr = formatUsageStats(aggregateUsage(details.results));
-					if (usageStr) {
-						container.addChild(new Spacer(1));
-						container.addChild(new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0));
-					}
-					return container;
-				}
-
-				// Collapsed view
-				let text =
-					icon +
-					" " +
-					theme.fg("toolTitle", theme.bold("chain ")) +
-					theme.fg("accent", `${successCount}/${details.results.length} steps`);
-				for (const r of details.results) {
-					const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-					const displayItems = getDisplayItems(r.messages);
-					text += `\n\n${theme.fg("muted", `─── Step ${r.step}: `)}${theme.fg("accent", r.agent)} ${rIcon}`;
-					if (displayItems.length === 0) text += `\n${theme.fg("muted", "(no output)")}`;
-					else text += `\n${renderDisplayItems(displayItems, 5)}`;
-				}
-				const usageStr = formatUsageStats(aggregateUsage(details.results));
-				if (usageStr) text += `\n\n${theme.fg("dim", `Total: ${usageStr}`)}`;
-				text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
-				return new Text(text, 0, 0);
-			}
-
-			if (details.mode === "parallel") {
-				const running = details.results.filter((r) => r.exitCode === -1).length;
-				const successCount = details.results.filter((r) => r.exitCode === 0).length;
-				const failCount = details.results.filter((r) => r.exitCode > 0).length;
-				const isRunning = running > 0;
-				const icon = isRunning
-					? theme.fg("warning", "⏳")
-					: failCount > 0
-						? theme.fg("warning", "◐")
-						: theme.fg("success", "✓");
-				const status = isRunning
-					? `${successCount + failCount}/${details.results.length} done, ${running} running`
-					: `${successCount}/${details.results.length} tasks`;
-
-				if (expanded && !isRunning) {
-					const container = new Container();
-					container.addChild(
-						new Text(
-							`${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", status)}`,
-							0,
-							0,
-						),
-					);
-
-					for (const r of details.results) {
-						const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-						const displayItems = getDisplayItems(r.messages);
-						const finalOutput = getFinalOutput(r.messages);
-
-						container.addChild(new Spacer(1));
-						container.addChild(
-							new Text(`${theme.fg("muted", "─── ") + theme.fg("accent", r.agent)} ${rIcon}`, 0, 0),
-						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0));
-
-						// Show tool calls
-						for (const item of displayItems) {
-							if (item.type === "toolCall") {
-								container.addChild(
-									new Text(
-										theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)),
-										0,
-										0,
-									),
-								);
-							}
-						}
-
-						// Show final output as markdown
-						if (finalOutput) {
-							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
-						}
-
-						const taskUsage = formatUsageStats(r.usage, r.model);
-						if (taskUsage) container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
-					}
-
-					const usageStr = formatUsageStats(aggregateUsage(details.results));
-					if (usageStr) {
-						container.addChild(new Spacer(1));
-						container.addChild(new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0));
-					}
-					return container;
-				}
-
-				// Collapsed view (or still running)
-				let text = `${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", status)}`;
-				for (const r of details.results) {
-					const rIcon =
-						r.exitCode === -1
-							? theme.fg("warning", "⏳")
-							: r.exitCode === 0
-								? theme.fg("success", "✓")
-								: theme.fg("error", "✗");
-					const displayItems = getDisplayItems(r.messages);
-					text += `\n\n${theme.fg("muted", "─── ")}${theme.fg("accent", r.agent)} ${rIcon}`;
-					if (displayItems.length === 0)
-						text += `\n${theme.fg("muted", r.exitCode === -1 ? "(running...)" : "(no output)")}`;
-					else text += `\n${renderDisplayItems(displayItems, 5)}`;
-				}
-				if (!isRunning) {
-					const usageStr = formatUsageStats(aggregateUsage(details.results));
-					if (usageStr) text += `\n\n${theme.fg("dim", `Total: ${usageStr}`)}`;
-				}
-				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
-				return new Text(text, 0, 0);
-			}
-
-			const text = result.content[0];
-			return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
+		renderResult(result, options, theme) {
+			return renderSubagentResult(result, options, theme);
 		},
 	});
+
+	function mapWithConcurrencyLimit<TIn, TOut>(
+		items: TIn[],
+		concurrency: number,
+		fn: (item: TIn, index: number) => Promise<TOut>,
+	): Promise<TOut[]> {
+		if (items.length === 0) return Promise.resolve([]);
+		const limit = Math.max(1, Math.min(concurrency, items.length));
+		const results: TOut[] = new Array(items.length);
+		let nextIndex = 0;
+		const workers = new Array(limit).fill(null).map(async () => {
+			while (true) {
+				const current = nextIndex++;
+				if (current >= items.length) return;
+				results[current] = await fn(items[current]!, current);
+			}
+		});
+		return Promise.all(workers).then(() => results);
+	}
 }
