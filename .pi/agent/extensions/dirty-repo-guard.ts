@@ -26,6 +26,7 @@ const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
 const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
 const STARTUP_GUARD_STATE_KEY = "__piDirtyRepoGuardStartupChecked";
+const IS_SUBAGENT_PROCESS = process.env.PI_SUBAGENT === "1";
 
 type DirtyRepoGuardBypassEvent = {
 	token?: string;
@@ -105,6 +106,10 @@ function isFreshStartupSession(ctx: ExtensionContext): boolean {
 }
 
 export default function (pi: ExtensionAPI) {
+	if (IS_SUBAGENT_PROCESS) {
+		return;
+	}
+
 	const activeBypassTokens = new Set<string>();
 	const startupGuardState = getStartupGuardState();
 

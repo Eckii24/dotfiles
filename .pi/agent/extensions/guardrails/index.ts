@@ -312,7 +312,28 @@ async function confirmBashViolation(
     },
   );
 
-  return result;
+  if (result === "allow" || result === "allow-session" || result === "deny") {
+    return result;
+  }
+
+  const choice = await ctx.ui.select(
+    [
+      "🛡️ Guardrails — Bash Confirmation",
+      "",
+      `Command: ${command}`,
+      "",
+      "Violations:",
+      ...violationTexts,
+      "",
+      "Choose an action:",
+    ].join("\n"),
+    ["Allow once", "Allow for session", "Deny"],
+    { timeout },
+  );
+
+  if (choice === "Allow once") return "allow";
+  if (choice === "Allow for session") return "allow-session";
+  return "deny";
 }
 
 export default function (pi: ExtensionAPI) {
