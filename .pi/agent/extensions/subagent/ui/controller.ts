@@ -4,14 +4,12 @@ import { SubagentRunStore } from "../run-store.js";
 import { buildActiveRunsWidgetLines, resolveWidgetLineWidth } from "./widget.js";
 
 const WIDGET_KEY = "subagent-active-runs";
-const MODAL_RESERVATION_KEY = "subagent-modal-reservation";
 const DEFAULT_RECENT_LIMIT = 8;
 
 export class SubagentUIController {
 	private selectedNodeId: string | undefined;
 	private uiContext: ExtensionContext | undefined;
 	private widgetSuspensionDepth = 0;
-	private modalReservationRows = 0;
 	private lastWidgetSignature: string | undefined;
 	private readonly unsubscribe: () => void;
 
@@ -21,13 +19,11 @@ export class SubagentUIController {
 
 	attachContext(ctx: ExtensionContext): void {
 		this.uiContext = ctx;
-		this.refreshModalReservation();
 		this.refreshWidget(true);
 	}
 
 	dispose(): void {
 		this.unsubscribe();
-		this.clearModalReservation();
 		this.clearWidget();
 	}
 
@@ -45,20 +41,6 @@ export class SubagentUIController {
 		if (this.widgetSuspensionDepth === 0) return;
 		this.widgetSuspensionDepth--;
 		if (this.widgetSuspensionDepth === 0) this.refreshWidget(true);
-	}
-
-	reserveModalArea(rows: number): void {
-		this.modalReservationRows = Math.max(0, rows);
-		this.refreshModalReservation();
-	}
-
-	clearModalReservation(): void {
-		if (this.modalReservationRows === 0 && this.uiContext) {
-			this.uiContext.ui.setWidget(MODAL_RESERVATION_KEY, undefined);
-			return;
-		}
-		this.modalReservationRows = 0;
-		this.uiContext?.ui.setWidget(MODAL_RESERVATION_KEY, undefined);
 	}
 
 	getActiveRuns(): RootRunSnapshot[] {
@@ -117,15 +99,4 @@ export class SubagentUIController {
 		this.uiContext.ui.setWidget(WIDGET_KEY, lines);
 	}
 
-	private refreshModalReservation(): void {
-		if (!this.uiContext?.hasUI) return;
-		if (this.modalReservationRows <= 0) {
-			this.uiContext.ui.setWidget(MODAL_RESERVATION_KEY, undefined);
-			return;
-		}
-		this.uiContext.ui.setWidget(
-			MODAL_RESERVATION_KEY,
-			Array.from({ length: this.modalReservationRows }, () => this.uiContext!.ui.theme.fg("dim", " ")),
-		);
-	}
 }

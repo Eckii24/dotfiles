@@ -8,7 +8,7 @@ Delegate tasks to specialized subagents with isolated context windows, plus Pi-n
 - **Single / parallel / chain modes**: Existing orchestration modes are preserved
 - **Shared run model**: Inline output, widget, and `/subagents` all read the same normalized tree/selection snapshot
 - **Active tree widget**: The area above the editor shows the spawned subagent tree only while subagents are still active
-- **Tree-first `/subagents` overlay**: Inspect active and recent runs in one tree-first modal with a persistent detail pane
+- **Tree-first `/subagents` overlay**: Inspect active and recent runs in one centered tree-first modal with a persistent detail pane
 - **Explicit steering/abort targeting**: Only leaves with a reachable live child-transport path resolve to controls, and the UI names the exact target node before sending actions
 - **Inline nested tree**: Transcript rendering stays concise while preserving nested subagent visibility
 - **Usage tracking**: Expanded inline view still shows token/cost stats per child run
@@ -47,7 +47,7 @@ Once all subagents finish, the widget disappears; historical inspection moves to
 
 ### 3. Tree-first `/subagents` overlay
 
-Run `/subagents` to open a Pi overlay with:
+Run `/subagents` to open a centered Pi overlay with:
 
 - a persistent **tree pane** on the left
 - a persistent **selected-node detail pane** on the right

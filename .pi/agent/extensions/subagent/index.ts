@@ -14,7 +14,7 @@ import { startRpcRunTransport } from "./run-transport-rpc.js";
 import type { RunTransportHandle } from "./run-transport.js";
 import { SubagentUIController } from "./ui/controller.js";
 import { openRunNodeExecutionOverlay } from "./ui/detail-overlay.js";
-import { STATUS_OVERLAY_RESERVED_WIDGET_LINES, openStatusOverlay } from "./ui/status-overlay.js";
+import { openStatusOverlay } from "./ui/status-overlay.js";
 import { openSteerCompose } from "./ui/steer-compose.js";
 
 const MAX_PARALLEL_TASKS = 8;
@@ -386,7 +386,6 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async () => {
 		if (!IS_RPC_SUBAGENT_PROCESS) {
-			controller.clearModalReservation();
 			controller.clearWidget();
 		}
 		await controlServer?.close().catch(() => {
@@ -416,7 +415,6 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			controller.suspendWidget();
-			controller.reserveModalArea(STATUS_OVERLAY_RESERVED_WIDGET_LINES);
 			try {
 				while (true) {
 					const action = await openStatusOverlay(ctx, controller);
@@ -489,7 +487,6 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 			} finally {
-				controller.clearModalReservation();
 				controller.resumeWidget();
 			}
 		},

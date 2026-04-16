@@ -30,7 +30,6 @@ export interface StatusOverlayRenderScheduler {
 }
 
 export const STATUS_OVERLAY_TOTAL_LINES = 22;
-export const STATUS_OVERLAY_RESERVED_WIDGET_LINES = 14;
 const STATUS_OVERLAY_VISIBLE_RECENT_LIMIT = 8;
 const STATUS_OVERLAY_CONTENT_LINES = STATUS_OVERLAY_TOTAL_LINES - 8;
 const STATUS_OVERLAY_RENDER_THROTTLE_MS = 90;
@@ -45,7 +44,7 @@ export async function openStatusOverlay(
 			{
 				overlay: true,
 				overlayOptions: {
-					anchor: "bottom-center",
+					anchor: "center",
 					width: "92%",
 					minWidth: 76,
 					maxHeight: STATUS_OVERLAY_TOTAL_LINES,
@@ -170,7 +169,7 @@ export function buildStatusOverlayFrame(options: {
 	const lines: string[] = [];
 	lines.push(options.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`));
 	lines.push(wrapOuter(` ${options.theme.fg("accent", options.theme.bold("Subagents"))}`, innerWidth, options.theme));
-	lines.push(wrapOuter(` ${options.theme.fg("dim", "Tree-first modal. Enter inspects; steer/abort still require a live reachable leaf.")}`, innerWidth, options.theme));
+	lines.push(wrapOuter(` ${options.theme.fg("dim", "Centered tree-first modal. Enter inspects; steer/abort still require a live reachable leaf.")}`, innerWidth, options.theme));
 	lines.push(wrapOuter(` ${options.theme.fg("dim", "↑/↓ move • Home/End jump • Enter inspect • S steer • X abort • Esc close")}`, innerWidth, options.theme));
 	lines.push(wrapOuter("", innerWidth, options.theme));
 

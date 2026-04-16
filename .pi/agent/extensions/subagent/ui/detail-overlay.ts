@@ -64,7 +64,7 @@ export async function openRunNodeExecutionOverlay(
 		{
 			overlay: true,
 			overlayOptions: {
-				anchor: "bottom-center",
+				anchor: "center",
 				width: "92%",
 				minWidth: 76,
 				maxHeight: EXECUTION_DETAIL_OVERLAY_TOTAL_LINES,
