@@ -25,8 +25,6 @@ import {
 	applyLearningNormalization,
 	detectNormalizationIssues,
 	mergeLearningDocuments,
-	recommendExistingAction,
-	recommendPendingAction,
 	sortExistingLearningsForReview,
 } from "./review.js";
 import { listAllLearningFiles, scanApprovedLearnings } from "./scan.js";
@@ -45,17 +43,16 @@ export interface LearningRuntimeSnapshot {
 	injection: LearningInjection;
 }
 
-interface ReviewablePendingItem {
+interface ScannedPendingItem {
 	path: string;
 	filename: string;
 	scope: LearningScope;
 	status: "pending";
 	summary: string;
 	body: string;
-	recommendation: string;
 }
 
-interface ReviewableExistingItem {
+interface ScannedExistingItem {
 	path: string;
 	filename: string;
 	scope: LearningScope;
@@ -63,7 +60,6 @@ interface ReviewableExistingItem {
 	summary: string;
 	body: string;
 	lastReviewed: string;
-	recommendation: string;
 }
 
 interface NormalizationReviewItem {
@@ -74,10 +70,10 @@ interface NormalizationReviewItem {
 	issues: Awaited<ReturnType<typeof detectNormalizationIssues>>;
 }
 
-export interface LearningReviewQueue {
+export interface LearningScan {
 	paths: LearningSystemPaths;
-	pending: ReviewablePendingItem[];
-	existing: ReviewableExistingItem[];
+	pending: ScannedPendingItem[];
+	existing: ScannedExistingItem[];
 	normalization: NormalizationReviewItem[];
 }
 
@@ -176,7 +172,7 @@ export async function createPendingLearningRuntime(cwd: string, candidate: Pendi
 	return writePendingLearning(paths, candidate);
 }
 
-export async function loadLearningReviewQueue(cwd: string): Promise<LearningReviewQueue> {
+export async function loadLearningScan(cwd: string): Promise<LearningScan> {
 	const { paths } = await refreshRuntimeState(cwd);
 	const allFiles = await listAllLearningFiles(paths);
 	const pendingDocuments = await Promise.all(
@@ -213,7 +209,6 @@ export async function loadLearningReviewQueue(cwd: string): Promise<LearningRevi
 			status: "pending",
 			summary: document.frontmatter.summary,
 			body: document.body,
-			recommendation: recommendPendingAction(document),
 		})),
 		existing: existingDocuments.map((document) => ({
 			path: document.path,
@@ -223,7 +218,6 @@ export async function loadLearningReviewQueue(cwd: string): Promise<LearningRevi
 			summary: document.frontmatter.summary,
 			body: document.body,
 			lastReviewed: document.frontmatter.lastReviewed,
-			recommendation: recommendExistingAction(document),
 		})),
 		normalization: normalizationCandidates,
 	};
@@ -651,19 +645,19 @@ export async function applyLearningReviewActionRuntime(
 	};
 }
 
-function formatReviewQueue(queue: LearningReviewQueue): string {
+function formatLearningScan(scan: LearningScan): string {
 	const lines = [
-		`Pending learnings: ${queue.pending.length}`,
-		...queue.pending.map(
-			(item, index) => `${index + 1}. [${item.scope}] ${item.path} — Recommended: ${item.recommendation}\n   Summary: ${item.summary}`,
+		`Pending learnings: ${scan.pending.length}`,
+		...scan.pending.map(
+			(item, index) => `${index + 1}. [${item.scope}] ${item.path}\n   Summary: ${item.summary}`,
 		),
-		`Existing learnings: ${queue.existing.length}`,
-		...queue.existing.map(
+		`Existing learnings: ${scan.existing.length}`,
+		...scan.existing.map(
 			(item, index) =>
-				`${index + 1}. [${item.scope}] ${item.path} — Recommended: ${item.recommendation} (lastReviewed: ${item.lastReviewed})\n   Summary: ${item.summary}`,
+				`${index + 1}. [${item.scope}] ${item.path} (lastReviewed: ${item.lastReviewed})\n   Summary: ${item.summary}`,
 		),
-		`Normalization items: ${queue.normalization.length}`,
-		...queue.normalization.map(describeNormalizationIssue),
+		`Normalization items: ${scan.normalization.length}`,
+		...scan.normalization.map(describeNormalizationIssue),
 	];
 	return lines.join("\n");
 }
@@ -694,34 +688,27 @@ const WritePendingParams = Type.Object({
 	created: Type.Optional(Type.String({ description: "Optional YYYY-MM-DD override for deterministic tests." })),
 });
 
-const CollisionActionSchema = StringEnum(["merge", "replace", "skip"] as const, {
-	description: "How to resolve a pending-creation slug collision.",
+const CollisionModeSchema = StringEnum(["pending_creation", "review"] as const, {
+	description: "Whether the collision came from pending creation or review-time mutation.",
 });
 
-const ResolvePendingCollisionParams = Type.Object({
+const CollisionActionSchema = StringEnum(["merge", "replace", "skip", "keep_current_filename"] as const, {
+	description: "How to resolve a learning collision.",
+});
+
+const ResolveCollisionParams = Type.Object({
+	mode: CollisionModeSchema,
 	action: CollisionActionSchema,
-	collisionPath: Type.String({ description: "Existing pending/approved file path reported by learning_write_pending." }),
+	collisionPath: Type.String({ description: "Existing pending/approved file path involved in the collision." }),
 	collisionScope: ScopeSchema,
 	collisionStatus: StringEnum(["pending", "approved"] as const, { description: "Status of the collided file." }),
-	summary: Type.String({ description: "Candidate learning summary." }),
-	body: Type.String({ description: "Candidate learning body." }),
+	summary: Type.Optional(Type.String({ description: "Candidate learning summary for pending-creation collisions." })),
+	body: Type.Optional(Type.String({ description: "Candidate learning body for pending-creation collisions." })),
 	created: Type.Optional(Type.String({ description: "Optional YYYY-MM-DD override for deterministic tests." })),
-	reviewedAt: Type.Optional(Type.String({ description: "Optional YYYY-MM-DD override for deterministic tests." })),
-});
-
-const ReviewCollisionActionSchema = StringEnum(["merge", "replace", "skip", "keep_current_filename"] as const, {
-	description: "How to resolve a review-time collision after learning_apply_review_action returns status=collision.",
-});
-
-const ResolveReviewCollisionParams = Type.Object({
-	action: ReviewCollisionActionSchema,
-	sourcePath: Type.String({ description: "Path to the source learning that triggered the collision." }),
-	sourceScope: ScopeSchema,
-	sourceStatus: StringEnum(["pending", "approved"] as const, { description: "Status of the source learning." }),
-	collisionPath: Type.String({ description: "Conflicting learning path returned by learning_apply_review_action." }),
-	collisionScope: ScopeSchema,
-	collisionStatus: StringEnum(["pending", "approved"] as const, { description: "Status of the conflicting learning." }),
-	deleteSourceOnResolved: Type.Optional(Type.Boolean({ description: "Delete the source learning after merge/replace resolves the collision." })),
+	sourcePath: Type.Optional(Type.String({ description: "Path to the source learning for review-time collisions." })),
+	sourceScope: Type.Optional(ScopeSchema),
+	sourceStatus: Type.Optional(StringEnum(["pending", "approved"] as const, { description: "Status of the source learning." })),
+	deleteSourceOnResolved: Type.Optional(Type.Boolean({ description: "Delete the source learning after merge/replace resolves a review-time collision." })),
 	reviewedAt: Type.Optional(Type.String({ description: "Optional YYYY-MM-DD override for deterministic tests." })),
 });
 
@@ -753,13 +740,94 @@ const ApplyReviewActionParams = Type.Object({
 	confirmationToken: Type.Optional(Type.String({ description: "Confirmation token returned by learning_promotion_preview after the user approves the promotion." })),
 });
 
+function requireScopeParam(value: LearningScope | undefined, label: string): LearningScope {
+	if (!value) throw new Error(`Missing required parameter: ${label}`);
+	return value;
+}
+
+function requireStatusParam(value: LearningStatus | undefined, label: string): LearningStatus {
+	if (!value) throw new Error(`Missing required parameter: ${label}`);
+	return value;
+}
+
+function buildApplyReviewActionInput(cwd: string, params: Record<string, unknown>) {
+	const action = params.action as string;
+	const reviewedAt = typeof params.reviewedAt === "string" ? params.reviewedAt : undefined;
+	switch (action) {
+		case "approve_pending":
+			return {
+				action: "approve_pending" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+				fromScope: requireScopeParam(params.fromScope as LearningScope | undefined, "fromScope"),
+				toScope: requireScopeParam(params.toScope as LearningScope | undefined, "toScope"),
+				reviewedAt,
+			};
+		case "reject_pending":
+			return {
+				action: "reject_pending" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+			};
+		case "keep":
+			return {
+				action: "keep" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+				scope: requireScopeParam(params.scope as LearningScope | undefined, "scope"),
+				reviewedAt,
+			};
+		case "move_to_scope":
+			return {
+				action: "move_to_scope" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+				fromScope: requireScopeParam(params.fromScope as LearningScope | undefined, "fromScope"),
+				toScope: requireScopeParam(params.toScope as LearningScope | undefined, "toScope"),
+				reviewedAt,
+			};
+		case "promote":
+			return {
+				action: "promote" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+				scope: requireScopeParam(params.scope as LearningScope | undefined, "scope"),
+				status: requireStatusParam(params.status as LearningStatus | undefined, "status"),
+				target: requireScopeParam(params.target as LearningScope | undefined, "target"),
+				reviewedAt,
+				sectionHeading: params.sectionHeading as string | undefined,
+				compactedText: params.compactedText as string | undefined,
+				confirmationToken: requireText(params.confirmationToken as string | undefined, "confirmationToken"),
+			};
+		case "remove":
+			return {
+				action: "remove" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+			};
+		case "consolidate":
+			return {
+				action: "consolidate" as const,
+				primaryPath: requireResolvedToolPath(cwd, params.primaryPath as string | undefined, "primaryPath"),
+				primaryScope: requireScopeParam(params.primaryScope as LearningScope | undefined, "primaryScope"),
+				secondaryPath: requireResolvedToolPath(cwd, params.secondaryPath as string | undefined, "secondaryPath"),
+				secondaryScope: requireScopeParam(params.secondaryScope as LearningScope | undefined, "secondaryScope"),
+				reviewedAt,
+			};
+		case "normalize":
+			return {
+				action: "normalize" as const,
+				path: requireResolvedToolPath(cwd, params.path as string | undefined, "path"),
+				scope: requireScopeParam(params.scope as LearningScope | undefined, "scope"),
+				status: requireStatusParam(params.status as LearningStatus | undefined, "status"),
+				reviewedAt,
+			};
+		default:
+			throw new Error(`Unsupported review action: ${String(action)}`);
+	}
+}
+
 export function registerLearningRuntimeTools(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "learning_write_pending",
 		label: "Learning Write Pending",
 		description: "Create a pending learning file using the live learning-system storage, slugging, and collision rules.",
 		promptSnippet: "Create a pending learning file via the live learning-system runtime.",
-		promptGuidelines: ["Use this instead of direct file writes when creating pending learnings during /learn."],
+		promptGuidelines: ["Use this instead of direct file writes when creating pending learnings during the learn skill flow."],
 		parameters: WritePendingParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const result = await createPendingLearningRuntime(ctx.cwd, params);
@@ -779,45 +847,39 @@ export function registerLearningRuntimeTools(pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "learning_resolve_pending_collision",
-		label: "Learning Resolve Pending Collision",
-		description: "Resolve a pending-learning creation collision by merging into, replacing, or skipping the existing file through the live runtime.",
-		promptSnippet: "Resolve a pending-learning slug collision via the live learning-system runtime.",
-		promptGuidelines: ["Use this after learning_write_pending reports a collision and the user chooses merge, replace, or skip."],
-		parameters: ResolvePendingCollisionParams,
+		name: "learning_resolve_collision",
+		label: "Learning Resolve Collision",
+		description: "Resolve a learning collision from pending creation or review-time mutation through the live runtime.",
+		promptSnippet: "Resolve a learning collision through the live learning-system runtime.",
+		promptGuidelines: ["Use this after `learning_write_pending` or `learning_apply_review_action` reports a collision and the user chooses how to resolve it."],
+		parameters: ResolveCollisionParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const result = await resolvePendingLearningCollisionRuntime(ctx.cwd, {
-				action: params.action,
-				collisionPath: requireResolvedToolPath(ctx.cwd, params.collisionPath, "collisionPath"),
-				collisionScope: params.collisionScope,
-				collisionStatus: params.collisionStatus,
-				candidate: {
-					summary: params.summary,
-					body: params.body,
-					created: params.created,
-				},
-				reviewedAt: params.reviewedAt,
-			});
-			return {
-				content: [{ type: "text", text: result.message }],
-				details: result,
-			};
-		},
-	});
-
-	pi.registerTool({
-		name: "learning_resolve_review_collision",
-		label: "Learning Resolve Review Collision",
-		description: "Resolve a review-time collision surfaced by learning_apply_review_action by merging, replacing, skipping, or keeping the current filename.",
-		promptSnippet: "Resolve a review-time learning collision through the live runtime.",
-		promptGuidelines: ["Use this when learning_apply_review_action returns status=collision during /learn review."],
-		parameters: ResolveReviewCollisionParams,
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (params.mode === "pending_creation") {
+				if (params.action === "keep_current_filename") {
+					throw new Error("`keep_current_filename` is only valid for review-time normalization collisions.");
+				}
+				const result = await resolvePendingLearningCollisionRuntime(ctx.cwd, {
+					action: params.action,
+					collisionPath: requireResolvedToolPath(ctx.cwd, params.collisionPath, "collisionPath"),
+					collisionScope: params.collisionScope,
+					collisionStatus: params.collisionStatus,
+					candidate: {
+						summary: requireText(params.summary, "summary"),
+						body: requireText(params.body, "body"),
+						created: params.created,
+					},
+					reviewedAt: params.reviewedAt,
+				});
+				return {
+					content: [{ type: "text", text: result.message }],
+					details: result,
+				};
+			}
 			const result = await resolveReviewCollisionRuntime(ctx.cwd, {
 				action: params.action,
 				sourcePath: requireResolvedToolPath(ctx.cwd, params.sourcePath, "sourcePath"),
-				sourceScope: params.sourceScope,
-				sourceStatus: params.sourceStatus,
+				sourceScope: requireScopeParam(params.sourceScope, "sourceScope"),
+				sourceStatus: requireStatusParam(params.sourceStatus, "sourceStatus") as "pending" | "approved",
 				collisionPath: requireResolvedToolPath(ctx.cwd, params.collisionPath, "collisionPath"),
 				collisionScope: params.collisionScope,
 				collisionStatus: params.collisionStatus,
@@ -832,17 +894,17 @@ export function registerLearningRuntimeTools(pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "learning_review_queue",
-		label: "Learning Review Queue",
-		description: "Inspect pending and approved learnings in live storage, including recommendations and normalization proposals.",
-		promptSnippet: "Inspect the live /learn review queue with recommendations and normalization proposals.",
-		promptGuidelines: ["Use this at the start of /learn review instead of ad-hoc directory scanning."],
+		name: "learning_scan",
+		label: "Learning Scan",
+		description: "Inspect pending and approved learnings in live storage as normalized documents, plus normalization proposals, without runtime recommendations.",
+		promptSnippet: "Scan the live learning store for pending, approved, and normalization items without runtime recommendations.",
+		promptGuidelines: ["Use this at the start of `/skill:learn review` instead of ad-hoc directory scanning."],
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const queue = await loadLearningReviewQueue(ctx.cwd);
+			const scan = await loadLearningScan(ctx.cwd);
 			return {
-				content: [{ type: "text", text: formatReviewQueue(queue) }],
-				details: queue,
+				content: [{ type: "text", text: formatLearningScan(scan) }],
+				details: scan,
 			};
 		},
 	});
@@ -852,7 +914,7 @@ export function registerLearningRuntimeTools(pi: ExtensionAPI) {
 		label: "Learning Promotion Preview",
 		description: "Build the live AGENTS.md promotion preview for a learning, including compacted text and target section.",
 		promptSnippet: "Preview a learning promotion into AGENTS.md before asking for confirmation.",
-		promptGuidelines: ["Use this before every AGENTS.md promotion questionnaire in /learn review."],
+		promptGuidelines: ["Use this before every AGENTS.md promotion questionnaire in `/skill:learn review`."],
 		parameters: PromotionPreviewParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const learningPath = requireResolvedToolPath(ctx.cwd, params.path, "path");
@@ -883,68 +945,11 @@ export function registerLearningRuntimeTools(pi: ExtensionAPI) {
 		name: "learning_apply_review_action",
 		label: "Learning Apply Review Action",
 		description: "Apply a reviewed learning action using the live store, review, normalization, consolidation, and promotion helpers.",
-		promptSnippet: "Apply a /learn review decision through the live learning-system runtime.",
-		promptGuidelines: ["Use this after questionnaire decisions instead of manual file edits during /learn review."],
+		promptSnippet: "Apply a learn-review decision through the live learning-system runtime.",
+		promptGuidelines: ["Use this after questionnaire decisions instead of manual file edits during `/skill:learn review`."],
 		parameters: ApplyReviewActionParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const result = await applyLearningReviewActionRuntime(
-				ctx.cwd,
-				params.action === "approve_pending"
-					? {
-							action: "approve_pending",
-							path: requireResolvedToolPath(ctx.cwd, params.path, "path"),
-							fromScope: params.fromScope ?? params.scope ?? "project",
-							toScope: params.toScope ?? "project",
-							reviewedAt: params.reviewedAt,
-						}
-					: params.action === "reject_pending"
-						? { action: "reject_pending", path: requireResolvedToolPath(ctx.cwd, params.path, "path") }
-						: params.action === "keep"
-							? {
-									action: "keep",
-									path: requireResolvedToolPath(ctx.cwd, params.path, "path"),
-									scope: params.scope ?? params.fromScope ?? "project",
-									reviewedAt: params.reviewedAt,
-							  }
-							: params.action === "move_to_scope"
-								? {
-										action: "move_to_scope",
-										path: requireResolvedToolPath(ctx.cwd, params.path, "path"),
-										fromScope: params.fromScope ?? params.scope ?? "project",
-										toScope: params.toScope ?? "global",
-										reviewedAt: params.reviewedAt,
-								  }
-								: params.action === "promote"
-									? {
-											action: "promote",
-											path: requireResolvedToolPath(ctx.cwd, params.path, "path"),
-											scope: params.scope ?? params.fromScope ?? "project",
-											status: params.status ?? "approved",
-											target: params.target ?? "project",
-											reviewedAt: params.reviewedAt,
-											sectionHeading: params.sectionHeading,
-											compactedText: params.compactedText,
-											confirmationToken: params.confirmationToken,
-									  }
-									: params.action === "remove"
-										? { action: "remove", path: requireResolvedToolPath(ctx.cwd, params.path, "path") }
-										: params.action === "consolidate"
-											? {
-													action: "consolidate",
-													primaryPath: requireResolvedToolPath(ctx.cwd, params.primaryPath ?? params.path, "primaryPath"),
-													primaryScope: params.primaryScope ?? params.scope ?? params.fromScope ?? "project",
-													secondaryPath: requireResolvedToolPath(ctx.cwd, params.secondaryPath, "secondaryPath"),
-													secondaryScope: params.secondaryScope ?? params.toScope ?? "project",
-													reviewedAt: params.reviewedAt,
-											  }
-											: {
-													action: "normalize",
-													path: requireResolvedToolPath(ctx.cwd, params.path, "path"),
-													scope: params.scope ?? params.fromScope ?? "project",
-													status: params.status ?? "approved",
-													reviewedAt: params.reviewedAt,
-											  },
-			);
+			const result = await applyLearningReviewActionRuntime(ctx.cwd, buildApplyReviewActionInput(ctx.cwd, params as Record<string, unknown>));
 			return {
 				content: [{ type: "text", text: result.message }],
 				details: result,

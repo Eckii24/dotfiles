@@ -21,12 +21,15 @@ Use this skill to manage the lifecycle between those layers.
 
 Use `.ai/current-work.md` as the active feature anchor:
 - current objective
+- a **minimal** todo tracker with only major workflow phases
 - constraints and decisions
 - implementation state
 - linked spec/plan/review artifacts
 - next restart step
 - open questions/blockers
 - a bounded evidence log for pitfalls/surprises, failed or rejected attempts, review findings/fixes, and learning candidates with exact evidence paths
+
+If a `.ai/<slug>-plan.md` exists, keep detailed execution tasks there. The todo tracker in `current-work.md` should stay intentionally minimal.
 
 This is the **source of truth for in-progress work**.
 
@@ -164,6 +167,14 @@ Keep it compact. Aim for a working record, not a transcript.
 
 [1-3 sentences]
 
+## Todo Tracker
+
+- [ ] [Major phase only]
+- [ ] [Major phase only]
+- [ ] Learn extraction run
+- [ ] User confirmed feature complete
+- [ ] Active artifacts archived
+
 ## Decisions & rationale
 
 - [Decision] — [why]
@@ -202,12 +213,20 @@ Keep it compact. Aim for a working record, not a transcript.
   - Candidate target: project learning | global learning | AGENTS.md | archive only
 ```
 
+Rules for the todo tracker:
+- Always include it when `current-work.md` is active.
+- Keep it **minimal**: one checkbox per major workflow phase, not a task list.
+- If a plan file exists, keep detailed steps in `.ai/<slug>-plan.md` instead of mirroring them here.
+- Mark only completed major phases; let `Next restart step` carry the exact next action.
+- Always end with the three checkboxes related to learning extraction, user confirmation of completion, and artifact archiving.
+
 Add sections only when useful. Keep each evidence-log section bounded to roughly 3–5 terse items. Refresh, merge, or drop stale/resolved noise instead of appending a session transcript.
 
 ## Feature lifecycle
 
 During active work:
 - record new findings in `current-work.md`, especially pitfalls/surprises, failed attempts, review findings/fixes, and learning candidates
+- keep the `Todo Tracker` populated with only the major workflow phases relevant to the active flow and the final steps of learning extraction, user confirmation, and artifact archiving
 - keep evidence-log entries concise and backed by exact file/artifact paths
 - link spec/plan/review artifacts explicitly
 - keep the restart step fresh
@@ -215,8 +234,8 @@ During active work:
 
 When the work produces reusable lessons:
 - prefer explicit `current-work.md` learning candidates first, then use review artifacts, changed files, and session context to validate or fill gaps
-- feed them into `/learn <focus>` as pending learnings
-- review them via `/learn review`
+- run extraction through the `learn-orchestrator` sub-agent
+- review them manually via `/skill:learn review`
 - promote only the compact durable essence into `AGENTS.md`
 
 ## Promotion review
@@ -239,6 +258,8 @@ Use when the note is historically useful but not worth injecting or promoting.
 
 Archive completed or replaced tracked-work artifacts under `.ai/archive/` with dated prefixes.
 
+Only archive after the user explicitly confirms that the tracked work is complete.
+
 Examples:
 - `.ai/archive/YYYY-MM-DD-<slug>-current-work.md`
 - `.ai/archive/YYYY-MM-DD-<slug>-spec.md`
@@ -251,10 +272,11 @@ Include the final `current-work.md` snapshot so the feature can be reconstructed
 
 Before finishing meaningful work, ask:
 - Is `current-work.md` up to date enough for a cold restart?
+- Is the `Todo Tracker` still minimal, accurate, up-to-date and aligned with the active workflow?
 - Did I capture fresh pitfalls, rejected options, review fixes, and learning candidates while the evidence is still easy to recover?
 - Did this session produce a reusable learning?
 - Did anything become durable enough for `AGENTS.md`?
-- Should anything be archived now?
+- Has the user explicitly confirmed that anything should be archived now?
 
 ## Response patterns
 
@@ -270,7 +292,7 @@ When you update the feature anchor:
 
 ```md
 Feature anchor updated:
-- `.ai/current-work.md` — captured decision, refreshed bounded evidence-log sections, linked review artifact, refreshed next restart step
+- `.ai/current-work.md` — refreshed the minimal Todo Tracker, captured decisions, refreshed bounded evidence-log sections, linked relevant artifacts, and updated the next restart step
 ```
 
 When you close and archive work:
@@ -279,6 +301,6 @@ When you close and archive work:
 Tracked work updated:
 - `.ai/archive/2026-03-31-auth-refresh-token-current-work.md` — archived final feature anchor
 - `.ai/archive/2026-03-31-auth-refresh-token-review.md` — archived review snapshot
-- `/learn auth refresh token` — created pending learnings from explicit current-work candidates and review evidence
-- `/learn review` — curated pending learnings for approval/promotion
+- `learn-orchestrator` — created pending learnings from explicit current-work candidates and review evidence
+- `/skill:learn review` — curated pending learnings for approval/promotion
 ```

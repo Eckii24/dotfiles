@@ -73,7 +73,7 @@ async function maybePromptPendingReview(pi: ExtensionAPI, ctx: ExtensionContext,
 		"No, skip for now",
 	]);
 	if (choice === "Yes, review now") {
-		pi.sendUserMessage("/learn review");
+		pi.sendUserMessage("/skill:learn review");
 	}
 }
 
@@ -138,7 +138,7 @@ export default function learningSystem(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		if (!state.lastPrompt?.startsWith("/learn")) return;
+		if (!state.lastPrompt?.startsWith("/skill:learn")) return;
 		await refreshState(state, ctx.cwd);
 		if (!state.injection) return;
 		maybeSendInjection(pi, ctx, state.injection);

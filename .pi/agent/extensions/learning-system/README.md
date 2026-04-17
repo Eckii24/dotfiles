@@ -5,8 +5,8 @@ The learning system is the repo’s runtime-backed memory pipeline for **capturi
 It replaces the old monolithic memory files with a **one-file-per-learning** model and connects four layers:
 
 1. **Storage and path resolution** — where learnings live and how files are validated
-2. **Runtime tools** — the live APIs used by prompts and agents during `/learn`
-3. **Prompt orchestration** — the `/learn` orchestrator flow in `prompts/learn.md`
+2. **Runtime tools** — the live APIs used by the learn skill and learning agents
+3. **Skill + agent orchestration** — the `learn` skill plus the `learn-orchestrator` split between creation and review
 4. **Context injection** — lightweight learning refs injected into the orchestrator and sub-agents
 
 Primary source files:
@@ -19,8 +19,8 @@ Primary source files:
 - `extensions/learning-system/paths.ts`
 - `extensions/learning-system/scan.ts`
 - `extensions/learning-system/markdown.ts`
-- `prompts/learn.md`
-- `agents/learning-analyst.md`
+- `skills/learn/SKILL.md`
+- `agents/learn-orchestrator.md`
 
 ---
 
@@ -34,9 +34,9 @@ The extension does all of the following:
 - creates the learning directories on first use
 - creates and scans the managed learning stores without any legacy migration/cleanup step
 - scans approved learnings and injects them into context as **refs only** (`filename + summary`)
-- prompts the orchestrator to run `/learn review` when pending learnings exist
-- exposes runtime-backed tools so prompt flows use the same logic as the extension implementation
-- refreshes injected learnings after `/learn` changes the live store
+- prompts the user to run `/skill:learn review` when pending learnings exist
+- exposes runtime-backed tools so skill and agent flows use the same logic as the extension implementation
+- refreshes injected learnings after `/skill:learn ...` changes the live store
 - keeps sub-agents synchronized with the same learning refs, but without the interactive review prompt
 
 This means the prompt layer does **not** manually invent its own storage or file naming rules. It delegates to the runtime.
@@ -44,7 +44,7 @@ This means the prompt layer does **not** manually invent its own storage or file
 Operational boundary:
 
 - direct file creation is acceptable only for **pending** learnings when the runtime tool is unavailable
-- approved learnings should enter or change state only through the `/learn review` runtime actions
+- approved learnings should enter or change state only through the `/skill:learn review` runtime actions
 
 ---
 
@@ -99,8 +99,6 @@ Code: `extensions/learning-system/review.ts`
 
 This layer provides:
 
-- recommendation heuristics for pending learnings
-- recommendation heuristics for approved learnings
 - sort order for review
 - merge logic for consolidating two learnings
 - normalization detection and normalization application
@@ -117,18 +115,18 @@ This layer:
 - creates a preview-consistency token for promotion safety
 - inserts the final bullet into `AGENTS.md`
 
-### 5. Runtime API and prompt integration
+### 5. Runtime API and skill integration
 
-Code: `extensions/learning-system/runtime.ts`, `prompts/learn.md`
+Code: `extensions/learning-system/runtime.ts`, `skills/learn/SKILL.md`
 
 The runtime wraps all storage/review/promotion logic behind explicit tools such as:
 
 - `learning_write_pending`
-- `learning_review_queue`
+- `learning_scan`
 - `learning_promotion_preview`
 - `learning_apply_review_action`
 
-The `/learn` prompt uses these tools as the canonical interface.
+The `learn` skill and its helper agents use these tools as the canonical interface.
 
 ### 6. Context injection and UI behavior
 
@@ -140,7 +138,7 @@ This layer:
 - renders it as a custom TUI message
 - injects it into the main orchestrator and sub-agents
 - deduplicates stale copies in context by hash
-- refreshes it after `/learn` mutates the learning store
+- refreshes it after `/skill:learn ...` mutates the learning store
 
 ---
 
@@ -194,7 +192,7 @@ So “same root” changes path resolution, **not** the storage model.
 
 ## Learning file format
 
-Code: `extensions/learning-system/contracts.ts`, `extensions/learning-system/markdown.ts`, `prompts/learn.md`
+Code: `extensions/learning-system/contracts.ts`, `extensions/learning-system/markdown.ts`, `skills/learn/SKILL.md`
 
 The system has exactly two persisted learning states: `pending` and `approved`.
 
@@ -395,7 +393,7 @@ The extension deduplicates old learning-system custom messages and keeps only th
 
 ### On `agent_end`
 
-If the last prompt started with `/learn`, the extension refreshes the live scan and re-sends the newest learning injection.
+If the last top-level command started with `/skill:learn`, the extension refreshes the live scan and re-sends the newest learning injection.
 
 ### Custom TUI rendering
 
@@ -405,62 +403,53 @@ The learning block is rendered via a custom message renderer. In collapsed mode 
 
 ---
 
-## `/learn` is the canonical workflow
+## `/skill:learn` is the canonical workflow
 
-Code: `prompts/learn.md`
+Code: `skills/learn/SKILL.md`
 
-`/learn` has exactly two modes:
+`/skill:learn` has exactly two modes:
 
-1. `/learn [focus]` — creation mode
-2. `/learn review` — review/curation mode
+1. `/skill:learn [focus]` — creation mode
+2. `/skill:learn review` — review/curation mode
 
-There are no separate slash commands for “cleanup”, “normalize”, or “promote”. Those are all part of `/learn review`.
+There are no separate slash commands for “cleanup”, “normalize”, or “promote”. Those are all part of `/skill:learn review`.
 
 ---
 
-## Workflow 1 — `/learn [focus]` creation flow
+## Workflow 1 — `/skill:learn [focus]` creation flow
 
-Code: `prompts/learn.md`, `agents/learning-analyst.md`, `extensions/learning-system/runtime.ts`
+Code: `skills/learn/SKILL.md`, `agents/learn-orchestrator.md`, `extensions/learning-system/runtime.ts`
 
-This flow is orchestrated by the `/learn` prompt and uses the learning runtime to persist candidates.
+This flow starts in the `learn` skill, while automatic creation-mode execution should usually be delegated to `agents/learn-orchestrator.md`, which uses `skills/learn/SKILL.md` plus the learning runtime to persist candidates.
 
 ### Step-by-step data flow
 
 1. **Read current work and artifacts**
    - The prompt reads `.ai/current-work.md` when present.
-   - It gathers additional evidence such as review/spec/plan docs and changed files.
-   - Source: `prompts/learn.md`
+   - It gathers additional evidence such as review/spec/plan docs, changed files, and an explicitly available session transcript path.
+   - Review artifacts should be treated as cumulative ledgers, so resolved findings are still valid learning evidence.
+   - Source: `skills/learn/SKILL.md`
 
-2. **Delegate candidate mining**
-   - The orchestrator delegates to `agents/learning-analyst.md`.
-   - The analyst must return 1–5 high-signal candidates.
-   - Each candidate must include:
-     - recommended scope
-     - summary
-     - why it matters
-     - exact evidence paths
-     - a full ready-to-write Markdown body
-   - Source: `agents/learning-analyst.md`
+2. **Delegate creation-mode orchestration**
+   - The calling workflow should prefer `agents/learn-orchestrator.md` for creation mode.
+   - That agent reads `skills/learn/SKILL.md`, mines candidates directly from the provided evidence, and may use optional narrow nested sub-agents only for session-transcript or broad changed-file summarization when the evidence set is unusually broad.
+   - Source: `skills/learn/SKILL.md`, `agents/learn-orchestrator.md`
 
 3. **Write pending learnings immediately**
-   - The orchestrator does **not** ask for pre-approval before writing pending candidates.
-   - It should use `learning_write_pending` instead of direct file writes.
-   - Source: `prompts/learn.md`, `extensions/learning-system/runtime.ts`
+   - Creation mode does **not** ask for pre-approval before writing pending candidates.
+   - The delegated agent should use `learning_write_pending` instead of direct file writes.
+   - Source: `skills/learn/SKILL.md`, `extensions/learning-system/runtime.ts`
 
-4. **Handle slug collisions**
+4. **Handle slug collisions in the caller**
    - `learning_write_pending` checks both pending and approved learnings in the relevant scope.
-   - If the canonical slug already exists, the tool returns a collision.
-   - The prompt asks the user whether to:
-     - Merge
-     - Replace
-     - Skip
-   - The decision is applied via `learning_resolve_pending_collision`.
-   - Source: `prompts/learn.md`, `extensions/learning-system/store.ts`, `extensions/learning-system/runtime.ts`
+   - If the canonical slug already exists, the delegated agent returns the unresolved collision to the caller.
+   - The top-level prompt asks the user whether to Merge, Replace, or Skip, then applies that decision with `learning_resolve_collision`.
+   - Source: `skills/learn/SKILL.md`, `skills/learn/SKILL.md`, `extensions/learning-system/store.ts`, `extensions/learning-system/runtime.ts`
 
 5. **Report exact created files**
-   - The orchestrator reports the created pending learning paths.
-   - Then it asks whether to continue directly into `/learn review`.
-   - Source: `prompts/learn.md`
+   - The prompt reports the created pending learning paths.
+   - Then it asks whether to continue directly into `/skill:learn review`.
+   - Source: `skills/learn/SKILL.md`
 
 ### Why creation writes directly to pending files
 
@@ -468,21 +457,21 @@ Because pending learnings are the incubation layer. The system wants a durable q
 
 ---
 
-## Workflow 2 — `/learn review`
+## Workflow 2 — `/skill:learn review`
 
-Code: `prompts/learn.md`, `extensions/learning-system/runtime.ts`, `extensions/learning-system/review.ts`
+Code: `skills/learn/SKILL.md`, `extensions/learning-system/runtime.ts`, `extensions/learning-system/review.ts`
 
-`/learn review` is the single curation flow and runs in **three phases**.
+`/skill:learn review` is the single curation flow and runs in **three phases**.
 
 ### Phase 1 — Pending review
 
-1. The prompt starts with `learning_review_queue`.
-2. The runtime returns:
+1. The skill starts with `learning_scan`.
+2. The runtime returns recommendation-free normalized scan results:
    - pending learnings
    - approved learnings
    - normalization issues
 3. Pending items are reviewed one by one with `questionnaire`.
-4. The recommendation is presented as the first option.
+4. The skill derives the recommendation heuristically from the scanned facts and presents it as the first option.
 5. The chosen decision is applied with `learning_apply_review_action`.
 
 Possible outcomes for pending items:
@@ -519,7 +508,7 @@ Possible decisions:
 
 ### Phase 3 — Normalization review
 
-After phases 1 and 2, the prompt re-runs `learning_review_queue` so phase 3 looks at the **remaining live state**.
+After phases 1 and 2, the skill re-runs `learning_scan` so phase 3 looks at the **remaining live state**.
 
 Normalization checks detect:
 
@@ -527,43 +516,42 @@ Normalization checks detect:
 - extra/missing frontmatter fields
 - malformed or unstructured bodies
 
-The prompt presents fixes via `questionnaire`, then applies approved normalizations with `learning_apply_review_action(action: "normalize")`.
+The skill presents fixes via `questionnaire`, then applies approved normalizations with `learning_apply_review_action(action: "normalize")`.
 
 ---
 
 ## Review heuristics and recommendations
 
-Code: `extensions/learning-system/review.ts`
+Code: `skills/learn/SKILL.md`
+
+The runtime no longer returns recommendations. The `learn` skill derives them from recommendation-free scan results.
 
 ### Pending recommendation heuristic
 
-`recommendPendingAction()` leans global only when the learning looks broadly reusable and directive-like.
+The skill should generally recommend:
 
-Signals for “keep as global learning” include:
-
-- broadly reusable language
-- directive wording
-- no obvious project-specific file paths or repo details
-
-Otherwise the default recommendation is project scope.
+- **Keep as project learning** for project-specific file paths or repo details
+- **Keep as global learning** for broadly reusable directive-style guidance with no obvious project coupling
+- promotion into `AGENTS.md` only for exceptionally stable, high-signal guidance
+- **Keep as project learning** as the default fallback
 
 ### Existing approved recommendation heuristic
 
-`recommendExistingAction()` uses age and content:
+The skill should generally recommend:
 
-- reviewed within 30 days → usually `Keep`
-- old, directive, project-specific → may recommend promotion into project `AGENTS.md`
-- old, directive, globally reusable → may recommend promotion into global `AGENTS.md`
-- project learning that looks broadly reusable → may recommend move to global scope
-- very old, structured but weak/non-directive → may recommend remove
+- **Keep** for items reviewed within 30 days
+- promotion into `AGENTS.md` for old, stable, directive-style guidance
+- **Promote to global learning** for project learnings that look broadly reusable
+- **Remove** for low-value or redundant items
+- normalization/keep over blind deletion when malformed content may still be salvageable
 
-These are recommendations only; the prompt still asks the user.
+These are recommendations only; the skill still asks the user via `questionnaire`.
 
 ---
 
 ## Collision handling
 
-Code: `extensions/learning-system/store.ts`, `extensions/learning-system/runtime.ts`, `prompts/learn.md`
+Code: `extensions/learning-system/store.ts`, `extensions/learning-system/runtime.ts`, `skills/learn/SKILL.md`
 
 The learning system treats slug collisions as **consolidation events**, not as a signal to generate suffixed filenames.
 
@@ -573,7 +561,7 @@ Triggered by `learning_write_pending`.
 
 Resolution tool:
 
-- `learning_resolve_pending_collision`
+- `learning_resolve_collision` with `mode: "pending_creation"`
 
 Actions:
 
@@ -587,7 +575,7 @@ Triggered by `learning_apply_review_action` when approving, moving, or normalizi
 
 Resolution tool:
 
-- `learning_resolve_review_collision`
+- `learning_resolve_collision` with `mode: "review"`
 
 Actions:
 
@@ -645,20 +633,20 @@ Section merge order:
 
 ## Promotion into `AGENTS.md`
 
-Code: `extensions/learning-system/promotion.ts`, `extensions/learning-system/runtime.ts`, `prompts/learn.md`
+Code: `extensions/learning-system/promotion.ts`, `extensions/learning-system/runtime.ts`, `skills/learn/SKILL.md`
 
 Promotion is the final “turn this learning into durable operating guidance” step.
 
 ### Promotion flow
 
-1. The prompt calls `learning_promotion_preview`.
+1. The skill calls `learning_promotion_preview`.
 2. The runtime reads the learning file.
 3. The learning is compacted into a short directive sentence.
 4. The prompt/user chooses the target AGENTS section semantically; the runtime uses that section or defaults to `Learnings`.
 5. A preview-consistency token is generated.
 6. The prompt shows the preview to the user.
 7. The prompt is responsible for the explicit user-approval step via `questionnaire`.
-8. After the user confirms, the prompt calls `learning_apply_review_action(action: "promote")` with the matching token.
+8. After the user confirms, the skill calls `learning_apply_review_action(action: "promote")` with the matching token.
 9. The runtime writes to `AGENTS.md` and deletes the source learning file.
 
 ### Why the confirmation token exists
@@ -706,14 +694,13 @@ If the compacted directive is already present in normalized form:
 
 Code: `extensions/learning-system/runtime.ts`
 
-These tools are the public runtime interface used by prompt flows.
+These tools are the public runtime interface used by skill and agent flows.
 
 | Tool | Purpose |
 |---|---|
 | `learning_write_pending` | Create a pending learning with canonical slugging, body normalization, and collision detection |
-| `learning_resolve_pending_collision` | Resolve a creation-time collision via merge, replace, or skip |
-| `learning_resolve_review_collision` | Resolve a review-time collision via merge, replace, skip, or keep-current-filename |
-| `learning_review_queue` | Return pending items, approved items, and normalization proposals in live review order |
+| `learning_resolve_collision` | Resolve a pending-creation or review-time collision via merge, replace, skip, or keep-current-filename |
+| `learning_scan` | Return normalized pending items, normalized approved items, and normalization proposals in live review order |
 | `learning_promotion_preview` | Build the AGENTS preview, selected section, dedupe signal, and preview-consistency token |
 | `learning_apply_review_action` | Apply approve/reject/keep/move/promote/remove/consolidate/normalize actions |
 
@@ -733,25 +720,31 @@ This is important because prompt code passes file paths around as tool parameter
 
 ## How prompts, agents, and sub-agents fit together
 
-### The `/learn` prompt is the orchestrator
+### The `learn` skill is the canonical learning workflow entrypoint
 
-Code: `prompts/learn.md`
+Code: `skills/learn/SKILL.md`
 
-The prompt owns the workflow shape:
+The skill owns the caller-facing workflow shape:
 
-- gather evidence
-- delegate candidate discovery
-- write pending learnings
+- gather evidence and caller-owned artifact paths
+- delegate creation mode to `learn-orchestrator` when possible
 - ask review questions with `questionnaire`
-- call runtime tools to make real state changes
+- handle unresolved collisions and promotion confirmation
+- call runtime tools to make final state changes
 
-### `learning-analyst` is the discovery worker
+### `learn-orchestrator` owns creation-mode execution
 
-Code: `agents/learning-analyst.md`
+Code: `agents/learn-orchestrator.md`, `skills/learn/SKILL.md`
 
-The analyst does **not** mutate storage. It returns candidate learnings with exact evidence paths and full bodies.
+The learn orchestrator:
 
-### Other prompts hand off into `/learn`
+- keeps its own instructions lean
+- mines candidates directly from current-work, review, spec/plan, changed-file, and session evidence
+- may use bounded nested sub-agents only when the evidence set is unusually broad
+- writes pending learnings through the runtime
+- returns unresolved collisions to the caller instead of making questionnaire-owned decisions itself
+
+### Other prompts hand off into learning creation explicitly
 
 Code:
 
@@ -761,7 +754,7 @@ Code:
 - `prompts/plan.md`
 - `prompts/spec-plan.md`
 
-These workflows explicitly treat `/learn <focus>` as the canonical post-implementation learning step instead of inventing parallel memory flows.
+These workflows should hand off explicitly to `learn-orchestrator` for post-implementation learning creation instead of relying on vague prompt-to-prompt dispatch, while `/skill:learn review` remains the canonical interactive curation flow.
 
 ### Sub-agents also receive learning refs
 
@@ -792,10 +785,10 @@ These are the rules the whole system is built around.
    - Source: `extensions/learning-system/inject.ts`
 
 2. **Injected content is refs only, not full bodies**
-   - Source: `extensions/learning-system/inject.ts`, `prompts/learn.md`
+   - Source: `extensions/learning-system/inject.ts`, `skills/learn/SKILL.md`
 
 3. **Collisions are consolidation signals**
-   - Source: `extensions/learning-system/store.ts`, `prompts/learn.md`
+   - Source: `extensions/learning-system/store.ts`, `skills/learn/SKILL.md`
 
 4. **Canonical filenames stay short and stable**
    - Source: `extensions/learning-system/store.ts`
@@ -810,9 +803,9 @@ These are the rules the whole system is built around.
    - Source: `extensions/learning-system/paths.ts`
 
 8. **Memory refs are hints, not truth**
-   - Source: `extensions/learning-system/inject.ts`, `prompts/learn.md`
+   - Source: `extensions/learning-system/inject.ts`, `skills/learn/SKILL.md`
 
-9. **The live runtime is the source of truth for `/learn` mutations**
+9. **The live runtime is the source of truth for learn-skill mutations**
    - Source: `extensions/learning-system/runtime.ts`
 
 ---
@@ -839,9 +832,9 @@ If the normalized canonical filename already exists, the runtime reports a colli
 
 ### Review recommendations are heuristic, not hard policy
 
-Code: `extensions/learning-system/review.ts`
+Code: `skills/learn/SKILL.md`
 
-The runtime provides recommended actions, but the prompt still asks the user via `questionnaire`.
+The `learn` skill derives recommended actions from recommendation-free scan results, but still asks the user via `questionnaire`.
 
 ### Old injected learning messages are removed from context
 
@@ -875,27 +868,28 @@ That command is useful for debugging path resolution and queue state.
 
 ### Example 1 — creation
 
-1. User runs `/learn guardrails-integration`
-2. `prompts/learn.md` gathers `.ai/current-work.md`, changed files, and mentioned files
-3. `agents/learning-analyst.md` returns candidate Markdown learnings
-4. The orchestrator writes them with `learning_write_pending`
-5. Pending files land in `.ai/learnings/pending/*.md`
-6. The user is asked whether to review now
+1. User runs `/skill:learn guardrails-integration`
+2. `skills/learn/SKILL.md` gathers `.ai/current-work.md`, changed files, mentioned files, and any explicitly available review/session artifacts
+3. The workflow delegates creation mode to `agents/learn-orchestrator.md`
+4. `learn-orchestrator` uses `skills/learn/SKILL.md`, mines candidates directly from the provided evidence, and writes pending learnings with `learning_write_pending`
+5. Any unresolved slug collisions are handed back to the top-level prompt for questionnaire-driven resolution
+6. Pending files land in `.ai/learnings/pending/*.md`
+7. The user is asked whether to review now
 
 ### Example 2 — review and promotion
 
-1. User runs `/learn review`
-2. The prompt starts with `learning_review_queue`
+1. User runs `/skill:learn review`
+2. The skill starts with `learning_scan`
 3. User chooses “Promote into project AGENTS.md” for a candidate
-4. The prompt calls `learning_promotion_preview`
+4. The skill calls `learning_promotion_preview`
 5. The runtime returns:
    - target AGENTS path
    - section heading
    - compacted text
    - dedupe status
    - preview-consistency token
-6. The prompt obtains explicit user confirmation via `questionnaire`
-7. The prompt calls `learning_apply_review_action(action: "promote", confirmationToken: ...)`
+6. The skill obtains explicit user confirmation via `questionnaire`
+7. The skill calls `learning_apply_review_action(action: "promote", confirmationToken: ...)`
 8. The runtime writes the AGENTS bullet and deletes the learning file
 9. The extension refreshes the injected learning refs
 
@@ -905,12 +899,12 @@ That command is useful for debugging path resolution and queue state.
 
 Start with these files in this order:
 
-1. `prompts/learn.md` — workflow contract
+1. `skills/learn/SKILL.md` — workflow contract
 2. `extensions/learning-system/runtime.ts` — tool/runtime behavior
 3. `extensions/learning-system/store.ts` — file creation/move/collision logic
 4. `extensions/learning-system/review.ts` — heuristics, normalization, merge behavior
 5. `extensions/learning-system/promotion.ts` — AGENTS placement and token flow
 6. `extensions/learning-system/index.ts` — injection and UI wiring
-7. `agents/learning-analyst.md` — candidate quality contract
+7. `agents/learn-orchestrator.md` — lean creation-mode worker contract
 
 That order matches the real dependency chain: prompt contract -> runtime API -> persistence/review rules -> UI injection.

@@ -21,20 +21,6 @@ import {
 } from "./markdown.js";
 import { findSlugCollision, isValidLearningSlug, overwriteLearningDocument, renameLearning, slugFromSummary } from "./store.js";
 
-function daysBetween(fromIso: string, toIso = todayIso()): number {
-	const from = new Date(`${fromIso}T00:00:00Z`).getTime();
-	const to = new Date(`${toIso}T00:00:00Z`).getTime();
-	return Math.max(0, Math.floor((to - from) / 86_400_000));
-}
-
-function isProjectSpecific(text: string): boolean {
-	return /(^|\s)(\.ai\/|extensions\/|prompts\/|agents\/|scripts\/|AGENTS\.md|package\.json|tsconfig|session|repo|project root)/i.test(text);
-}
-
-function isDirective(text: string): boolean {
-	return /\b(always|never|prefer|keep|validate|delegate|treat|avoid|use|write|review|normalize|promote|scan|compact)\b/i.test(text);
-}
-
 function fallbackSummaryFromPath(path: string): string {
 	return basename(path, ".md").replace(/-/g, " ").trim() || "learning";
 }
@@ -69,26 +55,6 @@ function normalizeFrontmatter(
 		created,
 		summary,
 	};
-}
-
-export function recommendPendingAction(document: LearningDocument<PendingLearningFrontmatter>): string {
-	const combined = `${document.frontmatter.summary}\n${document.body}`;
-	const clearlyGlobal = /\b(across projects|all projects|global|generally|questionnaire|user preference)\b/i.test(combined);
-	if (clearlyGlobal && isDirective(combined) && !isProjectSpecific(combined)) return "Keep as global learning";
-	return "Keep as project learning";
-}
-
-export function recommendExistingAction(document: LearningDocument<ApprovedLearningFrontmatter>, today = todayIso()): string {
-	const age = daysBetween(document.frontmatter.lastReviewed, today);
-	const combined = `${document.frontmatter.summary}\n${document.body}`;
-	const structured = hasStructuredBody(document.body);
-	if (age <= 30) return "Keep";
-	if (document.scope === "project" && !isProjectSpecific(combined) && isDirective(combined)) return "Promote to global learning";
-	if (age >= 90 && isDirective(combined)) {
-		return document.scope === "project" ? "Promote into project AGENTS.md" : "Promote into global AGENTS.md";
-	}
-	if (age >= 180 && structured && !isDirective(combined)) return "Remove";
-	return "Keep";
 }
 
 export function sortExistingLearningsForReview<T extends ApprovedLearningFrontmatter>(documents: LearningDocument<T>[]): LearningDocument<T>[] {
