@@ -85,10 +85,14 @@ EOF
 
     _detach_tag() {
         local bookmark_id="$1"
-        # Tag ID for "SUMMARIZE" (can be overridden via KARAKEEP_SUMMARIZE_TAG_ID)
-        local tag_id="${KARAKEEP_SUMMARIZE_TAG_ID:-dve9xcn3na386hrvvijno3ys}"
-        
-        curl -sS -X DELETE \
+        local tag_id="$2"
+
+        if [[ -z "$tag_id" || "$tag_id" == "null" ]]; then
+            _error "Could not determine SUMMARIZE tag ID for bookmark $bookmark_id"
+            return 1
+        fi
+
+        curl -fsS -X DELETE \
             -H "Authorization: Bearer ${KARAKEEP_TOKEN_VAL}" \
             -H "Content-Type: application/json" \
             -d "{\"tags\":[{\"tagId\":\"$tag_id\"}]}" \
@@ -137,10 +141,11 @@ EOF
             continue
         fi
 
-        local id url title
+        local id url title summarize_tag_id
         id="$(printf '%s' "$_decoded" | jq -r .id)"
         url="$(printf '%s' "$_decoded" | jq -r .content.url)"
         title="$(printf '%s' "$_decoded" | jq -r '.title // "Untitled"')"
+        summarize_tag_id="${KARAKEEP_SUMMARIZE_TAG_ID:-$(printf '%s' "$_decoded" | jq -r '.tags[]? | select(.name == "SUMMARIZE") | .id' | head -n1)}"
 
         if [[ -z "$url" || "$url" == "null" ]]; then
             _error "Skipping '$title': No URL"
@@ -204,7 +209,9 @@ EOF
         if [[ "$summary_result" -eq 0 ]]; then
             _log_info "Saved: $output_file"
             _log_step "Detaching tag SUMMARIZE from bookmark $id"
-            _detach_tag "$id"
+            if ! _detach_tag "$id" "$summarize_tag_id"; then
+                _error "Summary saved, but failed to detach SUMMARIZE from bookmark $id"
+            fi
             ((success++))
         else
             _error "Failed to summarize: $title"
