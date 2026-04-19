@@ -8,6 +8,7 @@ alias rm='trash-put'
 
 alias wiki='(cd $WIKI_HOME; nvim $WIKI_HOME/index.md)'
 alias daily='(cd $WIKI_HOME; nvim +Obsidian\ today)'
+alias tomorrow='(cd $WIKI_HOME; nvim +Obsidian\ tomorrow)'
 alias wikisync='gitsync $WIKI_HOME'
 alias tasksync='gitsync $TASKDATA'
 alias allsync='wikisync && tasksync'
