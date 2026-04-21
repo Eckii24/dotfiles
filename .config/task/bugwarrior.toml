@@ -8,7 +8,7 @@ annotation_links = false
 [ado_issues_omr]
 service = "azuredevops"
 description_template = "{{adotitle}}"
-PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+PAT="@oracle:eval:op read 'op://Employee/AzureDevOps/password'"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\OM LOG'"
@@ -18,7 +18,7 @@ add_tags = ["ado"]
 [ado_issues_rxp]
 service = "azuredevops"
 description_template = "{{adotitle}}"
-PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+PAT="@oracle:eval:op read 'op://Employee/AzureDevOps/password'"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\Rx Recognition App'"
@@ -28,7 +28,7 @@ add_tags = ["ado"]
 [ado_issues_infra]
 service = "azuredevops"
 description_template = "{{adotitle}}"
-PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+PAT="@oracle:eval:op read 'op://Employee/AzureDevOps/password'"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
@@ -38,7 +38,7 @@ add_tags = ["ado"]
 [ado_issues_other]
 service = "azuredevops"
 description_template = "{{adotitle}}"
-PAT="@oracle:eval:echo $AZURE_DEVOPS_PAT"
+PAT="@oracle:eval:op read 'op://Employee/AzureDevOps/password'"
 project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] <> 'VIS - Program 0\\OM LOG' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure' AND [System.AreaPath] <> 'VIS - Program 0\\P0 Platform and Infrastructure'"
