@@ -79,6 +79,7 @@ type RalphActiveRuntime = {
 type RalphGlobalState = {
 	control?: RalphSessionControl;
 	runtime?: RalphActiveRuntime;
+	currentLoopState?: Pick<RalphLoopState, "loopId" | "useFreshSessionPerIteration" | "status">;
 };
 
 export default function (pi: ExtensionAPI) {
@@ -120,24 +121,24 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
 		setActiveRalphRuntime(pi, ctx);
 
 		const currentStateRecord = getLatestRalphStateRecord(ctx);
 		const currentState = currentStateRecord?.state;
 		if (!currentState?.useFreshSessionPerIteration) return;
+		setCurrentRalphLoopState(currentState);
 
 		if (!getRalphSessionControl() && (currentState.status === "running" || currentState.status === "queued")) {
 			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...currentState, status: "aborted" });
 			clearFreshSessionStatus(ctx);
-			if (ctx.hasUI) {
-				ctx.ui.notify("⚠️ Ralph loop cannot resume automatically after a Pi restart; start /ralph again", "warning");
-			}
+			setCurrentRalphLoopState(undefined);
 			return;
 		}
 
 		syncFreshSessionStatus(ctx, currentState);
 		if (currentState.status !== "running") return;
+		if (event.reason === "new") return;
 		if (!currentStateRecord || hasIterationPromptAfterState(ctx, currentStateRecord)) return;
 
 		setTimeout(() => {
@@ -163,30 +164,21 @@ export default function (pi: ExtensionAPI) {
 		if (finalAssistantMessage.stopReason === "aborted") {
 			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "aborted" });
 			clearFreshSessionStatus(ctx);
-			if (ctx.hasUI) {
-				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${state.iteration}/${state.maxLoops}`, "warning");
-			}
+			setCurrentRalphLoopState(undefined);
 			return;
 		}
 
 		if (hasRalphDoneSignal(finalAssistantText)) {
 			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "done" });
 			clearFreshSessionStatus(ctx);
-			if (ctx.hasUI) {
-				ctx.ui.notify(
-					`✅ Ralph loop stopped early at iteration ${state.iteration}/${state.maxLoops} because the assistant emitted ${RALPH_DONE_MARKER}`,
-					"info",
-				);
-			}
+			setCurrentRalphLoopState(undefined);
 			return;
 		}
 
 		if (state.iteration >= state.maxLoops) {
 			pi.appendEntry(RALPH_STATE_ENTRY_TYPE, { ...nextBaseState, status: "done" });
 			clearFreshSessionStatus(ctx);
-			if (ctx.hasUI) {
-				ctx.ui.notify(`✅ Ralph loop completed all ${state.maxLoops} iterations`, "info");
-			}
+			setCurrentRalphLoopState(undefined);
 			return;
 		}
 
@@ -250,17 +242,20 @@ function injectIterationControlMessage(
 	maxLoops: number,
 	useFreshSessionPerIteration: boolean,
 ): void {
-	pi.sendMessage({
-		customType: "ralph-loop-control",
-		content: buildIterationControlPrompt({ iteration, maxLoops, useFreshSessionPerIteration }),
-		display: true,
-		details: {
-			iteration,
-			maxLoops,
-			sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
-			doneMarker: RALPH_DONE_MARKER,
+	pi.sendMessage(
+		{
+			customType: "ralph-loop-control",
+			content: buildIterationControlPrompt({ iteration, maxLoops, useFreshSessionPerIteration }),
+			display: false,
+			details: {
+				iteration,
+				maxLoops,
+				sessionMode: useFreshSessionPerIteration ? "fresh" : "same",
+				doneMarker: RALPH_DONE_MARKER,
+			},
 		},
-	});
+		{ triggerTurn: false, deliverAs: "followUp" },
+	);
 }
 
 function getRalphGlobalState(): RalphGlobalState {
@@ -296,6 +291,19 @@ function getActiveRalphRuntime(): RalphActiveRuntime | undefined {
 	return getRalphGlobalState().runtime;
 }
 
+function setCurrentRalphLoopState(state: RalphLoopState | undefined): void {
+	const globalState = getRalphGlobalState();
+	if (!state || !state.useFreshSessionPerIteration || state.status === "done" || state.status === "aborted") {
+		delete globalState.currentLoopState;
+		return;
+	}
+	globalState.currentLoopState = {
+		loopId: state.loopId,
+		useFreshSessionPerIteration: state.useFreshSessionPerIteration,
+		status: state.status,
+	};
+}
+
 function createInitialRalphState(ctx: ExtensionCommandContext, options: RalphLoopOptions): RalphLoopState {
 	return {
 		version: 1,
@@ -311,13 +319,8 @@ async function startFreshSessionRalphLoop(pi: ExtensionAPI, ctx: ExtensionComman
 	setRalphSessionControl(ctx);
 
 	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
-		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
 		await ctx.waitForIdle();
 	}
-
-	const sessionModeLabel = "fresh session per iteration";
-	const promptModeLabel = options.useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
-	ctx.ui.notify(`🔁 Starting Ralph loop (${options.maxLoops} iterations, ${sessionModeLabel}, ${promptModeLabel})`, "info");
 
 	const initialState = createInitialRalphState(ctx, options);
 	await openNextFreshSession(pi, ctx, initialState);
@@ -331,12 +334,11 @@ async function openNextFreshSession(
 	const control = getRalphSessionControl();
 	if (!control) {
 		clearFreshSessionStatus(ctx);
-		if (ctx.hasUI) {
-			ctx.ui.notify("⚠️ Ralph loop lost its session handoff controller; stopping loop", "warning");
-		}
+		setCurrentRalphLoopState(undefined);
 		return false;
 	}
 
+	setCurrentRalphLoopState(state);
 	syncFreshSessionStatus(ctx, state);
 	setDirtyRepoGuardBypass(pi, state.loopId, true);
 
@@ -350,9 +352,7 @@ async function openNextFreshSession(
 		if (result.cancelled) {
 			setDirtyRepoGuardBypass(pi, state.loopId, false);
 			clearFreshSessionStatus(ctx);
-			if (ctx.hasUI) {
-				ctx.ui.notify(`🛑 Ralph loop cancelled before iteration ${state.iteration}/${state.maxLoops}`, "warning");
-			}
+			setCurrentRalphLoopState(undefined);
 			return false;
 		}
 		const activeRuntime = getActiveRalphRuntime();
@@ -366,6 +366,7 @@ async function openNextFreshSession(
 		return true;
 	} catch (error) {
 		setDirtyRepoGuardBypass(pi, state.loopId, false);
+		setCurrentRalphLoopState(undefined);
 		throw error;
 	}
 }
@@ -392,7 +393,7 @@ function startFreshIterationInCurrentSession(pi: ExtensionAPI, state: RalphLoopS
 		return;
 	}
 
-	pi.sendUserMessage(state.prompt);
+	pi.sendUserMessage(state.prompt, { deliverAs: "followUp" });
 }
 
 function syncFreshSessionStatus(ctx: ExtensionContext, state: RalphLoopState): void {
@@ -486,11 +487,8 @@ async function runSameSessionRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandCo
 	const promptModeLabel = useAgentFollowUps ? "user first, then hidden trigger messages" : "all user messages";
 
 	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
-		ctx.ui.notify("⏳ Waiting for the current turn to finish before starting Ralph loop…", "info");
 		await ctx.waitForIdle();
 	}
-
-	ctx.ui.notify(`🔁 Starting Ralph loop (${maxLoops} iterations, same session (legacy), ${promptModeLabel})`, "info");
 
 	try {
 		for (let i = 1; i <= maxLoops; i++) {
@@ -520,28 +518,20 @@ async function runSameSessionRalphLoop(pi: ExtensionAPI, ctx: ExtensionCommandCo
 
 			const iterationStarted = await waitForIterationToFinish(ctx, branchEntryCountBeforeIteration);
 			if (!iterationStarted) {
-				ctx.ui.notify(`⚠️ Ralph iteration ${i}/${maxLoops} never started; stopping loop`, "warning");
 				return;
 			}
 
 			const iterationOutcome = getIterationOutcome(ctx, branchEntryCountBeforeIteration);
 			if (iterationOutcome.aborted) {
-				ctx.ui.notify(`🛑 Ralph loop aborted at iteration ${i}/${maxLoops}`, "warning");
 				return;
 			}
 
 			updateStatus(i, "done ✓");
 
 			if (iterationOutcome.done && i < maxLoops) {
-				ctx.ui.notify(
-					`✅ Ralph loop stopped early at iteration ${i}/${maxLoops} because the assistant emitted ${RALPH_DONE_MARKER}`,
-					"info",
-				);
 				return;
 			}
 		}
-
-		ctx.ui.notify(`✅ Ralph loop completed all ${maxLoops} iterations`, "info");
 	} finally {
 		clearStatus();
 	}

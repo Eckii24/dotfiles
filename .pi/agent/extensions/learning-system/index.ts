@@ -6,6 +6,8 @@ import { initializeLearningSystemRuntime, refreshRuntimeState, registerLearningR
 
 export const MESSAGE_TYPE = "learning-system-learnings";
 const SUBAGENT_ENV = "PI_SUBAGENT";
+const RALPH_STATE_ENTRY_TYPE = "ralph-loop-state";
+const RALPH_GLOBAL_STATE_KEY = "__piRalphLoopGlobalState";
 
 interface RuntimeState {
 	paths?: LearningSystemPaths;
@@ -43,8 +45,33 @@ export function buildCustomMessage(injection: LearningInjection, display: boolea
 	};
 }
 
+function getLatestRalphState(ctx: ExtensionContext): { useFreshSessionPerIteration?: boolean; status?: string } | undefined {
+	const entries = ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: unknown }>;
+	for (let index = entries.length - 1; index >= 0; index -= 1) {
+		const entry = entries[index];
+		if (entry?.type !== "custom" || entry.customType !== RALPH_STATE_ENTRY_TYPE) continue;
+		if (!entry.data || typeof entry.data !== "object") continue;
+		return entry.data as { useFreshSessionPerIteration?: boolean; status?: string };
+	}
+	return undefined;
+}
+
+function getGlobalQuietRalphState(): { useFreshSessionPerIteration?: boolean; status?: string } | undefined {
+	const globalState = globalThis as typeof globalThis & {
+		[RALPH_GLOBAL_STATE_KEY]?: {
+			currentLoopState?: { useFreshSessionPerIteration?: boolean; status?: string };
+		};
+	};
+	return globalState[RALPH_GLOBAL_STATE_KEY]?.currentLoopState;
+}
+
+function isQuietRalphSession(ctx: ExtensionContext): boolean {
+	const state = getLatestRalphState(ctx) ?? getGlobalQuietRalphState();
+	return state?.useFreshSessionPerIteration === true && (state.status === "queued" || state.status === "running");
+}
+
 function maybeSendInjection(pi: ExtensionAPI, ctx: ExtensionContext, injection: LearningInjection | undefined): void {
-	if (!injection) return;
+	if (!injection || isQuietRalphSession(ctx)) return;
 	if (latestCustomMessageHash(ctx, MESSAGE_TYPE) === injection.hash) return;
 	pi.sendMessage(buildCustomMessage(injection, true), { triggerTurn: false });
 }
@@ -65,7 +92,7 @@ export function renderLearningMessage(
 }
 
 async function maybePromptPendingReview(pi: ExtensionAPI, ctx: ExtensionContext, paths: LearningSystemPaths): Promise<void> {
-	if (process.env[SUBAGENT_ENV] === "1" || !ctx.hasUI) return;
+	if (process.env[SUBAGENT_ENV] === "1" || !ctx.hasUI || isQuietRalphSession(ctx)) return;
 	const pendingTotal = (await listAllLearningFiles(paths)).filter((learning) => learning.status === "pending").length;
 	if (pendingTotal === 0) return;
 	const choice = await ctx.ui.select(`${pendingTotal} pending learning${pendingTotal === 1 ? "" : "s"} detected. Review now?`, [
