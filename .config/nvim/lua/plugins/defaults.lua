@@ -74,7 +74,11 @@ return {
           projects = {
             dev = { "~/Development/" },
           },
+          files = {
+            hidden = true,
+          },
           explorer = {
+            hidden = true,
             win = {
               list = {
                 keys = {
