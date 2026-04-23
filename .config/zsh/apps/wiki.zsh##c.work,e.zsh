@@ -1,4 +1,4 @@
-export WIKI_HOME="$HOME/Development/Repos/Notes"
+export WIKI_HOME="$HOME/Library/CloudStorage/OneDrive-CarlZeissAG/Notes"
 export BUGWARRIORRC="$HOME/.config/task/bugwarrior.toml"
 export TASKRC="$HOME/.config/task/taskrc"
 export TASKDATA="$HOME/Development/Repos/Tasks"
