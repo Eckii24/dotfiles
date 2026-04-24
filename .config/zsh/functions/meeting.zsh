@@ -2,7 +2,7 @@ function meeting() {
   local role="meeting"
   local model=""
   local interactive=""
-  local glossary_file="$HOME/Development/Repos/Notes/resources/p0-glossar.md"
+  local glossary_file="$WIKI_HOME/resources/p0-glossar.md"
 
   # Parse command line arguments
   while [[ $# -gt 0 ]]; do
