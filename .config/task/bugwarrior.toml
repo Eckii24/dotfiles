@@ -1,6 +1,6 @@
 [general]
 taskrc = "~/.config/task/taskrc"
-targets = ["ado_issues_omr", "ado_issues_rxp", "ado_issues_infra", "ado_issues_other"]
+targets = ["ado_issues_omr", "ado_issues_rxp", "ado_issues_infra", "ado_issues_ccc", "ado_issues_other"]
 static_fields = ["project", "priority"]
 annotation_comments = false
 annotation_links = false
@@ -33,6 +33,16 @@ project = "VIS - Program 0"
 organization = "ZEISSgroup-VIS"
 wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - Program 0\\P0 Platform and Infrastructure'"
 project_template = "Infra"
+add_tags = ["ado"]
+
+[ado_issues_ccc]
+service = "azuredevops"
+description_template = "{{adotitle}}"
+PAT="@oracle:eval:op read 'op://Employee/AzureDevOps/password'"
+project = "VIS - CCC Automation"
+organization = "ZEISSgroup-VIS"
+wiql_filter = "[System.AssignedTo] = @me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed' AND [System.AreaPath] = 'VIS - CCC Automation'"
+project_template = "CCC"
 add_tags = ["ado"]
 
 [ado_issues_other]
