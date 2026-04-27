@@ -34,7 +34,7 @@ The extension does all of the following:
 - creates the learning directories on first use
 - creates and scans the managed learning stores without any legacy migration/cleanup step
 - scans approved learnings and injects them into context as **refs only** (`filename + summary`)
-- prompts the user to run `/skill:learn review` when pending learnings exist
+- asks whether to continue without processing open learnings, with an explicit `/skill:learn review` path when pending learnings exist
 - exposes runtime-backed tools so skill and agent flows use the same logic as the extension implementation
 - refreshes injected learnings after `/skill:learn ...` changes the live store
 - keeps sub-agents synchronized with the same learning refs, but without the interactive review prompt
@@ -373,7 +373,7 @@ The extension:
 1. initializes directories if needed
 2. scans approved learnings
 3. builds the injection block
-4. optionally prompts the user to review pending learnings
+4. optionally asks whether to continue without processing pending learnings or review them now
 5. sends the visible custom learning message into the session
 
 The pending-review prompt only appears when:
@@ -874,7 +874,7 @@ That command is useful for debugging path resolution and queue state.
 4. `learn-orchestrator` uses `skills/learn/SKILL.md`, mines candidates directly from the provided evidence, and writes pending learnings with `learning_write_pending`
 5. Any unresolved slug collisions are handed back to the top-level prompt for questionnaire-driven resolution
 6. Pending files land in `.ai/learnings/pending/*.md`
-7. The user is asked whether to review now
+7. The user is asked whether to continue without processing the open learnings or review them now
 
 ### Example 2 — review and promotion
 

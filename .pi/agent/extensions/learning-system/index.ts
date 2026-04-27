@@ -6,6 +6,8 @@ import { initializeLearningSystemRuntime, refreshRuntimeState, registerLearningR
 
 export const MESSAGE_TYPE = "learning-system-learnings";
 const SUBAGENT_ENV = "PI_SUBAGENT";
+const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
+const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
 const RALPH_STATE_ENTRY_TYPE = "ralph-loop-state";
 const RALPH_GLOBAL_STATE_KEY = "__piRalphLoopGlobalState";
 
@@ -95,11 +97,19 @@ async function maybePromptPendingReview(pi: ExtensionAPI, ctx: ExtensionContext,
 	if (process.env[SUBAGENT_ENV] === "1" || !ctx.hasUI || isQuietRalphSession(ctx)) return;
 	const pendingTotal = (await listAllLearningFiles(paths)).filter((learning) => learning.status === "pending").length;
 	if (pendingTotal === 0) return;
-	const choice = await ctx.ui.select(`${pendingTotal} pending learning${pendingTotal === 1 ? "" : "s"} detected. Review now?`, [
-		"Yes, review now",
-		"No, skip for now",
-	]);
-	if (choice === "Yes, review now") {
+
+	pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Pending learnings — confirmation needed" });
+	const choice = await (async () => {
+		try {
+			return await ctx.ui.select(`You have ${pendingTotal} open learning${pendingTotal === 1 ? "" : "s"}. Continue without processing ${pendingTotal === 1 ? "it" : "them"}?`, [
+				"Yes, continue without processing",
+				"No, review now",
+			]);
+		} finally {
+			pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+		}
+	})();
+	if (choice === "No, review now") {
 		pi.sendUserMessage("/skill:learn review");
 	}
 }
