@@ -36,7 +36,7 @@ alias ....='cd ../../..'
 
 # Global alias
 alias -g C='| pbcopy'
-alias -g G='| grep'
+alias -g G='| rg'
 alias -g L='| less'
 alias -g S='| sort -h'
 alias -g J='| jq'
