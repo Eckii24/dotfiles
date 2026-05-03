@@ -6,7 +6,8 @@
  *   Line 2: LEFT ... padding ... RIGHT
  *     LEFT:  ↑12k in  ↓8k out  67% ctx  codex: 5h 93% left | 7d 96% left
  *     RIGHT: (openai-codex)  gpt-5.4  think:high  (main)
- *   Line 3: extension statuses (if any)
+ *   Line 3: codex reset windows with countdown + local reset time/date
+ *   Line 4: extension statuses (if any)
  *
  * Token source:
  *   ~/.pi/agent/auth.json → openai-codex.access + openai-codex.accountId
@@ -93,6 +94,37 @@ function usageColorByRemaining(leftPercent: number | null): "dim" | "warning" | 
 	if (leftPercent <= 10) return "error";
 	if (leftPercent <= 30) return "warning";
 	return "dim";
+}
+
+function formatResetCountdown(seconds: number | null): string | null {
+	if (seconds === null || !Number.isFinite(seconds)) return null;
+	const total = Math.max(0, Math.round(seconds));
+	const days = Math.floor(total / 86_400);
+	const hours = Math.floor((total % 86_400) / 3_600);
+	const minutes = Math.floor((total % 3_600) / 60);
+	const secs = total % 60;
+	if (days > 0) return `${days}d${hours}h`;
+	if (hours > 0) return `${hours}h${minutes}m`;
+	if (minutes > 0) return `${minutes}m`;
+	return `${secs}s`;
+}
+
+function formatResetClock(seconds: number | null, includeDate: boolean): string | null {
+	if (seconds === null || !Number.isFinite(seconds)) return null;
+	const resetDate = new Date(Date.now() + Math.max(0, seconds) * 1000);
+	const now = new Date();
+	const time = resetDate.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+	if (!includeDate && resetDate.toDateString() === now.toDateString()) return time;
+	const weekday = resetDate.toLocaleDateString(undefined, { weekday: "short" });
+	const monthDay = resetDate.toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
+	return `${weekday} ${monthDay} ${time}`;
+}
+
+function formatResetWindow(label: string, seconds: number | null, includeDate: boolean): string | null {
+	const countdown = formatResetCountdown(seconds);
+	const clock = formatResetClock(seconds, includeDate);
+	if (!countdown || !clock) return null;
+	return `${label} ↺ ${countdown} @ ${clock}`;
 }
 
 function getResetAfterSeconds(window: Record<string, unknown> | null): number | null {
@@ -332,6 +364,18 @@ export default function (pi: ExtensionAPI) {
 					})());
 
 					const lines = [truncateToWidth(pwdLine, width, theme.fg("dim", "…")), statsLine];
+
+					if (usageData && !usageData.error) {
+						const resetLine = [
+							formatResetWindow("5h", usageData.fiveHour.resetAfterSeconds, false),
+							formatResetWindow("7d", usageData.sevenDay.resetAfterSeconds, true),
+						]
+							.filter((value): value is string => value !== null)
+							.join("  |  ");
+						if (resetLine) {
+							lines.push(truncateToWidth(theme.fg("dim", `codex reset: ${resetLine}`), width, theme.fg("dim", "…")));
+						}
+					}
 
 					const extensionStatuses = footerData.getExtensionStatuses();
 					if (extensionStatuses.size > 0) {
