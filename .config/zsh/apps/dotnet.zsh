@@ -15,6 +15,7 @@ function dotnet() {
   local secrets_dir=""
   local secrets_template=""
   local secrets_file=""
+  local -a op_run_args
 
   # Assumption: project/solution detection is non-recursive and only checks
   # the current directory or direct src/v* version folders, matching the
@@ -86,7 +87,17 @@ function dotnet() {
       fi
     fi
 
-    command op run -- dotnet "$@"
+    # 1Password's default stdout/stderr masking can make child processes think
+    # output is redirected, which disables ANSI/log highlighting in interactive
+    # console apps. Keep masking for non-interactive usage, but preserve a real
+    # TTY for terminal runs so Camunda/.NET console highlighting still works.
+    op_run_args=( run -- )
+
+    if [[ -t 1 && -t 2 ]]; then
+      op_run_args=( run --no-masking -- )
+    fi
+
+    command op "${op_run_args[@]}" dotnet "$@"
   )
 
   return $?
