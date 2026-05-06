@@ -1,4 +1,39 @@
 function dotnet() {
+  if [[ "$1" == "--wrapper-help" ]]; then
+    cat <<'EOF'
+Usage: dotnet [dotnet-args...]
+       dotnet --wrapper-help
+
+This zsh wrapper adds project discovery and secret handling before delegating
+to the real .NET CLI.
+
+Wrapper behavior:
+  1. Resolve the working directory for dotnet:
+     - prefer the current directory if it contains a .sln, .slnx, or project file
+     - otherwise scan src/v1, src/v2, ... and use the highest matching version
+
+  2. Prepare user secrets when exactly one unique UserSecretsId is found:
+     - scan project files below the selected directory
+     - read <UserSecretsId>...</UserSecretsId>
+     - if ~/.microsoft/usersecrets/<id>/secrets.tpl.json exists,
+       render it to secrets.json with `op inject`
+
+  3. Resolve op:// environment variables for the dotnet subprocess:
+     - run `dotnet` through `op run`
+     - interactive terminal runs use `op run --no-masking` to preserve a real
+       TTY so ANSI/Camunda console highlighting keeps working
+     - non-interactive runs keep the default masked mode
+
+Notes:
+  - The wrapper only injects user secrets when exactly one unique
+    UserSecretsId is found. If none or multiple IDs are found, it skips
+    secrets.json generation.
+  - Native .NET CLI help is unchanged: use `dotnet --help`
+  - Wrapper help is available via: `dotnet --wrapper-help`
+EOF
+    return 0
+  fi
+
   local -a current_matches
   local -a v1_matches
   local -a version_matches
