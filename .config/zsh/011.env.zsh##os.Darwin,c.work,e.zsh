@@ -39,3 +39,6 @@ export AZURE_DEVOPS_ORG="op://Employee/AzureDevOps/ORG"
 export AZURE_DEVOPS_ORG_URL="op://Employee/AzureDevOps/ORG_URL"
 export AZURE_DEVOPS_PAT="op://Employee/AzureDevOps/password"
 export AZURE_DEVOPS_DEFAULT_PROJECT="op://Employee/AzureDevOps/DEFAULT_PROJECT"
+
+# Nuget Config
+export NUGET_P0_PASSWORD="op://Employee/Nuget/password"
