@@ -7,9 +7,14 @@ function dotnet() {
   local version_dir
   local version_name
   local version_number
-  local secrets_dir="/Users/matthias.eck/.microsoft/usersecrets/68946189-588d-4486-9f58-ef28163e69f1"
-  local secrets_template="$secrets_dir/secrets.tpl.json"
-  local secrets_file="$secrets_dir/secrets.json"
+  local -a project_files
+  local -a secrets_ids
+  local project_file
+  local extracted_secrets_id
+  local secrets_id=""
+  local secrets_dir=""
+  local secrets_template=""
+  local secrets_file=""
 
   # Assumption: project/solution detection is non-recursive and only checks
   # the current directory or direct src/v* version folders, matching the
@@ -48,13 +53,40 @@ function dotnet() {
       cd "$target_dir" || exit 1
     fi
 
-    trap 'rm -f "$secrets_file"' EXIT
-    trap 'rm -f "$secrets_file"; exit 1' HUP INT QUIT TERM
+    # Assumption: inject only when the selected project tree resolves to one
+    # unique UserSecretsId. If none or multiple are present, skip injection
+    # rather than guessing the wrong secrets file.
+    if [[ -n "$target_dir" ]]; then
+      project_files=( **/*.csproj(N) **/*.fsproj(N) **/*.vbproj(N) )
+      secrets_ids=()
 
-    command op inject -f -i "$secrets_template" -o "$secrets_file" || exit 1
-    chmod 600 "$secrets_file" || exit 1
+      for project_file in "${project_files[@]}"; do
+        extracted_secrets_id=$(sed -n 's:.*<UserSecretsId>\([^<][^<]*\)</UserSecretsId>.*:\1:p' "$project_file" | head -n 1)
 
-    command dotnet "$@"
+        if [[ -n "$extracted_secrets_id" ]]; then
+          secrets_ids+=( "$extracted_secrets_id" )
+        fi
+      done
+
+      secrets_ids=( "${(@u)secrets_ids}" )
+
+      if [[ ${#secrets_ids[@]} -eq 1 ]]; then
+        secrets_id="$secrets_ids[1]"
+        secrets_dir="$HOME/.microsoft/usersecrets/$secrets_id"
+        secrets_template="$secrets_dir/secrets.tpl.json"
+        secrets_file="$secrets_dir/secrets.json"
+
+        if [[ -f "$secrets_template" ]]; then
+          trap 'rm -f "$secrets_file"' EXIT
+          trap 'rm -f "$secrets_file"; exit 1' HUP INT QUIT TERM
+
+          command op inject -f -i "$secrets_template" -o "$secrets_file" || exit 1
+          chmod 600 "$secrets_file" || exit 1
+        fi
+      fi
+    fi
+
+    command op run -- dotnet "$@"
   )
 
   return $?
