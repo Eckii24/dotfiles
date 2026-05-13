@@ -9,14 +9,15 @@ return {
         type = "file_scoped",
       },
       test_runner = {
+        neotest_integration = true,
         viewmode = "vsplit",
         vsplit_width = 80,
         hide_legend = true,
         mappings = {
-          run_test_from_buffer = { lhs = "<leader>tr", desc = "Run Test from Buffer" },
-          peek_stack_trace_from_buffer = { lhs = "<leader>tp", desc = "peek stack trace from buffer" },
-          debug_test_from_buffer = { lhs = "<leader>td", desc = "run test from buffer" },
-          filter_failed_tests = { lhs = "<leader>fe", desc = "filter failed tests" },
+          run_test_from_buffer = { lhs = "<leader>Tr", desc = "Run Test from Buffer" },
+          peek_stack_trace_from_buffer = { lhs = "<leader>Tp", desc = "peek stack trace from buffer" },
+          debug_test_from_buffer = { lhs = "<leader>Td", desc = "run test from buffer" },
+          filter_failed_tests = { lhs = "<leader>Tf", desc = "filter failed tests" },
           debug_test = { lhs = "d", desc = "debug test" },
           go_to_file = { lhs = "g", desc = "go to file" },
           run_all = { lhs = "R", desc = "run all tests" },
@@ -351,6 +352,16 @@ return {
       end
 
       require("easy-dotnet.netcoredbg").register_dap_variables_viewer()
+    end,
+  },
+  {
+    "nvim-neotest/neotest",
+    dependencies = {
+      "GustavEikaas/easy-dotnet.nvim",
+    },
+    optional = true,
+    opts = function(_, opts)
+      table.insert(opts.adapters, require("easy-dotnet.neotest"))
     end,
   },
 }
