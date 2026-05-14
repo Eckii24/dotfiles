@@ -281,8 +281,8 @@ verify_ssh_installation() {
   if [[ -z "$(ssh_service_name || true)" ]]; then
     err "Kein ssh/sshd systemd service gefunden, obwohl openssh-server installiert sein sollte."
     err "Verfügbare SSH-bezogene Units:"
-    systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
-    systemctl list-unit-files --type=socket --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    list_ssh_related_service_units
+    list_ssh_related_socket_units
     exit 1
   fi
 }
@@ -383,10 +383,26 @@ EOF
   visudo -cf "${sudoers_file}" >/dev/null
 }
 
+list_ssh_related_service_units() {
+  systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '/^(ssh|sshd)/ { print }'
+}
+
+list_ssh_related_socket_units() {
+  systemctl list-unit-files --type=socket --no-legend 2>/dev/null | awk '/^(ssh|sshd)/ { print }'
+}
+
+service_unit_exists() {
+  local unit="$1"
+  local load_state
+
+  load_state="$(systemctl show --property=LoadState --value "${unit}" 2>/dev/null || true)"
+  [[ -n "${load_state}" && "${load_state}" != "not-found" ]]
+}
+
 ssh_service_name() {
-  if systemctl list-unit-files | grep -q '^ssh.service'; then
+  if service_unit_exists 'ssh.service'; then
     printf 'ssh\n'
-  elif systemctl list-unit-files | grep -q '^sshd.service'; then
+  elif service_unit_exists 'sshd.service'; then
     printf 'sshd\n'
   fi
 }
@@ -414,8 +430,10 @@ disable_ssh_socket_activation() {
 
 port_is_listening() {
   local port="$1"
+  local listening_ports
 
-  ss -tlnH | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\1/' | grep -qx "${port}"
+  listening_ports="$(ss -tlnH | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\1/')"
+  grep -qx "${port}" <<<"${listening_ports}"
 }
 
 ensure_ssh_ports_listening() {
@@ -444,8 +462,8 @@ enable_and_restart_ssh_service() {
 
   if [[ -z "${service}" ]]; then
     err "Kein ssh/sshd systemd service gefunden. Abbruch, um SSH-Lockout zu vermeiden."
-    systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
-    systemctl list-unit-files --type=socket --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    list_ssh_related_service_units
+    list_ssh_related_socket_units
     exit 1
   fi
 
