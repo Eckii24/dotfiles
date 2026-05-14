@@ -65,3 +65,10 @@ After that the setup script can be run with the following command:
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/setup-debian.sh)"
 ```
+
+The VPS hardening script can also be executed directly from `curl` and accepts arguments via `bash -s --`:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/harden-debian-vps.sh | sudo bash -s -- --user matthias --ssh-port 2222
+```
+
+Hint: keep your current SSH session open until the new login works, and make sure any provider/cloud firewall allows the chosen SSH port.
