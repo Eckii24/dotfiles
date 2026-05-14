@@ -22,7 +22,7 @@ set -euo pipefail
 
 ADMIN_USER=""
 SSH_PORT="22"
-KEEP_SSH_PORT_22="true"
+KEEP_SSH_PORT_22="false"
 STACKS_DIR="/opt/stacks"
 ENABLE_AUTOMATIC_REBOOT="true"
 INSTALL_DOCKER="true"
@@ -30,11 +30,18 @@ RUN_SYSTEM_UPGRADE="true"
 INTERACTIVE="true"
 EXISTING_SSH_PORT=""
 FAIL2BAN_IGNORE_IPS=""
+ADD_ADMIN_TO_DOCKER_GROUP="false"
+LOCK_ROOT_PASSWORD="false"
 
 DOCKER_DAEMON_JSON="/etc/docker/daemon.json"
+DOCKER_USER_FIREWALL_SCRIPT="/usr/local/sbin/docker-user-firewall"
+DOCKER_USER_FIREWALL_SERVICE="/etc/systemd/system/docker-user-firewall.service"
 SSH_HARDENING_FILE="/etc/ssh/sshd_config.d/999-hardening.conf"
 SYSCTL_HARDENING_FILE="/etc/sysctl.d/99-vps-hardening.conf"
 FAIL2BAN_SSHD_FILE="/etc/fail2ban/jail.d/sshd.local"
+JOURNALD_HARDENING_FILE="/etc/systemd/journald.conf.d/99-vps-hardening.conf"
+AUDIT_HARDENING_RULES_FILE="/etc/audit/rules.d/99-vps-hardening.rules"
+BACKUP_README_FILE="/opt/backups/README-restic-rclone.md"
 
 CHECK_FAILED=0
 CHECK_WARNINGS=0
@@ -71,6 +78,9 @@ Options:
   -p, --ssh-port PORT             SSH port, default: 22
       --stacks-dir DIR            Docker stacks directory, default: /opt/stacks
       --fail2ban-ignore-ip IP     Extra IP/CIDR to whitelist in fail2ban (repeatable)
+      --keep-port-22              Keep TCP/22 as SSH fallback when --ssh-port is not 22
+      --allow-docker-group        Add admin user to docker group (root-equivalent convenience)
+      --lock-root-password        Lock the root password after admin sudo access is validated
       --no-auto-reboot            Disable unattended-upgrades automatic reboot
       --no-docker                 Do not install Docker
       --no-upgrade                Do not run apt full-upgrade
@@ -78,10 +88,12 @@ Options:
   -h, --help                      Show help
 
 Behavior:
-  - Port 22 stays enabled as SSH fallback to avoid lockout
-  - The currently detected SSH port is also kept during migration when possible
+  - For custom SSH ports, TCP/22 is removed by default after sshd validates the new port locally
+  - Use --keep-port-22 during risky migrations or until the provider firewall is confirmed
   - If systemd SSH socket activation exists, it is disabled so sshd itself binds the ports
   - fail2ban always ignores localhost and auto-whitelists the current SSH client IP when detectable
+  - Docker group membership is disabled by default because it is root-equivalent
+  - Docker's DOCKER-USER chain blocks published container ports except 80/tcp and 443/tcp by default
 
 Examples:
   sudo ./harden-debian-vps.sh --user matthias
@@ -108,6 +120,18 @@ parse_args() {
       --fail2ban-ignore-ip)
         FAIL2BAN_IGNORE_IPS+=" ${2:-}"
         shift 2
+        ;;
+      --keep-port-22)
+        KEEP_SSH_PORT_22="true"
+        shift
+        ;;
+      --allow-docker-group)
+        ADD_ADMIN_TO_DOCKER_GROUP="true"
+        shift
+        ;;
+      --lock-root-password)
+        LOCK_ROOT_PASSWORD="true"
+        shift
         ;;
       --no-auto-reboot)
         ENABLE_AUTOMATIC_REBOOT="false"
@@ -270,6 +294,10 @@ install_base_packages() {
     chrony \
     logrotate \
     needrestart \
+    iptables \
+    apparmor \
+    apparmor-utils \
+    auditd \
     nano \
     vim \
     rsync \
@@ -362,7 +390,7 @@ unban_current_ssh_client_ip() {
 }
 
 list_ssh_ports() {
-  local ports=("${SSH_PORT}" "${EXISTING_SSH_PORT}")
+  local ports=("${SSH_PORT}")
 
   if [[ "${KEEP_SSH_PORT_22}" == "true" ]]; then
     ports+=("22")
@@ -581,21 +609,33 @@ $(render_ssh_port_lines)
 
 PermitRootLogin no
 PasswordAuthentication no
+PermitEmptyPasswords no
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
+HostbasedAuthentication no
+IgnoreRhosts yes
+PermitUserEnvironment no
 
 PubkeyAuthentication yes
 AuthenticationMethods publickey
+AllowUsers ${ADMIN_USER}
 
 X11Forwarding no
 AllowAgentForwarding no
 AllowTcpForwarding no
+GatewayPorts no
+PermitTunnel no
 
 MaxAuthTries 3
+MaxSessions 2
+MaxStartups 10:30:60
 LoginGraceTime 20
 
 ClientAliveInterval 300
 ClientAliveCountMax 2
+TCPKeepAlive no
+Compression no
+LogLevel VERBOSE
 
 UsePAM yes
 EOF
@@ -616,7 +656,7 @@ EOF
   fi
 
   log "Effektive SSH-Werte:"
-  sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication|challengeresponseauthentication|authenticationmethods|maxauthtries|allowtcpforwarding|allowagentforwarding)' || true
+  sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication|challengeresponseauthentication|authenticationmethods|allowusers|maxauthtries|maxsessions|allowtcpforwarding|allowagentforwarding)' || true
 
   if [[ "${SSH_PORT}" != "22" ]]; then
     warn "Bei benutzerdefiniertem SSH-Port muss ggf. zusätzlich die Firewall des VPS-/Cloud-Anbieters angepasst werden."
@@ -624,6 +664,8 @@ EOF
 
   if [[ "${SSH_PORT}" != "22" && "${KEEP_SSH_PORT_22}" == "true" ]]; then
     warn "Port 22 bleibt absichtlich als Fallback aktiv, um Lockouts bei Port-Migrationen zu vermeiden."
+  elif [[ "${SSH_PORT}" != "22" ]]; then
+    warn "Port 22 wurde aus der SSH-Konfiguration entfernt. Prüfe Provider-Firewall und teste eine zweite Session auf Port ${SSH_PORT}."
   fi
 }
 
@@ -723,6 +765,67 @@ configure_chrony() {
   systemctl enable --now chrony
 }
 
+configure_apparmor() {
+  log "Aktiviere AppArmor."
+  systemctl enable --now apparmor || true
+  aa-status || true
+}
+
+configure_journald() {
+  log "Konfiguriere persistentes systemd-journald."
+
+  install -d -m 755 /etc/systemd/journald.conf.d
+  install -d -m 2755 -g systemd-journal /var/log/journal
+
+  write_file_if_changed "${JOURNALD_HARDENING_FILE}" 0644 <<'EOF' || true
+[Journal]
+Storage=persistent
+Compress=yes
+SystemMaxUse=1G
+RuntimeMaxUse=256M
+EOF
+
+  systemctl restart systemd-journald
+}
+
+configure_auditd() {
+  log "Konfiguriere auditd Basis-Regeln."
+
+  local docker_rules=""
+
+  if [[ "${INSTALL_DOCKER}" == "true" ]]; then
+    docker_rules="
+-w /etc/docker/daemon.json -p wa -k docker_config
+-w /usr/bin/docker -p x -k docker_exec"
+  fi
+
+  write_file_if_changed "${AUDIT_HARDENING_RULES_FILE}" 0640 <<EOF || true
+-w /etc/passwd -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+-w /etc/ssh/sshd_config -p wa -k sshd_config
+-w /etc/ssh/sshd_config.d/ -p wa -k sshd_config${docker_rules}
+-a always,exit -F arch=b64 -S init_module,delete_module,finit_module -k kernel_modules
+-a always,exit -F arch=b32 -S init_module,delete_module,finit_module -k kernel_modules
+EOF
+
+  systemctl enable --now auditd || true
+  augenrules --load || true
+}
+
+lock_root_password_if_requested() {
+  if [[ "${LOCK_ROOT_PASSWORD}" != "true" ]]; then
+    log "Root-Passwort bleibt unverändert. Root-SSH-Login ist trotzdem deaktiviert."
+    return
+  fi
+
+  log "Sperre Root-Passwort nach validiertem Admin-Sudo-Zugang."
+  passwd -l root
+}
+
 remove_conflicting_docker_packages() {
   log "Entferne potenziell konflikthafte Docker-Pakete, falls vorhanden."
 
@@ -791,11 +894,16 @@ install_docker_engine() {
 
   systemctl enable --now docker
 
-  if id -nG "${ADMIN_USER}" | tr ' ' '\n' | grep -qx docker; then
-    log "User '${ADMIN_USER}' ist bereits in Gruppe docker."
+  if [[ "${ADD_ADMIN_TO_DOCKER_GROUP}" == "true" ]]; then
+    warn "Füge '${ADMIN_USER}' zur Gruppe docker hinzu. Diese Gruppe ist root-äquivalent."
+
+    if id -nG "${ADMIN_USER}" | tr ' ' '\n' | grep -qx docker; then
+      log "User '${ADMIN_USER}' ist bereits in Gruppe docker."
+    else
+      usermod -aG docker "${ADMIN_USER}"
+    fi
   else
-    log "Füge '${ADMIN_USER}' zur Gruppe docker hinzu."
-    usermod -aG docker "${ADMIN_USER}"
+    log "Admin-User wird nicht zur root-äquivalenten Gruppe docker hinzugefügt. Nutze 'sudo docker ...'."
   fi
 }
 
@@ -834,6 +942,65 @@ EOF
   fi
 }
 
+configure_docker_user_firewall() {
+  if [[ "${INSTALL_DOCKER}" != "true" ]]; then
+    return
+  fi
+
+  log "Konfiguriere Docker DOCKER-USER Firewall."
+
+  write_file_if_changed "${DOCKER_USER_FIREWALL_SCRIPT}" 0755 <<'EOF' || true
+#!/usr/bin/env bash
+set -euo pipefail
+
+apply_rules() {
+  local bin="$1"
+
+  command -v "${bin}" >/dev/null 2>&1 || return 0
+
+  "${bin}" -w -N DOCKER-USER 2>/dev/null || true
+  "${bin}" -w -F DOCKER-USER
+
+  # Keep established flows and container-originated egress working.
+  "${bin}" -w -A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+  "${bin}" -w -A DOCKER-USER -i docker0 -j RETURN
+  "${bin}" -w -A DOCKER-USER -i br+ -j RETURN
+
+  # Allow only public web ports to published Docker services by default.
+  "${bin}" -w -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 80 -j RETURN
+  "${bin}" -w -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 443 -j RETURN
+
+  # Drop all other forwarded traffic into Docker bridge networks.
+  "${bin}" -w -A DOCKER-USER -o docker0 -j DROP
+  "${bin}" -w -A DOCKER-USER -o br+ -j DROP
+
+  # Return non-Docker forwarding decisions to the normal firewall path.
+  "${bin}" -w -A DOCKER-USER -j RETURN
+}
+
+apply_rules iptables
+apply_rules ip6tables
+EOF
+
+  write_file_if_changed "${DOCKER_USER_FIREWALL_SERVICE}" 0644 <<EOF || true
+[Unit]
+Description=Restrict Docker published ports through DOCKER-USER
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=${DOCKER_USER_FIREWALL_SCRIPT}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable --now docker-user-firewall.service
+}
+
 prepare_filesystem_layout() {
   log "Bereite Dateisystemlayout vor."
 
@@ -845,6 +1012,48 @@ prepare_filesystem_layout() {
   log "  ${STACKS_DIR}"
   log "  /opt/scripts"
   log "  /opt/backups"
+}
+
+configure_backup_scaffold() {
+  log "Erstelle Backup-Scaffold und Restore-Checkliste."
+
+  write_file_if_changed "${BACKUP_README_FILE}" 0640 <<'EOF' || true
+# VPS Backup Checklist
+
+This server has restic and rclone installed, but backups are not safe until you configure and test them.
+
+Required manual setup:
+
+1. Configure an offsite rclone remote:
+   rclone config
+
+2. Initialize an encrypted restic repository, for example:
+   export RESTIC_REPOSITORY="rclone:REMOTE:SERVER/restic"
+   export RESTIC_PASSWORD_FILE="/root/.config/restic/password"
+   restic init
+
+3. Back up at least:
+   - /etc
+   - /home
+   - /opt/stacks
+   - application data volumes/bind mounts
+
+4. Exclude volatile paths:
+   - /proc
+   - /sys
+   - /dev
+   - /run
+   - /tmp
+   - Docker overlay/cache directories unless explicitly needed
+
+5. Add a systemd timer or cron job.
+
+6. Test restore before relying on the backup:
+   restic snapshots
+   restic restore latest --target /tmp/restore-test
+
+7. Store the restic password/recovery material outside this VPS.
+EOF
 }
 
 apply_sysctl_hardening() {
@@ -870,17 +1079,28 @@ net.ipv6.conf.all.accept_source_route = 0
 net.ipv6.conf.default.accept_source_route = 0
 
 net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+net.ipv4.tcp_syncookies = 1
 
 net.ipv4.conf.all.log_martians = 1
 
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+
 kernel.kptr_restrict = 2
 kernel.dmesg_restrict = 1
+kernel.yama.ptrace_scope = 1
+kernel.unprivileged_bpf_disabled = 1
+kernel.perf_event_paranoid = 2
+kernel.randomize_va_space = 2
+kernel.sysrq = 0
 
 fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
+fs.suid_dumpable = 0
 EOF
   then
     changed=1
@@ -945,10 +1165,18 @@ check_user_and_groups() {
   fi
 
   if [[ "${INSTALL_DOCKER}" == "true" ]]; then
-    if id -nG "${ADMIN_USER}" | tr ' ' '\n' | grep -qx docker; then
-      ok "User ist in docker-Gruppe: ${ADMIN_USER}"
+    if [[ "${ADD_ADMIN_TO_DOCKER_GROUP}" == "true" ]]; then
+      if id -nG "${ADMIN_USER}" | tr ' ' '\n' | grep -qx docker; then
+        ok "User ist in docker-Gruppe: ${ADMIN_USER}"
+      else
+        fail "User ist nicht in docker-Gruppe: ${ADMIN_USER}"
+      fi
     else
-      fail "User ist nicht in docker-Gruppe: ${ADMIN_USER}"
+      if id -nG "${ADMIN_USER}" | tr ' ' '\n' | grep -qx docker; then
+        fail "User ist trotz sicherem Default in root-äquivalenter docker-Gruppe: ${ADMIN_USER}"
+      else
+        ok "User ist nicht in root-äquivalenter docker-Gruppe: ${ADMIN_USER}"
+      fi
     fi
   fi
 
@@ -962,6 +1190,14 @@ check_user_and_groups() {
     ok "User hat ein Passwort für sudo: ${ADMIN_USER}"
   else
     fail "User hat kein nutzbares Passwort für sudo: ${ADMIN_USER}"
+  fi
+
+  if [[ "${LOCK_ROOT_PASSWORD}" == "true" ]]; then
+    if passwd -S root 2>/dev/null | awk '{print $2}' | grep -Eq '^(L|LK|NP)$'; then
+      ok "Root-Passwort ist gesperrt oder nicht gesetzt"
+    else
+      fail "Root-Passwort ist nicht gesperrt"
+    fi
   fi
 }
 
@@ -1022,6 +1258,12 @@ check_ssh_effective_config() {
     fail "SSH AuthenticationMethods publickey nicht aktiv"
   fi
 
+  if grep -q "^allowusers ${ADMIN_USER}$" <<<"${effective}"; then
+    ok "SSH AllowUsers beschränkt auf ${ADMIN_USER}"
+  else
+    fail "SSH AllowUsers ist nicht wie erwartet gesetzt"
+  fi
+
   while IFS= read -r port; do
     if grep -q "^port ${port}$" <<<"${effective}"; then
       ok "SSH Port aktiv: ${port}"
@@ -1037,7 +1279,7 @@ check_ssh_effective_config() {
   done < <(list_ssh_ports)
 
   printf '\nEffektive SSH-Kernwerte:\n'
-  sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication|authenticationmethods|maxauthtries|allowtcpforwarding|allowagentforwarding)' || true
+  sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication|authenticationmethods|allowusers|maxauthtries|maxsessions|allowtcpforwarding|allowagentforwarding)' || true
 }
 
 check_firewall() {
@@ -1132,6 +1374,48 @@ check_chrony() {
   timedatectl || true
 }
 
+check_apparmor() {
+  log "Check: AppArmor"
+
+  check_service_active apparmor
+  check_service_enabled apparmor
+
+  if aa-status --enabled >/dev/null 2>&1; then
+    ok "AppArmor ist aktiviert"
+  else
+    fail "AppArmor ist nicht aktiviert"
+  fi
+}
+
+check_journald() {
+  log "Check: journald"
+
+  if [[ -d /var/log/journal ]]; then
+    ok "Persistentes Journal-Verzeichnis vorhanden"
+  else
+    fail "Persistentes Journal-Verzeichnis fehlt"
+  fi
+
+  if grep -q '^Storage=persistent$' "${JOURNALD_HARDENING_FILE}" 2>/dev/null; then
+    ok "journald Storage=persistent gesetzt"
+  else
+    fail "journald Storage=persistent fehlt"
+  fi
+}
+
+check_auditd() {
+  log "Check: auditd"
+
+  check_service_active auditd
+  check_service_enabled auditd
+
+  if [[ -f "${AUDIT_HARDENING_RULES_FILE}" ]]; then
+    ok "auditd Hardening-Regeln vorhanden"
+  else
+    fail "auditd Hardening-Regeln fehlen"
+  fi
+}
+
 check_docker() {
   if [[ "${INSTALL_DOCKER}" != "true" ]]; then
     log "Check: Docker übersprungen"
@@ -1169,6 +1453,27 @@ check_docker() {
     fail "Docker Logging Driver nicht wie erwartet"
   fi
 
+  check_service_active docker-user-firewall
+  check_service_enabled docker-user-firewall
+
+  if iptables -w -S DOCKER-USER 2>/dev/null | grep -q -- '-A DOCKER-USER -o docker0 -j DROP'; then
+    ok "Docker DOCKER-USER drop-Regel für docker0 aktiv"
+  else
+    fail "Docker DOCKER-USER drop-Regel für docker0 fehlt"
+  fi
+
+  if iptables -w -S DOCKER-USER 2>/dev/null | grep -q -- '--ctorigdstport 80'; then
+    ok "Docker DOCKER-USER erlaubt 80/tcp"
+  else
+    fail "Docker DOCKER-USER 80/tcp Ausnahme fehlt"
+  fi
+
+  if iptables -w -S DOCKER-USER 2>/dev/null | grep -q -- '--ctorigdstport 443'; then
+    ok "Docker DOCKER-USER erlaubt 443/tcp"
+  else
+    fail "Docker DOCKER-USER 443/tcp Ausnahme fehlt"
+  fi
+
   printf '\nDocker Version:\n'
   docker --version || true
   docker compose version || true
@@ -1198,6 +1503,12 @@ check_filesystem_layout() {
     ok "Backups-Verzeichnis vorhanden: /opt/backups"
   else
     fail "Backups-Verzeichnis fehlt: /opt/backups"
+  fi
+
+  if [[ -f "${BACKUP_README_FILE}" ]]; then
+    ok "Backup-Checkliste vorhanden: ${BACKUP_README_FILE}"
+  else
+    fail "Backup-Checkliste fehlt: ${BACKUP_README_FILE}"
   fi
 }
 
@@ -1239,6 +1550,27 @@ check_sysctl() {
   else
     fail "fs.protected_symlinks ist nicht 1"
   fi
+
+  value="$(sysctl -n kernel.yama.ptrace_scope 2>/dev/null || true)"
+  if [[ "${value}" == '1' ]]; then
+    ok "kernel.yama.ptrace_scope = 1"
+  else
+    fail "kernel.yama.ptrace_scope ist nicht 1"
+  fi
+
+  value="$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null || true)"
+  if [[ "${value}" == '1' ]]; then
+    ok "kernel.unprivileged_bpf_disabled = 1"
+  else
+    fail "kernel.unprivileged_bpf_disabled ist nicht 1"
+  fi
+
+  value="$(sysctl -n kernel.randomize_va_space 2>/dev/null || true)"
+  if [[ "${value}" == '2' ]]; then
+    ok "kernel.randomize_va_space = 2"
+  else
+    fail "kernel.randomize_va_space ist nicht 2"
+  fi
 }
 
 check_open_ports() {
@@ -1277,6 +1609,9 @@ run_system_checks() {
   check_fail2ban
   check_unattended_upgrades
   check_chrony
+  check_apparmor
+  check_journald
+  check_auditd
   check_docker
   check_filesystem_layout
   check_sysctl
@@ -1312,11 +1647,15 @@ run_system_checks() {
   printf '     ssh -p %s root@SERVER_IP\n' "${SSH_PORT}"
   printf '\n'
   if [[ "${SSH_PORT}" != '22' && "${KEEP_SSH_PORT_22}" == 'true' ]]; then
-    printf '  4. Nach neuem Login Docker ohne sudo testen:\n'
+    printf '  4. Nach neuem Login Docker testen:\n'
   else
-    printf '  3. Nach neuem Login Docker ohne sudo testen:\n'
+    printf '  3. Nach neuem Login Docker testen:\n'
   fi
-  printf '     docker ps\n'
+  if [[ "${ADD_ADMIN_TO_DOCKER_GROUP}" == 'true' ]]; then
+    printf '     docker ps\n'
+  else
+    printf '     sudo docker ps\n'
+  fi
   printf '\n'
   if [[ "${SSH_PORT}" != '22' && "${KEEP_SSH_PORT_22}" == 'true' ]]; then
     printf '  5. Nach Reboot final testen:\n'
@@ -1324,7 +1663,14 @@ run_system_checks() {
     printf '  4. Nach Reboot final testen:\n'
   fi
   printf '     sudo reboot\n'
-  printf '     docker run --rm hello-world\n'
+  if [[ "${ADD_ADMIN_TO_DOCKER_GROUP}" == 'true' ]]; then
+    printf '     docker run --rm hello-world\n'
+  else
+    printf '     sudo docker run --rm hello-world\n'
+  fi
+  printf '\n'
+  printf 'Backup bleibt erst sicher nach manueller Offsite-Konfiguration und Restore-Test:\n'
+  printf '     sudo less %s\n' "${BACKUP_README_FILE}"
 }
 
 main() {
@@ -1343,18 +1689,24 @@ main() {
 
   create_admin_user
   configure_sudo
+  ensure_admin_password_set
+  lock_root_password_if_requested
   configure_ssh
   configure_firewall
   configure_fail2ban
   configure_unattended_upgrades
   configure_chrony
+  configure_apparmor
+  configure_journald
 
   install_docker_engine
   configure_docker_daemon
+  configure_docker_user_firewall
+  configure_auditd
 
   prepare_filesystem_layout
+  configure_backup_scaffold
   apply_sysctl_hardening
-  ensure_admin_password_set
 
   run_system_checks
 }
