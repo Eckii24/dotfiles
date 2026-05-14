@@ -75,9 +75,9 @@ Options:
       --non-interactive           Do not ask questions; requires --user
 
 Behavior:
-  - Port 22 stays enabled as SSH fallback during port migrations to avoid lockout
-  - Existing SSH port also stays enabled for this run and is removed on a later rerun
-    once the new port is active
+  - Port 22 stays enabled as SSH fallback to avoid lockout
+  - The currently detected SSH port is also kept during migration when possible
+  - If systemd SSH socket activation exists, it is disabled so sshd itself binds the ports
   -h, --help                      Show help
 
 Examples:
@@ -272,6 +272,21 @@ install_base_packages() {
     rclone
 }
 
+verify_ssh_installation() {
+  if ! command -v sshd >/dev/null 2>&1; then
+    err "'sshd' wurde nicht gefunden. Prüfe, ob openssh-server erfolgreich installiert wurde."
+    exit 1
+  fi
+
+  if [[ -z "$(ssh_service_name || true)" ]]; then
+    err "Kein ssh/sshd systemd service gefunden, obwohl openssh-server installiert sein sollte."
+    err "Verfügbare SSH-bezogene Units:"
+    systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    systemctl list-unit-files --type=socket --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    exit 1
+  fi
+}
+
 capture_existing_ssh_port() {
   if command -v sshd >/dev/null 2>&1; then
     EXISTING_SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port / { print $2; exit }' || true)"
@@ -376,18 +391,66 @@ ssh_service_name() {
   fi
 }
 
-enable_and_reload_ssh_service() {
+ssh_socket_names() {
+  systemctl list-unit-files --type=socket --no-legend 2>/dev/null \
+    | awk '/^(ssh|sshd)\.socket/ { print $1 }'
+}
+
+disable_ssh_socket_activation() {
+  local socket
+  local found=0
+
+  while IFS= read -r socket; do
+    [[ -z "${socket}" ]] && continue
+    found=1
+    log "Deaktiviere SSH socket activation: ${socket}"
+    systemctl disable --now "${socket}" || true
+  done < <(ssh_socket_names)
+
+  if [[ "${found}" -eq 0 ]]; then
+    log "Keine SSH socket activation gefunden."
+  fi
+}
+
+port_is_listening() {
+  local port="$1"
+
+  ss -tlnH | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\1/' | grep -qx "${port}"
+}
+
+ensure_ssh_ports_listening() {
+  local port
+  local missing_ports=()
+
+  while IFS= read -r port; do
+    if port_is_listening "${port}"; then
+      ok "SSH lauscht auf TCP-Port ${port}"
+    else
+      missing_ports+=("${port}")
+    fi
+  done < <(list_ssh_ports)
+
+  if (( ${#missing_ports[@]} > 0 )); then
+    err "SSH lauscht nicht auf erwarteten Ports: ${missing_ports[*]}"
+    err "Das ist ein Lockout-Risiko. Prüfe 'systemctl status ssh', 'journalctl -u ssh -b' und 'ss -tlnp'."
+    exit 1
+  fi
+}
+
+enable_and_restart_ssh_service() {
   local service
 
   service="$(ssh_service_name || true)"
 
   if [[ -z "${service}" ]]; then
-    warn "Kein ssh/sshd systemd service gefunden. Bitte manuell prüfen."
-    return
+    err "Kein ssh/sshd systemd service gefunden. Abbruch, um SSH-Lockout zu vermeiden."
+    systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    systemctl list-unit-files --type=socket --no-legend 2>/dev/null | grep -E '^(ssh|sshd)' || true
+    exit 1
   fi
 
-  systemctl enable --now "${service}"
-  systemctl reload "${service}"
+  systemctl enable "${service}"
+  systemctl restart "${service}"
 }
 
 configure_ssh() {
@@ -426,7 +489,9 @@ EOF
 
   sshd -t
 
-  enable_and_reload_ssh_service
+  disable_ssh_socket_activation
+  enable_and_restart_ssh_service
+  ensure_ssh_ports_listening
 
   if [[ "${changed}" -eq 1 ]]; then
     log "SSH-Konfiguration geändert und neu geladen."
@@ -770,6 +835,7 @@ check_ssh_effective_config() {
   local effective
   local port
   local ssh_service
+  local socket
 
   log "Check: SSH effektive Konfiguration"
 
@@ -787,6 +853,14 @@ check_ssh_effective_config() {
   else
     fail "Kein ssh/sshd systemd service gefunden"
   fi
+
+  while IFS= read -r socket; do
+    if systemctl is-enabled --quiet "${socket}" 2>/dev/null; then
+      fail "SSH socket activation ist enabled und kann Port-Binding beeinflussen: ${socket}"
+    else
+      ok "SSH socket activation nicht enabled: ${socket}"
+    fi
+  done < <(ssh_socket_names)
 
   effective="$(sshd -T)"
 
@@ -819,6 +893,12 @@ check_ssh_effective_config() {
       ok "SSH Port aktiv: ${port}"
     else
       fail "SSH Port nicht aktiv wie erwartet: ${port}"
+    fi
+
+    if port_is_listening "${port}"; then
+      ok "SSH Port lauscht lokal: ${port}"
+    else
+      fail "SSH Port lauscht lokal nicht: ${port}"
     fi
   done < <(list_ssh_ports)
 
@@ -1124,6 +1204,7 @@ main() {
   apt_update_once
   update_system
   install_base_packages
+  verify_ssh_installation
   capture_existing_ssh_port
 
   create_admin_user
