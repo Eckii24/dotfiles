@@ -29,6 +29,7 @@ INSTALL_DOCKER="true"
 RUN_SYSTEM_UPGRADE="true"
 INTERACTIVE="true"
 EXISTING_SSH_PORT=""
+FAIL2BAN_IGNORE_IPS=""
 
 DOCKER_DAEMON_JSON="/etc/docker/daemon.json"
 SSH_HARDENING_FILE="/etc/ssh/sshd_config.d/999-hardening.conf"
@@ -69,16 +70,18 @@ Options:
   -u, --user USER                 Admin username to create/use
   -p, --ssh-port PORT             SSH port, default: 22
       --stacks-dir DIR            Docker stacks directory, default: /opt/stacks
+      --fail2ban-ignore-ip IP     Extra IP/CIDR to whitelist in fail2ban (repeatable)
       --no-auto-reboot            Disable unattended-upgrades automatic reboot
       --no-docker                 Do not install Docker
       --no-upgrade                Do not run apt full-upgrade
       --non-interactive           Do not ask questions; requires --user
+  -h, --help                      Show help
 
 Behavior:
   - Port 22 stays enabled as SSH fallback to avoid lockout
   - The currently detected SSH port is also kept during migration when possible
   - If systemd SSH socket activation exists, it is disabled so sshd itself binds the ports
-  -h, --help                      Show help
+  - fail2ban always ignores localhost and auto-whitelists the current SSH client IP when detectable
 
 Examples:
   sudo ./harden-debian-vps.sh --user matthias
@@ -100,6 +103,10 @@ parse_args() {
         ;;
       --stacks-dir)
         STACKS_DIR="${2:-}"
+        shift 2
+        ;;
+      --fail2ban-ignore-ip)
+        FAIL2BAN_IGNORE_IPS+=" ${2:-}"
         shift 2
         ;;
       --no-auto-reboot)
@@ -299,6 +306,61 @@ capture_existing_ssh_port() {
   log "Aktueller SSH-Port vor Änderungen: ${EXISTING_SSH_PORT}"
 }
 
+current_ssh_client_ip() {
+  if [[ -n "${SSH_CONNECTION:-}" ]]; then
+    awk '{print $1}' <<<"${SSH_CONNECTION}"
+    return 0
+  fi
+
+  if [[ -n "${SSH_CLIENT:-}" ]]; then
+    awk '{print $1}' <<<"${SSH_CLIENT}"
+    return 0
+  fi
+
+  return 1
+}
+
+list_fail2ban_ignore_ips() {
+  local current_ip=""
+  local extra_ignore_ips=""
+  local -a extra_ignore_ip_list=()
+
+  current_ip="$(current_ssh_client_ip || true)"
+  extra_ignore_ips="${FAIL2BAN_IGNORE_IPS//,/ }"
+
+  if [[ -n "${extra_ignore_ips}" ]]; then
+    read -r -a extra_ignore_ip_list <<<"${extra_ignore_ips}"
+  fi
+
+  {
+    printf '%s\n' '127.0.0.1/8' '::1'
+
+    if [[ -n "${current_ip}" ]]; then
+      printf '%s\n' "${current_ip}"
+    fi
+
+    if (( ${#extra_ignore_ip_list[@]} > 0 )); then
+      printf '%s\n' "${extra_ignore_ip_list[@]}"
+    fi
+  } | awk 'NF && !seen[$0]++'
+}
+
+fail2ban_ignore_ips_line() {
+  paste -sd' ' <(list_fail2ban_ignore_ips)
+}
+
+unban_current_ssh_client_ip() {
+  local current_ip=""
+
+  current_ip="$(current_ssh_client_ip || true)"
+
+  if [[ -z "${current_ip}" ]]; then
+    return
+  fi
+
+  fail2ban-client set sshd unbanip "${current_ip}" >/dev/null 2>&1 || true
+}
+
 list_ssh_ports() {
   local ports=("${SSH_PORT}" "${EXISTING_SSH_PORT}")
 
@@ -333,6 +395,42 @@ merge_authorized_keys() {
   awk 'NF && !seen[$0]++' "${target_file}" "${source_file}" >"${tmp_file}"
   install -m 600 -o "${owner_user}" -g "${owner_group}" "${tmp_file}" "${target_file}"
   rm -f "${tmp_file}"
+}
+
+admin_password_status() {
+  passwd -S "${ADMIN_USER}" 2>/dev/null | awk '{print $2}' || true
+}
+
+admin_password_is_set() {
+  [[ "$(admin_password_status)" == "P" ]]
+}
+
+ensure_admin_password_set() {
+  local password_status
+
+  password_status="$(admin_password_status)"
+
+  if [[ "${password_status}" == "P" ]]; then
+    log "Admin-User '${ADMIN_USER}' hat bereits ein Passwort für sudo."
+    return
+  fi
+
+  if [[ "${INTERACTIVE}" != "true" ]]; then
+    err "Admin-User '${ADMIN_USER}' hat noch kein nutzbares Passwort für sudo."
+    err "Setze ein Passwort mit 'passwd ${ADMIN_USER}' oder führe das Script interaktiv aus."
+    exit 1
+  fi
+
+  warn "Admin-User '${ADMIN_USER}' hat noch kein nutzbares Passwort für sudo."
+  warn "Setze jetzt ein Passwort, damit sudo nach dem Reboot funktioniert."
+  passwd "${ADMIN_USER}"
+
+  if ! admin_password_is_set; then
+    err "Für '${ADMIN_USER}' wurde kein nutzbares Passwort gesetzt. Abbruch."
+    exit 1
+  fi
+
+  log "Passwort für '${ADMIN_USER}' erfolgreich gesetzt."
 }
 
 create_admin_user() {
@@ -560,12 +658,22 @@ configure_fail2ban() {
   log "Konfiguriere Fail2ban für SSH."
 
   local changed=0
+  local current_ip=""
+
+  current_ip="$(current_ssh_client_ip || true)"
+
+  if [[ -n "${current_ip}" ]]; then
+    log "Aktuelle SSH-Client-IP wird in fail2ban ignoriert: ${current_ip}"
+  else
+    warn "Konnte aktuelle SSH-Client-IP nicht automatisch erkennen. Bei Bedarf --fail2ban-ignore-ip verwenden."
+  fi
 
   if write_file_if_changed "${FAIL2BAN_SSHD_FILE}" 0644 <<EOF
 [sshd]
 enabled = true
 backend = systemd
 port = $(ssh_ports_csv)
+ignoreip = $(fail2ban_ignore_ips_line)
 maxretry = 3
 findtime = 10m
 bantime = 1h
@@ -582,6 +690,8 @@ EOF
   else
     log "Fail2ban-Konfiguration unverändert."
   fi
+
+  unban_current_ssh_client_ip
 }
 
 configure_unattended_upgrades() {
@@ -846,6 +956,12 @@ check_user_and_groups() {
     ok "authorized_keys vorhanden für ${ADMIN_USER}"
   else
     fail "authorized_keys fehlt oder ist leer für ${ADMIN_USER}"
+  fi
+
+  if admin_password_is_set; then
+    ok "User hat ein Passwort für sudo: ${ADMIN_USER}"
+  else
+    fail "User hat kein nutzbares Passwort für sudo: ${ADMIN_USER}"
   fi
 }
 
@@ -1238,6 +1354,7 @@ main() {
 
   prepare_filesystem_layout
   apply_sysctl_hardening
+  ensure_admin_password_set
 
   run_system_checks
 }
