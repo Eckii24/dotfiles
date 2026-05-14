@@ -6,8 +6,11 @@
       "newline": true,
       "segments": [
         {
-          "background": "#d75f00",
+          "background": "#585858",
           "foreground": "#f2f3f8",
+          "background_templates": [
+            "{{ if eq .OS \"darwin\" }}#d75f00{{ end }}"
+          ],
           "style": "diamond",
           "leading_diamond": "\u256d\u2500\ue0b2",
           "template": " {{ if .WSL }}WSL at {{ end }}{{ .Icon }} ",
@@ -110,7 +113,10 @@
       "newline": true,
       "segments": [
         {
-          "foreground": "#d75f00",
+          "foreground": "#585858",
+          "foreground_templates": [
+            "{{ if eq .OS \"darwin\" }}#d75f00{{ end }}"
+          ],
           "style": "plain",
           "template": "\u2570\u2500 ",
           "type": "text"
@@ -122,7 +128,10 @@
           "home_enabled": true
         },
         {
-          "foreground": "#d75f00",
+          "foreground": "#585858",
+          "foreground_templates": [
+            "{{ if eq .OS \"darwin\" }}#d75f00{{ end }}"
+          ],
           "style": "plain",
           "template": " {{ if .Root }}#{{else}}${{end}}",
           "type": "text"
