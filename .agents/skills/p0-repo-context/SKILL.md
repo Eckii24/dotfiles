@@ -20,22 +20,22 @@ The goal is to get ground truth from source instead of guessing from dependency 
 
 ## Important command
 
-The repo CLI is implemented here:
-
-`/Users/matthias.eck/.config/zsh/functions/repo.zsh`
+The repo CLI is bundled with this skill at `scripts/repo.zsh` (resolve relative to this skill directory).
 
 Invoke it like this:
 
 ```bash
-zsh -lc 'source ~/.config/zsh/functions/repo.zsh && repo --help'
+zsh -lc 'source <SKILL_DIR>/scripts/repo.zsh && repo --help'
 ```
 
 For agent-friendly usage, prefer these non-interactive forms:
 
 ```bash
-zsh -lc 'source ~/.config/zsh/functions/repo.zsh && repo --search "keyword"'
-zsh -lc 'source ~/.config/zsh/functions/repo.zsh && repo --name "exact-repo-name" --path'
+zsh -lc 'source <SKILL_DIR>/scripts/repo.zsh && repo --search "keyword"'
+zsh -lc 'source <SKILL_DIR>/scripts/repo.zsh && repo --name "exact-repo-name" --path'
 ```
+
+Replace `<SKILL_DIR>` with the absolute path of this skill's directory (the parent of this `SKILL.md` file).
 
 Do **not** rely on the interactive picker.
 
@@ -79,7 +79,7 @@ Preferred sequence:
 1. Search with the most likely keyword:
 
 ```bash
-zsh -lc 'source ~/.config/zsh/functions/repo.zsh && repo --search "<keyword>"'
+zsh -lc 'source <SKILL_DIR>/scripts/repo.zsh && repo --search "<keyword>"'
 ```
 
 2. If needed, try one or two refined keywords.
@@ -96,7 +96,7 @@ If there are multiple plausible repositories, **ask the user before choosing**. 
 Once you have the exact repo name, get its local path like this:
 
 ```bash
-zsh -lc 'source ~/.config/zsh/functions/repo.zsh && repo --name "<exact-repo-name>" --path'
+zsh -lc 'source <SKILL_DIR>/scripts/repo.zsh && repo --name "<exact-repo-name>" --path'
 ```
 
 This should clone the repo if needed and return the local filesystem path.
