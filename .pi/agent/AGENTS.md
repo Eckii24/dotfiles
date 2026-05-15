@@ -28,7 +28,7 @@
 - If `.ai/current-work.md` exists, read it before substantial repo work and continue from it.
 - Treat `.ai/current-work.md` as the active feature anchor, restart point, and living working document.
 - Keep `.ai/current-work.md` bounded: capture concise notes in `Pitfalls & surprises`, `Failed attempts / rejected options`, `Review findings & fixes`, and `Learning candidates` with exact evidence paths, but do not turn it into a transcript.
-- Whenever `current-work.md` is active, keep a minimal `Todo Tracker` with only major workflow phases. If a `.ai/<slug>-plan.md` exists, keep detailed task breakdown there instead of duplicating it in `current-work.md`.
+- Whenever `current-work.md` is active, keep a minimal `Todo Tracker` with only major workflow phases. If a `.ai/<slug>-issues.md` exists, keep detailed task breakdown there instead of duplicating it in `current-work.md`.
 - Treat `.ai/learnings/*.md` and `~/.agents/learnings/*.md` as curated reusable learnings. Pending learnings may be created directly; approved-state changes and AGENTS.md promotions must go through `/skill:learn review`.
 - Prefer learning extraction from explicit current-work learning candidates first, then use review artifacts, changed files, and session context to validate or fill gaps.
 - Preserve original review findings in `.ai/<slug>-review.md` or `.ai/current-work.md` until learning extraction has mined them; mark them resolved/verified instead of deleting the evidence.

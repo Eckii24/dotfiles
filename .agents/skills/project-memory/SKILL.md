@@ -29,7 +29,7 @@ Use `.ai/current-work.md` as the active feature anchor:
 - open questions/blockers
 - a bounded evidence log for pitfalls/surprises, failed or rejected attempts, review findings/fixes, and learning candidates with exact evidence paths
 
-If a `.ai/<slug>-plan.md` exists, keep detailed execution tasks there. The todo tracker in `current-work.md` should stay intentionally minimal.
+If a `.ai/<slug>-issues.md` exists, keep detailed execution tasks there. The todo tracker in `current-work.md` should stay intentionally minimal.
 
 This is the **source of truth for in-progress work**.
 
@@ -81,8 +81,8 @@ Prefer this minimal repo-root `.ai/` layout:
 ```text
 .ai/
   current-work.md
-  <slug>-spec.md
-  <slug>-plan.md
+  <slug>-prd.md
+  <slug>-issues.md
   <slug>-review.md
   learnings/
     *.md
@@ -106,7 +106,7 @@ For monorepos, prefer the git root unless the package is clearly independent.
 ### 2) Read memory in this order
 
 1. `.ai/current-work.md`
-2. relevant active artifacts: `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`
+2. relevant active artifacts: `.ai/<slug>-prd.md`, `.ai/<slug>-issues.md`, `.ai/<slug>-review.md`
 3. approved learning refs already injected into context
 4. specific learning files only when a ref looks directly relevant
 5. `AGENTS.md` as durable operating guidance
@@ -126,7 +126,7 @@ Early in your reply, briefly state:
 Track a feature when:
 - it spans multiple sessions
 - losing context would be expensive
-- the workflow will produce spec/plan/review artifacts
+- the workflow will produce PRD/issues/review artifacts
 - the user explicitly wants resumable work
 - the task is large enough that a restart step matters
 
@@ -140,8 +140,8 @@ If one already exists for a different feature, ask the user before replacing it.
 
 Keep exactly one active top-level feature anchor:
 - `.ai/current-work.md`
-- optional `.ai/<slug>-spec.md`
-- optional `.ai/<slug>-plan.md`
+- optional `.ai/<slug>-prd.md`
+- optional `.ai/<slug>-issues.md`
 - optional `.ai/<slug>-review.md`
 
 All active top-level artifacts must share the same slug.
@@ -216,7 +216,7 @@ Keep it compact. Aim for a working record, not a transcript.
 Rules for the todo tracker:
 - Always include it when `current-work.md` is active.
 - Keep it **minimal**: one checkbox per major workflow phase, not a task list.
-- If a plan file exists, keep detailed steps in `.ai/<slug>-plan.md` instead of mirroring them here.
+- If an issues file exists, keep detailed steps in `.ai/<slug>-issues.md` instead of mirroring them here.
 - Mark only completed major phases; let `Next restart step` carry the exact next action.
 - Always end with the three checkboxes related to learning extraction, user confirmation of completion, and artifact archiving.
 
@@ -228,7 +228,7 @@ During active work:
 - record new findings in `current-work.md`, especially pitfalls/surprises, failed attempts, review findings/fixes, and learning candidates
 - keep the `Todo Tracker` populated with only the major workflow phases relevant to the active flow and the final steps of learning extraction, user confirmation, and artifact archiving
 - keep evidence-log entries concise and backed by exact file/artifact paths
-- link spec/plan/review artifacts explicitly
+- link PRD/issues/review artifacts explicitly
 - keep the restart step fresh
 - do **not** create approved learnings directly
 
@@ -262,8 +262,8 @@ Only archive after the user explicitly confirms that the tracked work is complet
 
 Examples:
 - `.ai/archive/YYYY-MM-DD-<slug>-current-work.md`
-- `.ai/archive/YYYY-MM-DD-<slug>-spec.md`
-- `.ai/archive/YYYY-MM-DD-<slug>-plan.md`
+- `.ai/archive/YYYY-MM-DD-<slug>-prd.md`
+- `.ai/archive/YYYY-MM-DD-<slug>-issues.md`
 - `.ai/archive/YYYY-MM-DD-<slug>-review.md`
 
 Include the final `current-work.md` snapshot so the feature can be reconstructed later.
@@ -283,7 +283,7 @@ Before finishing meaningful work, ask:
 When you read tracked work:
 
 ```md
-Memory checked: `.ai/current-work.md`, `.ai/<slug>-plan.md`
+Memory checked: `.ai/current-work.md`, `.ai/<slug>-issues.md`
 Feature anchor active: auth-refresh-token (in progress)
 Relevant: next restart step is updating `src/auth.ts`; review artifact already captured two follow-up fixes.
 ```

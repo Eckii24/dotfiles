@@ -9,7 +9,7 @@ This workflow assumes tracked feature work and `.ai/` artifacts.
 2. If `.ai/current-work.md` exists, read it before delegating.
 3. You own the top-level implement → review → repair loop. Keep sub-agents scoped; do not ask them to orchestrate the loop for you.
 4. `worker` implements only. Do not ask `worker` to perform the formal review, assign review severities, decide whether the work is approved, or replace the separate `code-reviewer` step.
-5. Whenever `.ai/current-work.md` exists or is created, keep a **minimal** `Todo Tracker` there with only the major workflow phases. If a `.ai/<slug>-plan.md` exists, keep detailed execution tasks in the plan instead of duplicating them in `current-work.md`.
+5. Whenever `.ai/current-work.md` exists or is created, keep a **minimal** `Todo Tracker` there with only the major workflow phases. If a `.ai/<slug>-issues.md` exists, keep detailed execution tasks in the issues breakdown instead of duplicating them in `current-work.md`.
 
 ## Workflow
 Use the `subagent` tool with the `chain` parameter for each implementation/review or repair/review sequence.
@@ -38,10 +38,10 @@ Use the `subagent` tool with the `chain` parameter for each implementation/revie
    - Refresh `.ai/current-work.md` after the handoff and mark the major learning phase complete.
 6. Before finishing:
    - Update `.ai/current-work.md` following `project-memory` conventions.
-   - Keep the Todo Tracker minimal: major phases only, no detailed checklist when a plan file exists.
+   - Keep the Todo Tracker minimal: major phases only, no detailed checklist when an issues file exists.
    - Link changed files, review artifact paths, eval/test results, next step, and any remaining assumptions or follow-ups.
 7. Ask via `questionnaire` whether the tracked work is complete and should be archived now.
-   - If the user confirms completion, before moving any files update the live `.ai/current-work.md` so both `User confirmed feature complete` and `Active artifacts archived` are checked as the final closeout state, then archive that exact final `.ai/current-work.md` snapshot plus any active `.ai/<slug>-review.md`, `.ai/<slug>-plan.md`, and related tracked-work artifacts following `project-memory` conventions.
+   - If the user confirms completion, before moving any files update the live `.ai/current-work.md` so both `User confirmed feature complete` and `Active artifacts archived` are checked as the final closeout state, then archive that exact final `.ai/current-work.md` snapshot plus any active `.ai/<slug>-review.md`, `.ai/<slug>-issues.md`, `.ai/<slug>-prd.md`, and related tracked-work artifacts following `project-memory` conventions.
    - If the user does not confirm completion, keep the feature anchor active and leave `User confirmed feature complete` / `Active artifacts archived` unchecked in the Todo Tracker.
 
 ## Completion
