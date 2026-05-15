@@ -43,7 +43,9 @@ This workflow creates tracked-work artifacts under `.ai/`.
   - Mirror high-signal resolved findings into `.ai/current-work.md` under `Review findings & fixes` or `Learning candidates` when they are worth preserving beyond the review artifact.
   - Run another focused `worker` pass to fix those findings.
   - Re-run `code-reviewer` on the updated changes.
-  - Repeat until the latest review has no `Blocking Issues` and no `Important Issues`, the user explicitly accepts the remaining issues, or ambiguity requires `questionnaire`.
+  - **Iteration budget**: run at most 3 fix → re-review cycles. If blocking issues remain after 3 cycles, stop and present remaining issues via `questionnaire` for the user to triage (accept, defer, or continue with manual guidance).
+  - **Scoped fix passes**: send only unresolved `Blocking Issues` and `Important Issues` from the latest review to the worker — not the full cumulative review artifact. Reference specific file:line locations.
+  - Repeat until the latest review has no `Blocking Issues` and no `Important Issues`, the user explicitly accepts the remaining issues, the iteration budget is exhausted, or ambiguity requires `questionnaire`.
 - Treat `Minor Issues / Suggestions` as optional follow-up work:
   - Apply them when clearly correct, low-risk, and in scope.
   - Otherwise record them in `.ai/<slug>-review.md` or `.ai/current-work.md`.
