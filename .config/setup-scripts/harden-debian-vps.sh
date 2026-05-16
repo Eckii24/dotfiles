@@ -93,7 +93,7 @@ Behavior:
   - If systemd SSH socket activation exists, it is disabled so sshd itself binds the ports
   - fail2ban always ignores localhost and auto-whitelists the current SSH client IP when detectable
   - Docker group membership is disabled by default because it is root-equivalent
-  - Docker's DOCKER-USER chain blocks published container ports except 80/tcp and 443/tcp by default
+  - Docker's DOCKER-USER chain blocks published container ports by default
 
 Examples:
   sudo ./harden-debian-vps.sh --user matthias
@@ -684,9 +684,6 @@ configure_firewall() {
     fi
   done < <(list_ssh_ports)
 
-  ufw allow 80/tcp >/dev/null || true
-  ufw allow 443/tcp >/dev/null || true
-
   ufw --force enable >/dev/null
 
   if [[ "${changed}" -eq 1 ]]; then
@@ -966,11 +963,7 @@ apply_rules() {
   "${bin}" -w -A DOCKER-USER -i docker0 -j RETURN
   "${bin}" -w -A DOCKER-USER -i br+ -j RETURN
 
-  # Allow only public web ports to published Docker services by default.
-  "${bin}" -w -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 80 -j RETURN
-  "${bin}" -w -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 443 -j RETURN
-
-  # Drop all other forwarded traffic into Docker bridge networks.
+  # Drop forwarded traffic into Docker bridge networks by default.
   "${bin}" -w -A DOCKER-USER -o docker0 -j DROP
   "${bin}" -w -A DOCKER-USER -o br+ -j DROP
 
@@ -1301,18 +1294,6 @@ check_firewall() {
     fi
   done < <(list_ssh_ports)
 
-  if ufw status | grep -q '80/tcp'; then
-    ok "UFW erlaubt 80/tcp"
-  else
-    fail "UFW-Regel für 80/tcp fehlt"
-  fi
-
-  if ufw status | grep -q '443/tcp'; then
-    ok "UFW erlaubt 443/tcp"
-  else
-    fail "UFW-Regel für 443/tcp fehlt"
-  fi
-
   printf '\nUFW Status:\n'
   ufw status verbose || true
 }
@@ -1460,18 +1441,6 @@ check_docker() {
     ok "Docker DOCKER-USER drop-Regel für docker0 aktiv"
   else
     fail "Docker DOCKER-USER drop-Regel für docker0 fehlt"
-  fi
-
-  if iptables -w -S DOCKER-USER 2>/dev/null | grep -q -- '--ctorigdstport 80'; then
-    ok "Docker DOCKER-USER erlaubt 80/tcp"
-  else
-    fail "Docker DOCKER-USER 80/tcp Ausnahme fehlt"
-  fi
-
-  if iptables -w -S DOCKER-USER 2>/dev/null | grep -q -- '--ctorigdstport 443'; then
-    ok "Docker DOCKER-USER erlaubt 443/tcp"
-  else
-    fail "Docker DOCKER-USER 443/tcp Ausnahme fehlt"
   fi
 
   printf '\nDocker Version:\n'
