@@ -1,4 +1,4 @@
-export WIKI_HOME="$HOME/Wiki"
+export WIKI_HOME="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Wiki"
 export BUGWARRIORRC="$HOME/.config/task/bugwarrior.toml"
 export TASKRC="$HOME/.config/task/taskrc"
 export TASKDATA="$HOME/.local/state/task"
