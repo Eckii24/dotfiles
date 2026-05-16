@@ -18,8 +18,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { getAgentDir } from "@mariozechner/pi-coding-agent";
+import { join, resolve } from "node:path";
 import type { GuardrailsConfig } from "./types.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
 
@@ -62,6 +61,20 @@ interface LoadedSource {
 }
 
 const configCache = new Map<string, CachedConfig>();
+
+function getAgentDir(): string {
+  const configured = process.env.PI_AGENT_DIR;
+  if (configured && configured.trim().length > 0) {
+    return resolve(configured);
+  }
+
+  const home = process.env.HOME;
+  if (home && home.trim().length > 0) {
+    return resolve(home, ".pi", "agent");
+  }
+
+  return resolve(".pi", "agent");
+}
 
 export function getConfigPaths(cwd: string): GuardrailsConfigPaths {
   const effectiveCwd = getEffectiveCwd(cwd);
@@ -235,6 +248,22 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
           errors.push({ field: "bash.deny", message: "must be an array of strings" });
         }
       }
+
+      if (raw.bash.allow !== undefined) {
+        if (isStringArray(raw.bash.allow)) {
+          config.bash.allow = raw.bash.allow;
+        } else {
+          errors.push({ field: "bash.allow", message: "must be an array of strings" });
+        }
+      }
+
+      if (raw.bash.preflightModel !== undefined) {
+        if (typeof raw.bash.preflightModel === "string") {
+          config.bash.preflightModel = raw.bash.preflightModel;
+        } else {
+          errors.push({ field: "bash.preflightModel", message: "must be a string" });
+        }
+      }
     } else {
       errors.push({ field: "bash", message: "must be an object" });
     }
@@ -274,6 +303,8 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
     result.bash = {
       ...base.bash,
       deny: mergeArrays(base.bash?.deny, override.bash.deny),
+      allow: mergeArrays(base.bash?.allow, override.bash.allow),
+      preflightModel: override.bash.preflightModel ?? base.bash?.preflightModel,
     };
   }
 

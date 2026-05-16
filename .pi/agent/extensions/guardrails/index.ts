@@ -18,7 +18,7 @@
 // - Matching `denyRead`, `denyWrite`, or blocked `allowWrite` rules triggers a confirmation dialog.
 // - Bash violations offer three choices:
 //   - Allow once (y/Enter)
-//   - Allow for session (a) — skips future prompts for the same command pattern
+//   - Allow for session (a) — skips future prompts for the same exact command in the same cwd scope
 //   - Deny (n/Esc)
 // - If no confirmation is given before timeout, the operation is blocked.
 // - Default timeout is 300000 ms (5 minutes), configurable via `timeout`.
@@ -55,9 +55,9 @@
 //   `paths.denyWrite`.
 //
 // Session allow-list:
-// - When user chooses "Allow for session" on a bash command, the command string
-//   is remembered for the current session.
-// - Future identical commands skip the confirmation prompt entirely.
+// - When user chooses "Allow for session" on a bash command, the exact command string
+//   is remembered for the current session together with its cwd scope.
+// - Future identical commands in the same scope skip the confirmation prompt entirely.
 // - The allow-list is cleared when the session ends.
 //
 // Config sources (merged, later entries take precedence):
@@ -144,6 +144,9 @@ import { getConfigSourceInfo, loadConfig } from "./config.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
+import { evaluateBashCommandGates } from "./command-gates.js";
+import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, runPreflightJudge } from "./preflight.js";
+import { SessionAllowList } from "./session-allow-list.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 
@@ -167,49 +170,50 @@ function scopeLabel(cwd: string): string {
   return effectiveCwd === cwd ? effectiveCwd : `${effectiveCwd} (git root)`;
 }
 
-// ─── Session allow-list ───
+function extractRecentContext(ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1]): string {
+  const entries = ctx.sessionManager.getBranch() as Array<{
+    type: string;
+    message?: { role?: string; content?: unknown };
+  }>;
 
-/**
- * Tracks bash commands allowed for the current session.
- * When a user chooses "Allow for session", the exact command string
- * is stored here and future identical commands skip confirmation.
- */
-class SessionAllowList {
-  private allowedCommands = new Set<string>();
-  private allowedPatterns: string[] = [];
+  const parts: string[] = [];
+  let foundAssistant = false;
 
-  /** Check if a command is allowed for this session */
-  isAllowed(command: string): boolean {
-    if (this.allowedCommands.has(command)) return true;
-    // Check if any allowed pattern is a substring of the command
-    for (const pattern of this.allowedPatterns) {
-      if (command.includes(pattern)) return true;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.type !== "message") continue;
+
+    if (!foundAssistant && entry.message?.role === "assistant") {
+      foundAssistant = true;
+      const text = extractMessageText(entry.message.content);
+      if (text) parts.unshift(`Assistant: ${text}`);
+      continue;
     }
-    return false;
-  }
 
-  /** Allow an exact command for this session */
-  allowCommand(command: string): void {
-    this.allowedCommands.add(command);
-  }
-
-  /** Allow a violation pattern for this session (e.g., a specific denied command name) */
-  allowPattern(pattern: string): void {
-    if (!this.allowedPatterns.includes(pattern)) {
-      this.allowedPatterns.push(pattern);
+    if (foundAssistant && entry.message?.role === "user") {
+      const text = extractMessageText(entry.message.content);
+      if (text) parts.unshift(`User: ${text}`);
+      break;
     }
   }
 
-  /** Clear all session allows */
-  clear(): void {
-    this.allowedCommands.clear();
-    this.allowedPatterns = [];
-  }
+  const combined = parts.join("\n\n");
+  return combined.length > 6000 ? combined.slice(0, 6000) + "\n...(truncated)" : combined;
+}
 
-  /** Get count of allowed entries */
-  get size(): number {
-    return this.allowedCommands.size + this.allowedPatterns.length;
-  }
+function extractMessageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter(
+      (block: unknown): block is { type: string; text: string } =>
+        typeof block === "object" &&
+        block !== null &&
+        (block as { type?: unknown }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string",
+    )
+    .map((block) => block.text)
+    .join("\n");
 }
 
 // ─── Confirmation result type ───
@@ -231,6 +235,8 @@ async function confirmBashViolation(
       return `• Denied command: ${v.command}`;
     } else if (v.type === "file_read_detected") {
       return `• File read detected: ${v.details}`;
+    } else if (v.type === "preflight_flagged") {
+      return `• Preflight flagged: ${v.details}`;
     } else {
       return `• File write detected: ${v.details}`;
     }
@@ -465,26 +471,17 @@ export default function (pi: ExtensionAPI) {
     // ─── Bash Guard ───
     if (isToolCallEventType("bash", event)) {
       const command = event.input.command;
+      const sessionScope = getEffectiveCwd(ctx.cwd);
 
       // Check session allow-list first
-      if (sessionAllow.isAllowed(command)) {
+      if (sessionAllow.isAllowed(sessionScope, command)) {
         return undefined;
       }
 
       const result = checkBash(command, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed) {
-        // Filter out violations for commands already allowed in session
-        const activeViolations = result.violations.filter(v => {
-          if (v.type === "denied_command") {
-            return !sessionAllow.isAllowed(v.command);
-          }
-          return true;
-        });
-
-        if (activeViolations.length === 0) {
-          return undefined;
-        }
+        const activeViolations = result.violations;
 
         if (!ctx.hasUI) {
           const reasons = activeViolations.map(v => `  • ${v.details ?? v.command}`).join("\n");
@@ -505,15 +502,7 @@ export default function (pi: ExtensionAPI) {
         })();
 
         if (confirmResult === "allow-session") {
-          // Remember this command for the session
-          sessionAllow.allowCommand(command);
-
-          // Also allow the individual denied command names for flexibility
-          for (const v of activeViolations) {
-            if (v.type === "denied_command") {
-              sessionAllow.allowPattern(v.command);
-            }
-          }
+          sessionAllow.allowCommand(sessionScope, command);
 
           ctx.ui.notify(
             `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
@@ -526,6 +515,7 @@ export default function (pi: ExtensionAPI) {
           const violationLines = activeViolations.map(v => {
             if (v.type === "denied_command") return `  • Denied command: ${v.command}`;
             if (v.type === "file_read_detected") return `  • File read detected: ${v.details}`;
+            if (v.type === "preflight_flagged") return `  • Preflight flagged: ${v.details}`;
             return `  • File write detected: ${v.details}`;
           }).join("\n");
 
@@ -537,6 +527,125 @@ export default function (pi: ExtensionAPI) {
 
         // "allow" — allow this one time, continue
         return undefined;
+      }
+
+      const gateResult = evaluateBashCommandGates(command, ctx.cwd, currentConfig);
+      if (gateResult.decision === "allow") {
+        return undefined;
+      }
+
+      const preflightModel = currentConfig.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL;
+      const preflightPrompt = buildPreflightPrompt({
+        command,
+        cwd: ctx.cwd,
+        effectiveCwd: sessionScope,
+        recentContext: extractRecentContext(ctx),
+        gate1Reason: gateResult.reason,
+        gate1Hints: gateResult.hints,
+      });
+
+      let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
+      try {
+        preflightVerdict = await runPreflightJudge({
+          cwd: sessionScope,
+          model: preflightModel,
+          prompt: preflightPrompt,
+          timeoutMs: timeout,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const fallbackViolation: BashViolation = {
+          type: "preflight_flagged",
+          command: command.split(/\s+/)[0] || command,
+          segment: command,
+          details: `Gate-2 judge error (${preflightModel}): ${message}`,
+        };
+
+        if (!ctx.hasUI) {
+          return {
+            block: true,
+            reason: `[Guardrails] Bash blocked: Gate-2 preflight failed without UI:\n  • ${fallbackViolation.details}`,
+          };
+        }
+
+        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — Gate-2 preflight judge failed; confirmation needed" });
+        const confirmResult = await (async () => {
+          try {
+            return await confirmBashViolation(command, [fallbackViolation], ctx, timeout);
+          } finally {
+            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+          }
+        })();
+
+        if (confirmResult === "allow-session") {
+          sessionAllow.allowCommand(sessionScope, command);
+          ctx.ui.notify(
+            `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
+            "info",
+          );
+          return undefined;
+        }
+
+        if (confirmResult === "deny") {
+          return {
+            block: true,
+            reason: `[Guardrails] Bash denied after Gate-2 preflight failure:\n  • ${fallbackViolation.details}`,
+          };
+        }
+
+        return undefined;
+      }
+
+      if (preflightVerdict.decision === "allow") {
+        return undefined;
+      }
+
+      const verdictDetails = [preflightVerdict.reason, ...preflightVerdict.concerns].filter(Boolean).join("; ");
+      const verdictViolation: BashViolation = {
+        type: "preflight_flagged",
+        command: command.split(/\s+/)[0] || command,
+        segment: command,
+        details: `Gate-2 (${preflightModel}) => ${preflightVerdict.decision.toUpperCase()}: ${verdictDetails}`,
+      };
+
+      if (preflightVerdict.decision === "deny") {
+        return {
+          block: true,
+          reason: `[Guardrails] Bash denied by Gate-2 preflight:\n  • ${verdictViolation.details}`,
+        };
+      }
+
+      if (!ctx.hasUI) {
+        return {
+          block: true,
+          reason: `[Guardrails] Bash blocked by Gate-2 preflight (no UI):\n  • ${verdictViolation.details}`,
+        };
+      }
+
+      pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — bash preflight confirmation needed" });
+
+      const confirmResult = await (async () => {
+        try {
+          return await confirmBashViolation(command, [verdictViolation], ctx, timeout);
+        } finally {
+          pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+        }
+      })();
+
+      if (confirmResult === "allow-session") {
+        sessionAllow.allowCommand(sessionScope, command);
+        ctx.ui.notify(
+          `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
+          "info",
+        );
+        return undefined;
+      }
+
+      if (confirmResult === "deny") {
+        return {
+          block: true,
+          reason: `[Guardrails] Bash denied by preflight after ${Math.round(timeout / 1000)}s:\n  • ${verdictViolation.details}`,
+        };
       }
     }
 
@@ -565,6 +674,8 @@ export default function (pi: ExtensionAPI) {
         "",
         "─── Bash ───",
         `Deny:        ${cfg.bash?.deny?.length ? cfg.bash.deny.join(", ") : "(none)"}`,
+        `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
+        `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
       ];
       ctx.ui.notify(lines.join("\n"), "info");
     },
