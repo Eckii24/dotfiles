@@ -21,10 +21,6 @@ export interface PathsConfig {
 export interface BashConfig {
   /** Command names that require confirmation before execution */
   deny?: string[];
-  /** Command names that can bypass preflight when AST proves a single simple read-only call */
-  allow?: string[];
-  /** provider/model id used for the Gate-2 preflight judge */
-  preflightModel?: string;
 }
 
 /** Root guardrails configuration */
@@ -70,7 +66,7 @@ export interface BashCheckResult {
 /** A single violation found in a bash command */
 export interface BashViolation {
   /** Type of violation */
-  type: "denied_command" | "file_write_detected" | "file_read_detected" | "preflight_flagged";
+  type: "denied_command" | "file_write_detected" | "file_read_detected";
   /** The command that triggered the violation */
   command: string;
   /** The full command segment */
