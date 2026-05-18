@@ -1,3 +1,5 @@
+local deactivate_taskwarrior = vim.env.NVIM_DEACTIVATE_TASKWARRIOR ~= nil and vim.env.NVIM_DEACTIVATE_TASKWARRIOR ~= ""
+
 return {
   {
     "obsidian-nvim/obsidian.nvim",
@@ -64,6 +66,7 @@ return {
   },
   {
     "eckii24/m_taskwarrior_d.nvim",
+    enabled = not deactivate_taskwarrior,
     branch = "dev",
     -- dir = "~/Development/m_taskwarrior_d.nvim/",
     dependencies = { "MunifTanjim/nui.nvim" },
