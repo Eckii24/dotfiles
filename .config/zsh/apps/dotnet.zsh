@@ -4,30 +4,20 @@ function dotnet() {
 Usage: dotnet [dotnet-args...]
        dotnet --wrapper-help
 
-This zsh wrapper adds project discovery and secret handling before delegating
-to the real .NET CLI.
+This zsh wrapper adds project discovery before delegating to the real .NET
+CLI through 1Password.
 
 Wrapper behavior:
   1. Resolve the working directory for dotnet:
      - prefer the current directory if it contains a .sln, .slnx, or project file
      - otherwise scan src/v1, src/v2, ... and use the highest matching version
 
-  2. Prepare user secrets when exactly one unique UserSecretsId is found:
-     - scan project files below the selected directory
-     - read <UserSecretsId>...</UserSecretsId>
-     - if ~/.microsoft/usersecrets/<id>/secrets.tpl.json exists,
-       render it to secrets.json with `op inject`
-
-  3. Resolve op:// environment variables for the dotnet subprocess:
-     - run `dotnet` through `op run`
-     - interactive terminal runs use `op run --no-masking` to preserve a real
-       TTY so ANSI/Camunda console highlighting keeps working
-     - non-interactive runs keep the default masked mode
+  2. Resolve op:// environment variables for the dotnet subprocess:
+     - non-interactive runs behave like `O dotnet ...`
+     - interactive terminal runs behave like `OM dotnet ...` to preserve a
+       real TTY so ANSI/Camunda console highlighting keeps working
 
 Notes:
-  - The wrapper only injects user secrets when exactly one unique
-    UserSecretsId is found. If none or multiple IDs are found, it skips
-    secrets.json generation.
   - Native .NET CLI help is unchanged: use `dotnet --help`
   - Wrapper help is available via: `dotnet --wrapper-help`
 EOF
@@ -42,14 +32,6 @@ EOF
   local version_dir
   local version_name
   local version_number
-  local -a project_files
-  local -a secrets_ids
-  local project_file
-  local extracted_secrets_id
-  local secrets_id=""
-  local secrets_dir=""
-  local secrets_template=""
-  local secrets_file=""
   local -a op_run_args
 
   # Assumption: project/solution detection is non-recursive and only checks
@@ -89,43 +71,10 @@ EOF
       cd "$target_dir" || exit 1
     fi
 
-    # Assumption: inject only when the selected project tree resolves to one
-    # unique UserSecretsId. If none or multiple are present, skip injection
-    # rather than guessing the wrong secrets file.
-    if [[ -n "$target_dir" ]]; then
-      project_files=( **/*.csproj(N) **/*.fsproj(N) **/*.vbproj(N) )
-      secrets_ids=()
-
-      for project_file in "${project_files[@]}"; do
-        extracted_secrets_id=$(sed -n 's:.*<UserSecretsId>\([^<][^<]*\)</UserSecretsId>.*:\1:p' "$project_file" | head -n 1)
-
-        if [[ -n "$extracted_secrets_id" ]]; then
-          secrets_ids+=( "$extracted_secrets_id" )
-        fi
-      done
-
-      secrets_ids=( "${(@u)secrets_ids}" )
-
-      if [[ ${#secrets_ids[@]} -eq 1 ]]; then
-        secrets_id="$secrets_ids[1]"
-        secrets_dir="$HOME/.microsoft/usersecrets/$secrets_id"
-        secrets_template="$secrets_dir/secrets.tpl.json"
-        secrets_file="$secrets_dir/secrets.json"
-
-        if [[ -f "$secrets_template" ]]; then
-          trap 'rm -f "$secrets_file"' EXIT
-          trap 'rm -f "$secrets_file"; exit 1' HUP INT QUIT TERM
-
-          command op inject -f -i "$secrets_template" -o "$secrets_file" || exit 1
-          chmod 600 "$secrets_file" || exit 1
-        fi
-      fi
-    fi
-
     # 1Password's default stdout/stderr masking can make child processes think
     # output is redirected, which disables ANSI/log highlighting in interactive
-    # console apps. Keep masking for non-interactive usage, but preserve a real
-    # TTY for terminal runs so Camunda/.NET console highlighting still works.
+    # console apps. Use O-style behavior for non-interactive usage, but switch
+    # to OM-style behavior for terminal runs so Camunda/.NET highlighting stays.
     op_run_args=( run -- )
 
     if [[ -t 1 && -t 2 ]]; then
