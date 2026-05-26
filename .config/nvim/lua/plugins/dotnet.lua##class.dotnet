@@ -222,13 +222,6 @@ return {
         desc = "Build Solution",
       },
       {
-        "<leader>N<space>",
-        function()
-          require("easy-dotnet").project_view()
-        end,
-        desc = "Project View",
-      },
-      {
         "<leader>Nr",
         function()
           require("easy-dotnet").run()
@@ -297,24 +290,6 @@ return {
         csharpier = {
           command = "csharpier",
           args = { "format", "--stdin-path", "$FILENAME" },
-        },
-      },
-    },
-  },
-  {
-    "saghen/blink.cmp",
-    optional = true,
-    opts = {
-      sources = {
-        default = { "easy-dotnet" },
-        providers = {
-          ["easy-dotnet"] = {
-            name = "easy-dotnet",
-            enabled = true,
-            module = "easy-dotnet.completion.blink",
-            score_offset = 10000,
-            async = true,
-          },
         },
       },
     },
