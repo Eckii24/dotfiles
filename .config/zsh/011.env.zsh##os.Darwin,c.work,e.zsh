@@ -34,11 +34,18 @@ export DB_UI_STAGE="op://Employee/DB_UI_STAGE/password"
 export DB_UI_PROD="op://Employee/DB_UI_PROD/password"
 export DB_UI_REDIS="op://Employee/DB_UI_REDIS/password"
 
+export VIP_CONNECTIONSTRING_CENTRAL="op://Employee/vip-db-connectionString/local"
+export OMR_CONNECTIONSTRING_CENTRAL="op://Employee/omr-connectionString-central/dev"
+# export COSMOS_CONNECTIONSTRING="op://Employee/cosmosdb-connectionString/test"
+
 # Azure DevOps
 export AZURE_DEVOPS_ORG="op://Employee/AzureDevOps/ORG"
 export AZURE_DEVOPS_ORG_URL="op://Employee/AzureDevOps/ORG_URL"
 export AZURE_DEVOPS_PAT="op://Employee/AzureDevOps/password"
 export AZURE_DEVOPS_DEFAULT_PROJECT="op://Employee/AzureDevOps/DEFAULT_PROJECT"
+export DevOpsConfiguration__DevOpsOrganizaton="op://Employee/AzureDevOps/ORG"
+export DevOpsConfiguration__DevOpsProject="op://Employee/AzureDevOps/DEFAULT_PROJECT"
+export DevOpsConfiguration__PersonalAccessToken="op://Employee/AzureDevOps/password"
 
 # Nuget Config
 export NUGET_P0_PASSWORD="op://Employee/Nuget/password"
