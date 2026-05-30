@@ -12,7 +12,7 @@
  * Core idea: `while :; do cat PROMPT.md | coding-agent ; done`
  *
  * Usage:
- *   /ralph <prompt>                  - Run ralph loop with fresh sessions (default 25 iterations)
+ *   /ralph <prompt>                  - Run ralph loop with fresh sessions (default 5 iterations)
  *   /ralph --same-session <prompt>   - Legacy behavior: reuse the same session across iterations
  *   /ralph                           - Open overlay dialog to configure the loop
  */
@@ -21,7 +21,7 @@ import { randomUUID } from "node:crypto";
 import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@mariozechner/pi-coding-agent";
 import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
 
-const DEFAULT_MAX_LOOPS = 25;
+const DEFAULT_MAX_LOOPS = 5;
 const SAME_SESSION_FLAG = "--same-session";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 const ITERATION_START_TIMEOUT_MS = 5_000;
@@ -791,7 +791,7 @@ class RalphLoopDialog implements Focusable {
 		// Max iterations field
 		const loopsActive = this.activeField === "maxLoops";
 		const loopsLabel = loopsActive ? th.fg("accent", "  Max Iterations:") : th.fg("text", "  Max Iterations:");
-		const loopsInput = renderInput(this.maxLoopsText, this.maxLoopsCursor, loopsActive, "25");
+		const loopsInput = renderInput(this.maxLoopsText, this.maxLoopsCursor, loopsActive, "5");
 		lines.push(row(`${loopsLabel} ${loopsInput}`));
 		lines.push(row(""));
 

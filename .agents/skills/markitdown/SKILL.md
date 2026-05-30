@@ -1,6 +1,6 @@
 ---
 name: markitdown
-description: Use MarkItDown to convert files into LLM-friendly Markdown. Reach for this skill whenever the user wants to use `markitdown`, convert PDFs, Word docs, PowerPoint decks, Excel files, images, HTML, EPUBs, ZIPs, audio, or similar inputs into Markdown, or asks for an install command, CLI usage, Python API example, batch conversion, plugin setup, or troubleshooting for MarkItDown. Also use it when the user wants document content prepared for RAG, search, summarization, or other text-analysis workflows and MarkItDown is a good fit, even if they do not explicitly mention the library by name.
+description: Convert PDFs, Office files, images, HTML, EPUB/ZIP/audio, or other docs to LLM-friendly Markdown with MarkItDown; include install/CLI/API/batch/plugin help.
 compatibility:
   tools: bash, read, write, edit
   dependencies: Python 3.10+, markitdown

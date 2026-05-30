@@ -1,6 +1,6 @@
 ---
 name: p0-repo-context
-description: Inspect related P0-owned repositories when dependency names, NuGet/package references, service names, or an explicit user request suggest another repo contains the answer. Use this whenever code in one repository points at a sibling/internal repo under your responsibility, even if the user does not explicitly ask to "check another repository." Resolve the repo via the repo CLI, ensure it is available locally, inspect the source directly, and cite exact repository and file paths in the answer.
+description: Inspect related P0-owned sibling/internal repos when dependencies, package refs, service names, or user request point outside current repo; cite exact paths.
 compatibility:
   tools: bash, read
 ---

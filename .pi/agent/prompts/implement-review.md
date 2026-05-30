@@ -1,55 +1,59 @@
 ---
-description: Implement → review → fix → re-review for a tracked feature
+description: Implement → bounded review → focused fix for tracked feature work
 ---
 
-This workflow assumes tracked feature work and `.ai/` artifacts.
+Assume tracked feature work and `.ai/` artifacts.
 
 ## Setup
-1. First read `~/.agents/skills/project-memory/SKILL.md`.
-2. If `.ai/current-work.md` exists, read it before delegating.
-3. You own the top-level implement → review → repair loop. Keep sub-agents scoped; do not ask them to orchestrate the loop for you.
-4. `worker` implements only. Do not ask `worker` to perform the formal review, assign review severities, decide whether the work is approved, or replace the separate `code-reviewer` step.
-5. Whenever `.ai/current-work.md` exists or is created, keep a **minimal** `Todo Tracker` there with only the major workflow phases. If a `.ai/<slug>-issues.md` exists, keep detailed execution tasks in the issues breakdown instead of duplicating them in `current-work.md`.
+
+1. Read `.ai/current-work.md` if present before delegating.
+2. Use compact `AGENTS.md` tracked-work rules; read `~/.agents/skills/project-memory/SKILL.md` only for create/replace/archive details or unclear lifecycle.
+3. You own the loop. `worker` implements/tests only; `code-reviewer` reviews only.
+4. Current-work Todo Tracker = major phases only. Detailed tasks live in `.ai/<slug>-issues.md` when present.
+
+## Review budget
+
+- Default path: 1 implementation pass + 1 review pass + at most 1 focused fix/verification pass.
+- Hard cap: 2 focused fix/verification cycles. After that, stop and ask `questionnaire`: accept, defer remaining findings, or continue with explicit guidance.
+- Use full `code-reviewer` only once. Later passes are **verification-only**: check listed fixes and nearby regressions, not the whole change again.
+- For trivial docs/prompt/config-only changes with no behavior/security/data risk, skip `code-reviewer`; run inline checklist and record `Formal review skipped: low-risk non-code change`.
 
 ## Workflow
-Use the `subagent` tool with the `chain` parameter for each implementation/review or repair/review sequence.
 
-1. Run `worker` to implement: $@
-   - Pass `.ai/current-work.md` when it exists.
-   - Tell `worker` to stop after implementation plus any needed eval/test runs.
-   - Tell `worker` not to review its own work beyond noting concrete blockers or uncertainties.
-   - Require explicit changed-file paths, artifact paths, and eval/test results.
-2. Run `code-reviewer` on the implementation result (`{previous}`).
-   - Pass `.ai/current-work.md` when it exists.
-   - Require explicit file paths and eval/test results in the review output.
-3. If the review reports any `Blocking Issues` or `Important Issues`:
-   - Create or update `.ai/<slug>-review.md` with the actionable findings.
-   - Keep that review artifact as a cumulative ledger: preserve the original findings, append fix/verification notes, and do not delete resolved issues before learn extraction has mined them.
-   - Mirror high-signal resolved findings into `.ai/current-work.md` under `Review findings & fixes` or `Learning candidates` when they are worth preserving beyond the review artifact.
-   - Run another `subagent` chain: focused `worker` fix pass → `code-reviewer` verification pass.
-   - Pass the exact review artifact path, changed files, and prior eval/test context into the fix pass.
-   - **Iteration budget**: run at most 3 fix → re-review cycles. If blocking issues remain after 3 cycles, stop and present remaining issues via `questionnaire` for the user to triage (accept, defer, or continue with manual guidance).
-   - **Scoped fix passes**: send only unresolved `Blocking Issues` and `Important Issues` from the latest review to the worker — not the full cumulative review artifact. Reference specific file:line locations.
-   - Repeat until the latest review has no `Blocking Issues` and no `Important Issues`, the user explicitly accepts the remaining issues, the iteration budget is exhausted, or ambiguity requires `questionnaire`.
-4. Treat `Minor Issues / Suggestions` as optional follow-up work:
-   - Apply them when clearly correct, low-risk, and in scope.
-   - Otherwise record them in `.ai/<slug>-review.md` or `.ai/current-work.md`.
-5. After meaningful work, always run an explicit `subagent` handoff to `learn-orchestrator`, passing `.ai/current-work.md`, the review artifact path if any, changed files, and any session transcript path that is explicitly available.
-   - If that handoff hits unresolved collisions or other caller-owned decisions, handle them here with `questionnaire` and the learning runtime, or record an explicit manual follow-up for `/skill:learn review`.
-   - Use explicit `Learning candidates` from `.ai/current-work.md` as the primary source when available.
-   - Refresh `.ai/current-work.md` after the handoff and mark the major learning phase complete.
-6. Before finishing:
-   - Update `.ai/current-work.md` following `project-memory` conventions.
-   - Keep the Todo Tracker minimal: major phases only, no detailed checklist when an issues file exists.
-   - Link changed files, review artifact paths, eval/test results, next step, and any remaining assumptions or follow-ups.
-7. Ask via `questionnaire` whether the tracked work is complete and should be archived now.
-   - If the user confirms completion, before moving any files update the live `.ai/current-work.md` so both `User confirmed feature complete` and `Active artifacts archived` are checked as the final closeout state, then archive that exact final `.ai/current-work.md` snapshot plus any active `.ai/<slug>-review.md`, `.ai/<slug>-issues.md`, `.ai/<slug>-prd.md`, and related tracked-work artifacts following `project-memory` conventions.
-   - If the user does not confirm completion, keep the feature anchor active and leave `User confirmed feature complete` / `Active artifacts archived` unchecked in the Todo Tracker.
+1. `worker`: implement `$@`.
+   - Pass current-work path when present.
+   - Stop after implementation + needed eval/test runs.
+   - No self-review beyond concrete blockers/uncertainties.
+   - Require changed-file paths, artifact paths, eval/test results.
+2. Build a compact review packet. Do not blindly forward full `{previous}` if long.
+   - requirement summary: max 10 bullets / relevant acceptance criteria only
+   - changed files and key touched symbols
+   - eval/test summary
+   - current-work/review artifact paths
+3. Review:
+   - If low-risk non-code change, run inline checklist and skip subagent.
+   - Else run `code-reviewer` full review using the compact packet. Provide paths for deeper reads, not pasted full files/logs.
+4. If Blocking/Important issues:
+   - Create/update `.ai/<slug>-review.md` cumulative ledger; preserve originals, append fix/verification notes.
+   - Mirror only durable high-signal fixes into current-work.
+   - Run focused `worker` fix pass with only unresolved latest Blocking/Important findings, file:line refs, changed files, eval context. Do not pass full ledger unless needed.
+   - Run `code-reviewer` in **verification-only mode** on those findings. Require output of only remaining Blocking/Important issues + eval status.
+   - Do not loop for Minor suggestions.
+5. Minor Issues / Suggestions:
+   - Apply only if obvious, low-risk, in scope, and does not require another review.
+   - Else record as follow-up.
+6. Learning:
+   - Run `learn-orchestrator` only with reusable evidence: explicit candidates, non-trivial review fixes, repeated pitfalls, durable workflow/tooling lesson, or user request.
+   - If none, skip and record `Learning extraction skipped: no reusable learning candidate` in current-work when active.
+   - Handle collisions with `questionnaire` + learning runtime, or record `/skill:learn review` follow-up.
+7. Finish:
+   - Update current-work: major Todo, changed files, review path, eval/test results, next step, assumptions/follow-ups.
+   - Ask via `questionnaire` whether tracked work is complete/archive now.
+   - If yes, first update live current-work closeout boxes, then archive final current-work + active PRD/issues/review artifacts per `project-memory`.
 
-## Completion
-Stop when one of these is true:
-- the latest review has no `Blocking Issues` and no `Important Issues`
-- the user explicitly accepts the remaining issues
-- a blocker or ambiguity requires `questionnaire`
+## Stop conditions
 
-Prefer at least one re-review after every fix pass.
+- no Blocking/Important issues after initial review or verification
+- user accepts/defers remaining issues
+- hard cap reached
+- blocker/ambiguity needs `questionnaire`

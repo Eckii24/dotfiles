@@ -1,6 +1,6 @@
 ---
 name: fetch-website-to-markdown
-description: Convert public webpages, articles, docs pages, blog posts, or lists of URLs into clean Markdown files. Use this skill whenever the user asks to download, archive, save, scrape, mirror, or turn a website/page/article/docs page into `.md`, even if they do not explicitly say "markdown." Especially use it when the user wants readable headings, lists, links, or code blocks preserved, or wants one Markdown file per URL with the source URL included.
+description: Fetch public URLs/articles/docs/blogs and save clean Markdown with source URL, headings, lists, links, and code blocks.
 compatibility:
   tools: bash, write
 ---

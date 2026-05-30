@@ -5,113 +5,66 @@ description: "Review code changes for correctness, security, performance, and ma
 
 # Code Review
 
-Review code changes systematically. Prioritize findings by impact. Be specific and actionable.
+Review changes systematically. Prioritize impact. Be specific/actionable; no nitpicks while logic is wrong.
 
-## Before reviewing
+## Gather context first
 
-Gather context before reading code:
+1. Requirements: spec/story/plan/PR description.
+2. Changed files and scope.
+3. Test/eval signals from plan or relevant commands.
+4. Neighboring code patterns for conventions/error handling.
 
-1. **Requirements source**: Read the spec, story, plan, or PR description. Understand what the code is supposed to do.
-2. **Changed files**: Identify what changed and the scope of the change.
-3. **Test signals**: Check whether tests pass, what coverage looks like, and whether evals from the plan were run.
-4. **Codebase patterns**: Look at neighboring code to understand existing conventions, abstractions, and error handling patterns. The change should fit the codebase, not introduce a parallel style.
+If context is missing, note it as a review limitation/finding.
 
-If any of these are unavailable, note it in your review — missing context is itself a finding.
+## Review priority
 
-## What to review
+1. **Correctness**: requirements met, edge cases, null/empty/boundaries, async/races, error paths, contracts.
+2. **Security**: validation at trust boundaries, injection, auth/authz, secrets/logging.
+3. **Performance**: N+1, hot-path blocking, unbounded results, missing pagination/cache/batching.
+4. **Maintainability**: fits codebase patterns, clear names, justified complexity, no premature/parallel abstractions.
+5. **Tests**: behavior coverage for happy + meaningful edge paths; deterministic; proportional to risk.
 
-Review in this priority order. Spend proportional time: don't nitpick formatting if the logic is wrong.
+## Severity
 
-### 1. Correctness
+- **Blocking**: must fix before merge; correctness/security/data-loss/broken-contract risk.
+- **Important**: should fix; meaningful quality/perf/maintainability/test gap.
+- **Minor**: nice-to-have style/naming/small simplification.
+- **Question**: intent unclear; ask instead of assuming.
 
-- Does the code do what the requirements ask?
-- Are edge cases handled? (null, empty, boundary values, concurrent access)
-- Are error paths correct — not just present, but producing the right behavior?
-- Off-by-one errors, wrong comparisons, missing awaits, race conditions.
+## Finding style
 
-### 2. Security
+Use exact `file:line`, issue, impact, suggested fix. Example:
 
-- Input validation and sanitization at trust boundaries.
-- Injection risks (SQL, XSS, command injection).
-- Authentication/authorization checks where needed.
-- Secrets not hardcoded, sensitive data not logged.
-
-### 3. Performance
-
-- N+1 queries, unnecessary loops over large collections.
-- Blocking operations in hot paths.
-- Missing pagination, unbounded results.
-- Expensive operations that should be cached or batched.
-
-### 4. Maintainability
-
-- Does the code follow the codebase's existing patterns and conventions?
-- Are names clear? Can someone unfamiliar with the PR understand the intent?
-- Is complexity justified? Could the same thing be done more simply?
-- Are abstractions appropriate — not premature, not missing where needed?
-
-### 5. Test quality
-
-- Do tests cover the happy path AND meaningful edge cases?
-- Do tests verify behavior, not implementation details?
-- Are tests deterministic and independent?
-- Is coverage proportional to the risk of the change?
-
-## How to report findings
-
-Use severity levels. Be concrete: file path, line reference, what's wrong, why it matters, and what to do instead.
-
-### Severity levels
-
-- **Blocking** — Must fix before merge. Correctness bugs, security issues, data loss risks, broken contracts.
-- **Important** — Should fix. Meaningful quality, performance, or maintainability concerns. Discuss if you disagree.
-- **Minor** — Nice to have. Style, naming, small simplifications. Not blocking.
-- **Question** — Intent is unclear. Ask rather than assume.
-
-### Good vs bad feedback
-
-Bad: "This is wrong."
-Good: "`src/api/handler.ts:42` — This query isn't parameterized, creating a SQL injection risk. Use a prepared statement instead."
-
-Bad: "Rename this variable."
-Good: "[minor] `userCount` would be clearer than `uc` here, since it's used across three functions."
-
-Bad: "Add error handling."
-Good: "[blocking] `fetchUser()` at line 58 doesn't handle a failed HTTP response. If the API returns 4xx/5xx, this will pass `undefined` to `processUser()` and crash. Wrap in try/catch or check `response.ok`."
+`src/api/handler.ts:42` — Query is not parameterized, creating SQL injection risk. Use prepared statement.
 
 ## Output format
 
 ```md
 ## Summary
-[1-3 sentences: what was reviewed, overall assessment, most important finding.]
+[1-3 sentences: scope, overall assessment, top risk.]
 
 ## Blocking Issues
-- `file:line` — [issue]. [impact]. [suggested fix].
+- `file:line` — [issue]. [impact]. [fix].
 
 ## Important Issues
-- `file:line` — [issue]. [rationale].
+- `file:line` — [issue]. [rationale/fix].
 
 ## Minor Issues / Suggestions
 - `file:line` — [suggestion].
 
 ## Questions
-- `file:line` — [what's unclear and why it matters].
+- `file:line` — [unclear point and why it matters].
 
 ## Requirements Compliance
-[If a spec/plan/story was provided: which requirements are met, which are missing or partially implemented.]
+[Met/missing/partial requirements when source exists.]
 
 ## Test & Eval Results
-[If tests/evals were run: command, result, pass/fail. If not run: note it.]
+[command -> pass/fail + short output summary; or not run + why.]
 
 ## Verdict
-[Approve / Approve with minor fixes / Request changes — and the 1-2 most important next actions.]
+[Approve / Approve with minor fixes / Request changes] — [1-2 next actions].
 ```
 
-## Verify against the plan when one exists
+## Plan-aware review
 
-When reviewing implementation that has an associated plan:
-
-- Check each phase's tasks against the actual code changes.
-- Run the eval gate commands from the plan and report results.
-- Flag any plan tasks that were skipped or only partially implemented.
-- Note deviations from the plan — some are fine, but they should be intentional.
+When a plan exists, check tasks against actual changes, run eval gates when practical, flag skipped/partial tasks, and note intentional deviations.

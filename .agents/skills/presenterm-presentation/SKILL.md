@@ -1,6 +1,6 @@
 ---
 name: presenterm-presentation
-description: Create, review, or update Presenterm slide decks in Markdown, including runnable `.md` presentations, optional theme configuration, speaker notes, presentation-structure guidance, and Presenterm-specific layout/comment syntax. Use this skill whenever the user asks for a presentation, slide deck, talk outline, markdown slides, Presenterm, terminal slides, or help improving a presentation’s flow, readability, speaker support, or exportable terminal-first format, even if they do not explicitly say “Presenterm”.
+description: Create/review/update Presenterm or Markdown slide decks, talk outlines, speaker notes, themes, exports, and presentation flow/readability.
 compatibility:
   tools: read, write, bash
   dependencies:

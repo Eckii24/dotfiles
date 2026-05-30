@@ -14,7 +14,7 @@
  *   1 — no rewrite available (pass through unchanged)
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 const IS_SUBAGENT = process.env.PI_SUBAGENT === "1";
@@ -34,7 +34,7 @@ function checkRtk(): boolean {
 
 function tryRewrite(command: string): string | null {
 	try {
-		const result = execSync(`rtk rewrite ${JSON.stringify(command)}`, {
+		const result = execFileSync("rtk", ["rewrite", command], {
 			stdio: ["pipe", "pipe", "pipe"],
 			timeout: 3000,
 			env: { ...process.env, NO_COLOR: "1" },
