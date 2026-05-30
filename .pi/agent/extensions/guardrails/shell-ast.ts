@@ -216,6 +216,7 @@ export type Command =
 export interface Stmt {
   Cmd: Command;
   Redirs?: Redirect[];
+  Background?: boolean;
 }
 
 /** Top-level file node */

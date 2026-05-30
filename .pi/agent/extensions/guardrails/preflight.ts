@@ -25,9 +25,12 @@ export interface RunPreflightJudgeInput {
   prompt: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Test seam for subprocess invocation; production resolves the active pi CLI. */
+  piExecutable?: string;
 }
 
 export const DEFAULT_PREFLIGHT_MODEL = "github-copilot/claude-haiku-4.5";
+export const DEFAULT_PREFLIGHT_TIMEOUT_MS = 30000;
 
 export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   const parts: string[] = [];
@@ -83,7 +86,9 @@ export function parsePreflightVerdict(output: string): PreflightVerdict | undefi
   };
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
+function getPiInvocation(args: string[], piExecutable?: string): { command: string; args: string[] } {
+  if (piExecutable) return { command: piExecutable, args };
+
   const currentScript = process.argv[1];
   if (currentScript && existsSync(currentScript)) {
     return { command: process.execPath, args: [currentScript, ...args] };
@@ -95,6 +100,8 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 }
 
 export async function runPreflightJudge(input: RunPreflightJudgeInput): Promise<PreflightVerdict> {
+  const timeoutMs = input.timeoutMs ?? DEFAULT_PREFLIGHT_TIMEOUT_MS;
+
   return new Promise<PreflightVerdict>((resolve, reject) => {
     if (input.signal?.aborted) {
       reject(new Error("Preflight aborted"));
@@ -108,11 +115,16 @@ export async function runPreflightJudge(input: RunPreflightJudgeInput): Promise<
       input.model,
       "--no-session",
       "--no-tools",
-      "--thinking-level",
+      "--no-extensions",
+      "--no-skills",
+      "--no-prompt-templates",
+      "--no-context-files",
+      "--no-themes",
+      "--thinking",
       "off",
     ];
 
-    const invocation = getPiInvocation(args);
+    const invocation = getPiInvocation(args, input.piExecutable);
     const proc = spawn(invocation.command, invocation.args, {
       cwd: input.cwd,
       shell: false,
@@ -124,6 +136,8 @@ export async function runPreflightJudge(input: RunPreflightJudgeInput): Promise<
     let stderr = "";
     let settled = false;
 
+    proc.stdin.end();
+
     const timeoutHandle = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -132,8 +146,8 @@ export async function runPreflightJudge(input: RunPreflightJudgeInput): Promise<
         if (!proc.killed) proc.kill("SIGKILL");
       }, 2000);
       killTimer.unref?.();
-      reject(new Error(`Preflight judge timed out after ${input.timeoutMs ?? 30000}ms`));
-    }, input.timeoutMs ?? 30000);
+      reject(new Error(`Preflight judge timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
 
     proc.stdout.on("data", (chunk) => {
       stdout += chunk.toString();

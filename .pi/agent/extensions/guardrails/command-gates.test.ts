@@ -52,4 +52,65 @@ describe("evaluateBashCommandGates", () => {
     expect(result.gate).toBe(1);
     expect(result.decision).toBe("allow");
   });
+
+  it("preserves gate-1 allowlist behavior in fallback mode", () => {
+    const result = evaluateBashCommandGates("pwd", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.gate).toBe(1);
+    expect(result.decision).toBe("allow");
+    expect(result.requiresPreflight).toBe(false);
+  });
+
+  it("keeps chained allowlisted commands in gate 2 in fallback mode", () => {
+    const result = evaluateBashCommandGates("pwd && ls", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+    expect(result.requiresPreflight).toBe(true);
+  });
+
+  it("does not treat quoted shell metacharacters as fallback-mode control syntax", () => {
+    const bracketRegex = evaluateBashCommandGates('grep "[0-9]" foo.txt', process.cwd(), baseConfig, { forceFallback: true });
+    const pipeRegex = evaluateBashCommandGates('grep "foo|bar" foo.txt', process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(bracketRegex.gate).toBe(1);
+    expect(pipeRegex.gate).toBe(1);
+  });
+
+  it("rejects command substitution in fallback-mode gate 1 even when quoted", () => {
+    const result = evaluateBashCommandGates('grep "$(whoami)" foo.txt', process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+  });
+
+  it("keeps backgrounded commands in gate 2 in fallback mode", () => {
+    const result = evaluateBashCommandGates("pwd & curl https://example.com", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+    expect(result.requiresPreflight).toBe(true);
+  });
+
+  it("keeps backgrounded commands in gate 2 in AST mode", () => {
+    const result = evaluateBashCommandGates("pwd &", process.cwd(), baseConfig);
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+    expect(result.requiresPreflight).toBe(true);
+  });
+
+  it("keeps mutating git branch forms in gate 2", () => {
+    const result = evaluateBashCommandGates("git branch -D demo", process.cwd(), baseConfig);
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+  });
+
+  it("keeps parameter-expanded paths in gate 2", () => {
+    const result = evaluateBashCommandGates('cat "$HOME/docs/readme.txt"', process.cwd(), baseConfig);
+
+    expect(result.gate).toBe(2);
+    expect(result.decision).toBe("preflight");
+  });
 });

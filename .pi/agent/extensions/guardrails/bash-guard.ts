@@ -356,6 +356,13 @@ function checkBashInner(
 /**
  * AST-based bash analysis.
  */
+function astContainsCommandType(value: unknown, type: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => astContainsCommandType(item, type));
+  if (typeof value !== "object" || value === null) return false;
+  if ((value as { Type?: unknown }).Type === type) return true;
+  return Object.values(value).some((item) => astContainsCommandType(item, type));
+}
+
 function checkBashViaAST(
   ast: ShellFile,
   cwd: string,
@@ -369,10 +376,12 @@ function checkBashViaAST(
   hasDenyRead: boolean,
 ): void {
   let shellCwd = cwd;
+  const trackCwd = !astContainsCommandType(ast, "Subshell") && !astContainsCommandType(ast, "CmdSubst") && !astContainsCommandType(ast, "ProcSubst");
 
   walkShellCommands(ast, (astCmd) => {
-    // Track cwd changes
-    if (astCmd.name === "cd" && astCmd.args.length > 0) {
+    // Track cwd changes. Backgrounded commands run in a subshell and do not affect later cwd.
+    // Subshells have separate cwd scope, so keep cwd conservative when they appear.
+    if (trackCwd && astCmd.name === "cd" && astCmd.args.length > 0 && !astCmd.stmt.Background) {
       const target = astCmd.args[0];
       if (target && !target.startsWith("$") && !target.includes("$(__cmd_subst__)")) {
         if (target === "-") {
@@ -468,8 +477,17 @@ function stripQuotes(token: string): string {
 
 // ─── Segment splitting ───
 
+interface CommandSegment {
+  segment: string;
+  background: boolean;
+}
+
 function splitCommandSegments(command: string): string[] {
-  const segments: string[] = [];
+  return splitCommandSegmentsDetailed(command).map((item) => item.segment);
+}
+
+function splitCommandSegmentsDetailed(command: string): CommandSegment[] {
+  const segments: CommandSegment[] = [];
   let current = "";
   let i = 0;
   let inSingleQuote = false;
@@ -536,28 +554,35 @@ function splitCommandSegments(command: string): string[] {
     }
 
     if (ch === ";" || ch === "\n") {
-      if (current.trim()) segments.push(current.trim());
+      if (current.trim()) segments.push({ segment: current.trim(), background: false });
       current = "";
       i++;
       continue;
     }
 
     if (ch === "&" && next === "&") {
-      if (current.trim()) segments.push(current.trim());
+      if (current.trim()) segments.push({ segment: current.trim(), background: false });
       current = "";
       i += 2;
       continue;
     }
 
+    if (ch === "&" && cmd[i - 1] !== ">" && cmd[i - 1] !== "<" && next !== ">") {
+      if (current.trim()) segments.push({ segment: current.trim(), background: true });
+      current = "";
+      i++;
+      continue;
+    }
+
     if (ch === "|" && next === "|") {
-      if (current.trim()) segments.push(current.trim());
+      if (current.trim()) segments.push({ segment: current.trim(), background: false });
       current = "";
       i += 2;
       continue;
     }
 
     if (ch === "|" && next !== "|") {
-      if (current.trim()) segments.push(current.trim());
+      if (current.trim()) segments.push({ segment: current.trim(), background: false });
       current = "";
       i++;
       continue;
@@ -567,7 +592,7 @@ function splitCommandSegments(command: string): string[] {
     i++;
   }
 
-  if (current.trim()) segments.push(current.trim());
+  if (current.trim()) segments.push({ segment: current.trim(), background: false });
   return segments;
 }
 
@@ -754,11 +779,11 @@ function detectRedirections(segment: string): string[] {
 
 // ─── Fallback cwd tracking ───
 
-function trackCwdChanges(segments: string[], baseCwd: string): string[] {
+function trackCwdChanges(segments: CommandSegment[], baseCwd: string): string[] {
   const cwds: string[] = [];
   let currentCwd = baseCwd;
 
-  for (const segment of segments) {
+  for (const { segment, background } of segments) {
     cwds.push(currentCwd);
 
     const trimmed = segment.trim();
@@ -771,7 +796,7 @@ function trackCwdChanges(segments: string[], baseCwd: string): string[] {
 
     if (idx < tokens.length) {
       const cmd = stripQuotes(tokens[idx]);
-      if (cmd === "cd" && idx + 1 < tokens.length) {
+      if (cmd === "cd" && idx + 1 < tokens.length && !background) {
         const target = stripQuotes(tokens[idx + 1]);
         if (target && !target.startsWith("$") && !target.includes("`")) {
           if (target === "-") {
@@ -807,8 +832,9 @@ function checkBashViaFallback(
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
 ): void {
-  const topSegments = splitCommandSegments(command);
-  const segmentCwds = trackCwdChanges(topSegments, cwd);
+  const topSegmentInfo = splitCommandSegmentsDetailed(command);
+  const topSegments = topSegmentInfo.map((item) => item.segment);
+  const segmentCwds = trackCwdChanges(topSegmentInfo, cwd);
 
   const allCommands = extractCommandsFallback(command);
 
@@ -872,7 +898,7 @@ export function checkBash(
   command: string,
   cwd: string,
   config: GuardrailsConfig,
-  options: { patternCwd?: string } = {},
+  options: { patternCwd?: string; forceFallback?: boolean } = {},
 ): BashCheckResult {
   const violations: BashViolation[] = [];
   const patternCwd = options.patternCwd ?? cwd;
@@ -889,7 +915,7 @@ export function checkBash(
   }
 
   // Try AST-based analysis first
-  const ast = parseShellAST(command);
+  const ast = options.forceFallback ? null : parseShellAST(command);
   if (ast) {
     checkBashViaAST(ast, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
   } else {

@@ -1,0 +1,91 @@
+import { describe, expect, it } from "bun:test";
+import { checkBash } from "./bash-guard.js";
+
+const baseConfig = {
+  timeout: 300000,
+  paths: {},
+  bash: {
+    deny: ["echo"],
+  },
+};
+
+describe("checkBash parsing", () => {
+  it("checks commands after standalone background separators", () => {
+    const result = checkBash("pwd & echo hi", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.allowed).toBe(false);
+    expect(result.violations).toEqual([
+      {
+        type: "denied_command",
+        command: "echo",
+        segment: "echo hi",
+        details: "Command 'echo' is in the deny list",
+      },
+    ]);
+  });
+
+  it("does not split fd redirections as background separators", () => {
+    const result = checkBash("echo hi 2>&1", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(result.allowed).toBe(false);
+    expect(result.violations[0]?.command).toBe("echo");
+    expect(result.violations[0]?.segment).toBe("echo hi 2>&1");
+  });
+
+  it("does not propagate backgrounded cd into later path checks", () => {
+    const config = {
+      timeout: 300000,
+      paths: {
+        allowWrite: ["./sandbox/**"],
+      },
+      bash: {},
+    };
+
+    for (const forceFallback of [false, true]) {
+      const result = checkBash("cd sandbox & echo hi > allowed.txt", "/tmp/repo", config, {
+        patternCwd: "/tmp/repo",
+        forceFallback,
+      });
+
+      expect(result.allowed).toBe(false);
+      expect(result.violations[0]?.details).toContain("Path not in allowWrite list");
+    }
+  });
+
+  it("does not propagate subshell cd into outer path checks", () => {
+    const config = {
+      timeout: 300000,
+      paths: {
+        allowWrite: ["./sandbox/**"],
+      },
+      bash: {},
+    };
+
+    for (const forceFallback of [false, true]) {
+      const result = checkBash("(cd sandbox; echo hi > allowed.txt) & echo ok > denied.txt", "/tmp/repo", config, {
+        patternCwd: "/tmp/repo",
+        forceFallback,
+      });
+
+      expect(result.allowed).toBe(false);
+      expect(result.violations.some((violation) => violation.details?.includes("Path not in allowWrite list"))).toBe(true);
+    }
+  });
+
+  it("does not propagate command-substitution cd into outer path checks", () => {
+    const config = {
+      timeout: 300000,
+      paths: {
+        allowWrite: ["./sandbox/**"],
+      },
+      bash: {},
+    };
+
+    const result = checkBash("echo $(cd sandbox; printf x); echo ok > allowed.txt", "/tmp/repo", config, {
+      patternCwd: "/tmp/repo",
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.violations.some((violation) => violation.details?.includes("Path not in allowWrite list"))).toBe(true);
+  });
+});

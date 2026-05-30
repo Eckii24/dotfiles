@@ -145,7 +145,7 @@ import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
-import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, runPreflightJudge } from "./preflight.js";
+import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
@@ -168,52 +168,6 @@ function configSourceLabel(cwd: string): string {
 function scopeLabel(cwd: string): string {
   const effectiveCwd = getEffectiveCwd(cwd);
   return effectiveCwd === cwd ? effectiveCwd : `${effectiveCwd} (git root)`;
-}
-
-function extractRecentContext(ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1]): string {
-  const entries = ctx.sessionManager.getBranch() as Array<{
-    type: string;
-    message?: { role?: string; content?: unknown };
-  }>;
-
-  const parts: string[] = [];
-  let foundAssistant = false;
-
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i];
-    if (entry.type !== "message") continue;
-
-    if (!foundAssistant && entry.message?.role === "assistant") {
-      foundAssistant = true;
-      const text = extractMessageText(entry.message.content);
-      if (text) parts.unshift(`Assistant: ${text}`);
-      continue;
-    }
-
-    if (foundAssistant && entry.message?.role === "user") {
-      const text = extractMessageText(entry.message.content);
-      if (text) parts.unshift(`User: ${text}`);
-      break;
-    }
-  }
-
-  const combined = parts.join("\n\n");
-  return combined.length > 6000 ? combined.slice(0, 6000) + "\n...(truncated)" : combined;
-}
-
-function extractMessageText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter(
-      (block: unknown): block is { type: string; text: string } =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: unknown }).type === "text" &&
-        typeof (block as { text?: unknown }).text === "string",
-    )
-    .map((block) => block.text)
-    .join("\n");
 }
 
 // ─── Confirmation result type ───
@@ -539,7 +493,7 @@ export default function (pi: ExtensionAPI) {
         command,
         cwd: ctx.cwd,
         effectiveCwd: sessionScope,
-        recentContext: extractRecentContext(ctx),
+        recentContext: "", // Do not forward chat/session text into the preflight subprocess.
         gate1Reason: gateResult.reason,
         gate1Hints: gateResult.hints,
       });
@@ -550,7 +504,7 @@ export default function (pi: ExtensionAPI) {
           cwd: sessionScope,
           model: preflightModel,
           prompt: preflightPrompt,
-          timeoutMs: timeout,
+          timeoutMs: Math.min(timeout, DEFAULT_PREFLIGHT_TIMEOUT_MS),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -607,13 +561,6 @@ export default function (pi: ExtensionAPI) {
         segment: command,
         details: `Gate-2 (${preflightModel}) => ${preflightVerdict.decision.toUpperCase()}: ${verdictDetails}`,
       };
-
-      if (preflightVerdict.decision === "deny") {
-        return {
-          block: true,
-          reason: `[Guardrails] Bash denied by Gate-2 preflight:\n  • ${verdictViolation.details}`,
-        };
-      }
 
       if (!ctx.hasUI) {
         return {

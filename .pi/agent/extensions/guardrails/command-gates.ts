@@ -44,7 +44,7 @@ const PROCESS_CONTROL_COMMANDS = new Set(["kill", "killall", "pkill", "nohup", "
 const WRAPPER_COMMANDS = new Set(["bash", "sh", "zsh", "fish", "eval", "xargs", "sudo", "env", "time", "timeout"]);
 
 function hasPlaceholderToken(value: string): boolean {
-  return value.includes("$(__cmd_subst__)") || value.includes("$((…))") || value.includes("<(…)") || value.includes("`");
+  return /\$\{?[A-Za-z_]/.test(value) || value.includes("$(__cmd_subst__)") || value.includes("$((…))") || value.includes("<(…)") || value.includes("`");
 }
 
 function getConfiguredAllow(config: GuardrailsConfig): Set<string> {
@@ -54,14 +54,108 @@ function getConfiguredAllow(config: GuardrailsConfig): Set<string> {
 
 function isReadOnlyGitCommand(args: string[]): boolean {
   const subcommand = args[0]?.toLowerCase();
-  return subcommand !== undefined && ["status", "diff", "log", "show", "branch"].includes(subcommand);
+  return subcommand !== undefined && ["status", "diff", "log", "show"].includes(subcommand);
+}
+
+function tokenizeSimpleCommand(command: string): string[] | null {
+  const tokens: string[] = [];
+  let current = "";
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+
+    if (ch === "\\" && !inSingle) {
+      current += next ?? "";
+      i++;
+      continue;
+    }
+
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && /\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (inSingle || inDouble) return null;
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function hasUnsafeShellSyntaxOutsideQuotes(command: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+
+    if (ch === "\\" && !inSingle) {
+      i++;
+      continue;
+    }
+
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+
+    if (!inSingle && (ch === "`" || (ch === "$" && next === "("))) return true;
+
+    if (!inSingle && !inDouble) {
+      if (ch === "\n" || ch === ";" || ch === "|" || ch === "&" || ch === "<" || ch === ">") return true;
+      if (ch === "(" || ch === ")") return true;
+    }
+  }
+
+  return inSingle || inDouble;
+}
+
+function isSimpleAllowlistedFallback(command: string, config: GuardrailsConfig): boolean {
+  if (hasUnsafeShellSyntaxOutsideQuotes(command)) return false;
+
+  const tokens = tokenizeSimpleCommand(command.trim());
+  if (!tokens || tokens.length === 0) return false;
+
+  const commandName = tokens[0];
+  if (!commandName || commandName.includes("/") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(commandName)) return false;
+  if (tokens.some(hasPlaceholderToken)) return false;
+
+  const args = tokens.slice(1);
+  const allowSet = getConfiguredAllow(config);
+  const lowerName = commandName.toLowerCase();
+  if (allowSet.has(lowerName)) return true;
+  if (lowerName === "git") return isReadOnlyGitCommand(args);
+  return false;
 }
 
 function isSimpleAllowlistedAST(ast: ShellFile, config: GuardrailsConfig): boolean {
   if (ast.Stmts.length !== 1) return false;
 
   const stmt = ast.Stmts[0];
-  if (!stmt?.Cmd || stmt.Cmd.Type !== "CallExpr") return false;
+  if (!stmt?.Cmd || stmt.Cmd.Type !== "CallExpr" || stmt.Background) return false;
   if (stmt.Redirs && stmt.Redirs.length > 0) return false;
   if (!stmt.Cmd.Args || stmt.Cmd.Args.length === 0) return false;
 
@@ -129,10 +223,11 @@ export function evaluateBashCommandGates(
   command: string,
   _cwd: string,
   config: GuardrailsConfig,
+  options: { forceFallback?: boolean } = {},
 ): CommandGateResult {
-  const ast = parseShellAST(command);
+  const ast = options.forceFallback ? null : parseShellAST(command);
 
-  if (ast && isSimpleAllowlistedAST(ast, config)) {
+  if (ast ? isSimpleAllowlistedAST(ast, config) : isSimpleAllowlistedFallback(command, config)) {
     return {
       gate: 1,
       decision: "allow",
