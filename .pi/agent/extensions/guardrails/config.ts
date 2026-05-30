@@ -61,6 +61,8 @@ interface LoadedSource {
 }
 
 const configCache = new Map<string, CachedConfig>();
+const MAX_PREFLIGHT_RULES = 20;
+const MAX_PREFLIGHT_RULE_CHARS = 500;
 
 function getAgentDir(): string {
   const configured = process.env.PI_AGENT_DIR;
@@ -182,6 +184,18 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
+function normalizePreflightRules(value: string[]): string[] {
+  return value.map((rule) => rule.trim()).filter((rule) => rule.length > 0);
+}
+
+function hasUnsafePreflightRuleText(rule: string): boolean {
+  return /[\r\n\u2028\u2029\t\0-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(rule) ||
+    /\[\/?PREFLIGHT_VERDICT\]|```|\b(?:DECISION|REASON|CONCERNS):/i.test(rule) ||
+    /\b(?:ignore|disregard|forget|override)\b.*\b(?:instruction|policy|rule|above|previous|prior)\b/i.test(rule) ||
+    /\balways\s+(?:allow|approve)\b/i.test(rule) ||
+    /\b(?:return|output|respond)\b.*\b(?:allow|deny|confirm|verdict|decision)\b/i.test(rule);
+}
+
 interface ValidationError {
   field: string;
   message: string;
@@ -264,6 +278,23 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
           errors.push({ field: "bash.preflightModel", message: "must be a string" });
         }
       }
+
+      if (raw.bash.preflightRules !== undefined) {
+        if (isStringArray(raw.bash.preflightRules)) {
+          const rules = normalizePreflightRules(raw.bash.preflightRules);
+          if (rules.length > MAX_PREFLIGHT_RULES) {
+            errors.push({ field: "bash.preflightRules", message: `must contain at most ${MAX_PREFLIGHT_RULES} non-empty rules` });
+          } else if (rules.some((rule) => rule.length > MAX_PREFLIGHT_RULE_CHARS)) {
+            errors.push({ field: "bash.preflightRules", message: `each rule must be at most ${MAX_PREFLIGHT_RULE_CHARS} characters` });
+          } else if (rules.some(hasUnsafePreflightRuleText)) {
+            errors.push({ field: "bash.preflightRules", message: "must contain only single-line plain-text policy statements" });
+          } else {
+            config.bash.preflightRules = rules;
+          }
+        } else {
+          errors.push({ field: "bash.preflightRules", message: "must be an array of strings" });
+        }
+      }
     } else {
       errors.push({ field: "bash", message: "must be an object" });
     }
@@ -305,6 +336,7 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
       deny: mergeArrays(base.bash?.deny, override.bash.deny),
       allow: mergeArrays(base.bash?.allow, override.bash.allow),
       preflightModel: override.bash.preflightModel ?? base.bash?.preflightModel,
+      preflightRules: mergeArrays(base.bash?.preflightRules, override.bash.preflightRules),
     };
   }
 

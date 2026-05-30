@@ -145,7 +145,7 @@ import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
-import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, runPreflightJudge } from "./preflight.js";
+import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
@@ -329,6 +329,9 @@ export default function (pi: ExtensionAPI) {
     if (config.bash?.deny?.length) {
       lines.push(t.fg("dim", `  Bash Deny:   ${config.bash.deny.join(", ")}`));
     }
+    if (config.bash?.preflightRules?.length) {
+      lines.push(t.fg("dim", `  Gate 2 rules: ${formatPreflightRulesForDisplay(config.bash.preflightRules)}`));
+    }
     lines.push(t.fg("dim", `  Scope:       ${scopeLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
@@ -496,6 +499,7 @@ export default function (pi: ExtensionAPI) {
         recentContext: "", // Do not forward chat/session text into the preflight subprocess.
         gate1Reason: gateResult.reason,
         gate1Hints: gateResult.hints,
+        preflightRules: currentConfig.bash?.preflightRules ?? [],
       });
 
       let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
@@ -623,6 +627,7 @@ export default function (pi: ExtensionAPI) {
         `Deny:        ${cfg.bash?.deny?.length ? cfg.bash.deny.join(", ") : "(none)"}`,
         `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
         `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
+        `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
       ];
       ctx.ui.notify(lines.join("\n"), "info");
     },

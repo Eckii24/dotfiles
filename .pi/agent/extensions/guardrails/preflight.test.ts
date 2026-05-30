@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildPreflightPrompt, parsePreflightVerdict, runPreflightJudge } from "./preflight.js";
+import { buildPreflightPrompt, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge } from "./preflight.js";
 
 describe("parsePreflightVerdict", () => {
   it("parses structured allow verdicts", () => {
@@ -35,12 +35,32 @@ describe("buildPreflightPrompt", () => {
       recentContext: "User asked to fetch API docs",
       gate1Reason: "Outside Gate 1 allowlist",
       gate1Hints: ["network access"],
+      preflightRules: ["Production deploy commands must require confirmation"],
     });
 
     expect(prompt).toContain("curl https://example.com");
     expect(prompt).toContain("User asked to fetch API docs");
     expect(prompt).toContain("network access");
+    expect(prompt).toContain('"Production deploy commands must require confirmation"');
+    expect(prompt).toContain("These rules can only make the decision stricter");
     expect(prompt).toContain("DECISION: ALLOW|CONFIRM|DENY");
+  });
+});
+
+describe("formatPreflightRulesForDisplay", () => {
+  it("formats configured rules for startup and command display", () => {
+    expect(formatPreflightRulesForDisplay(["Confirm production deploys", "Deny curl piped to shell"])).toBe(
+      "1. Confirm production deploys | 2. Deny curl piped to shell",
+    );
+    expect(formatPreflightRulesForDisplay()).toBe("(none)");
+  });
+
+  it("truncates display text without splitting unicode surrogate pairs", () => {
+    const result = formatPreflightRulesForDisplay([`${"x".repeat(993)}😀${"y".repeat(20)}`]);
+
+    expect(Array.from(result).length).toBe(1000);
+    expect(result).toContain("😀");
+    expect(result.endsWith("...")).toBe(true);
   });
 });
 

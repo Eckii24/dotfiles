@@ -25,6 +25,8 @@ export interface BashConfig {
   allow?: string[];
   /** provider/model id used for the Gate-2 preflight judge */
   preflightModel?: string;
+  /** Additive soft rules appended to the Gate-2 preflight prompt. Cannot weaken core policy. */
+  preflightRules?: string[];
 }
 
 /** Root guardrails configuration */
