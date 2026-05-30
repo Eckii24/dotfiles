@@ -5,6 +5,9 @@
   "defaultModel": "gpt-5.4",
   "enableInstallTelemetry": false,
   "packages": [],
+  "npmCommand": [
+    "bun"
+  ],
   "guardrails": {
     "timeout": 300000,
     "paths": {
