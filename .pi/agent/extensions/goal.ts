@@ -31,6 +31,7 @@ import {
 	CURSOR_MARKER,
 	type Focusable,
 	matchesKey,
+	truncateToWidth,
 	visibleWidth,
 } from "@mariozechner/pi-tui";
 
@@ -38,7 +39,7 @@ import {
 
 const GOAL_STATE_ENTRY_TYPE = "goal-state";
 const GOAL_GLOBAL_STATE_KEY = "__piGoalGlobalState";
-const DEFAULT_MAX_TURNS = 50;
+const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_EVALUATOR_MODEL = "github-copilot/claude-haiku-4.5";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 
@@ -82,6 +83,12 @@ type GoalGlobalState = {
 	activeGoalId?: string;
 	evaluatorProcess?: ChildProcessWithoutNullStreams;
 	abortEvaluation?: () => void;
+	sessionControl?: {
+		goalId: string;
+		parentSession?: string;
+		control: GoalSessionControl;
+	};
+	handoffGoalId?: string;
 };
 
 type GoalSessionControl = Pick<
@@ -152,10 +159,49 @@ function getGlobalState(): GoalGlobalState {
 	return g[GOAL_GLOBAL_STATE_KEY]!;
 }
 
+function setGoalSessionControl(ctx: ExtensionCommandContext, state: GoalState): void {
+	getGlobalState().sessionControl = {
+		goalId: state.goalId,
+		parentSession: state.parentSession,
+		control: {
+			newSession: ctx.newSession,
+			waitForIdle: ctx.waitForIdle,
+			isIdle: ctx.isIdle,
+			hasPendingMessages: ctx.hasPendingMessages,
+		},
+	};
+}
+
+function getGoalSessionControl(state?: Pick<GoalState, "goalId">): GoalSessionControl | undefined {
+	const stored = getGlobalState().sessionControl;
+	if (!stored) return undefined;
+	if (state && stored.goalId !== state.goalId) return undefined;
+	return stored.control;
+}
+
+function clearGoalSessionControl(goalId: string): void {
+	const globalState = getGlobalState();
+	if (globalState.sessionControl?.goalId === goalId) {
+		globalState.sessionControl = undefined;
+	}
+	if (globalState.handoffGoalId === goalId) {
+		globalState.handoffGoalId = undefined;
+	}
+}
+
+function markGoalHandoff(goalId: string, active: boolean): void {
+	const globalState = getGlobalState();
+	if (active) {
+		globalState.handoffGoalId = goalId;
+	} else if (globalState.handoffGoalId === goalId) {
+		globalState.handoffGoalId = undefined;
+	}
+}
+
 // ── State persistence helpers ────────────────────────────────────────
 
 function getLatestGoalState(ctx: ExtensionContext): GoalState | undefined {
-	const entries = ctx.sessionManager.getEntries() as Array<{
+	const entries = ctx.sessionManager.getBranch() as Array<{
 		type: string;
 		customType?: string;
 		data?: unknown;
@@ -203,7 +249,14 @@ function buildEvaluatorPrompt(
 	}
 	parts.push("");
 	parts.push("Verify whether the goal condition above is met. Use tools to check independently.");
-	parts.push("End your response with the [GOAL_VERDICT] block.");
+	parts.push("Do NOT modify anything. Never edit files, write files, create files, or make changes.");
+	parts.push("Be decisive. If uncertain, return NO and explain what remains.");
+	parts.push("");
+	parts.push("You MUST end your response with exactly this block:");
+	parts.push("[GOAL_VERDICT]");
+	parts.push("MET: YES or NO");
+	parts.push("REASON: One or two sentences explaining why the condition is or is not met.");
+	parts.push("[/GOAL_VERDICT]");
 	return parts.join("\n");
 }
 
@@ -333,12 +386,10 @@ async function runEvaluator(
 			if (verdict) {
 				resolve(verdict);
 			} else {
-				// Fallback: if no structured verdict, treat as NOT met
-				reject(
-					new Error(
-						`Evaluator did not return a structured verdict. Output: ${stdout.slice(0, 500)}`,
-					),
-				);
+				resolve({
+					met: false,
+					reason: `Evaluator did not return a structured verdict. Output: ${stdout.slice(0, 500)}`,
+				});
 			}
 		});
 
@@ -358,6 +409,26 @@ function parseVerdict(output: string): EvaluationResult | undefined {
 		met: match[1]!.toUpperCase() === "YES",
 		reason: match[2]!.trim(),
 	};
+}
+
+function buildGoalWorkPrompt(condition: string): string {
+	return `Goal: ${condition}\n\nWork toward this goal. When you believe it is complete, describe what you did and the evidence of completion.`;
+}
+
+function buildGoalContinuationPrompt(
+	state: GoalState,
+	evalReason: string,
+	prefix = "The evaluator determined the goal is NOT yet met.",
+): string {
+	return [
+		prefix,
+		"",
+		`Goal: ${state.condition}`,
+		"",
+		`Evaluator feedback: ${evalReason}`,
+		"",
+		`Iteration ${state.currentTurn} of ${state.maxTurns}. Continue working toward the goal. Address the evaluator's feedback.`,
+	].join("\n");
 }
 
 // ── Status display ───────────────────────────────────────────────────
@@ -420,7 +491,6 @@ async function pickEvaluatorModel(ctx: ExtensionContext): Promise<string | undef
 // ── Extension ────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
-	let sessionControl: GoalSessionControl | undefined;
 	let latestCtx: ExtensionContext | undefined;
 
 	pi.registerCommand("goal", {
@@ -433,10 +503,15 @@ export default function (pi: ExtensionAPI) {
 				currentState &&
 				(currentState.status === "active" ||
 					currentState.status === "evaluating");
+			const hasGoal =
+				currentState &&
+				(currentState.status === "active" ||
+					currentState.status === "evaluating" ||
+					currentState.status === "paused");
 
 			// /goal clear
 			if (CLEAR_ALIASES.has(trimmed.toLowerCase())) {
-				if (!isActive) {
+				if (!hasGoal) {
 					ctx.ui.notify("No active goal to clear", "info");
 					return;
 				}
@@ -446,8 +521,8 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// /goal status (or /goal with no args when goal is active)
-			if (trimmed.toLowerCase() === "status" || (trimmed === "" && isActive)) {
-				if (!isActive) {
+			if (trimmed.toLowerCase() === "status" || (trimmed === "" && hasGoal)) {
+				if (!hasGoal) {
 					ctx.ui.notify("No active goal", "info");
 					return;
 				}
@@ -530,18 +605,35 @@ export default function (pi: ExtensionAPI) {
 		if (!state) return;
 
 		if (state.status === "active" || state.status === "evaluating") {
+			if (state.useFreshSession && !getGoalSessionControl(state)) {
+				const paused: GoalState = {
+					...state,
+					status: "paused",
+					lastEvalReason: "Fresh-session control unavailable after reload or resume. Start /goal again to continue autonomously.",
+				};
+				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, paused);
+				updateStatus(ctx, paused);
+				return;
+			}
+
 			// Restore active goal display
 			const restored: GoalState = { ...state, status: "active" };
 			pi.appendEntry(GOAL_STATE_ENTRY_TYPE, restored);
 			updateStatus(ctx, restored);
+		} else if (state.status === "paused") {
+			updateStatus(ctx, state);
 		}
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (event) => {
 		// Kill any running evaluator
 		const globalState = getGlobalState();
 		globalState.abortEvaluation?.();
-		clearStatus(latestCtx!);
+		if (event.reason !== "new" || !globalState.handoffGoalId) {
+			globalState.sessionControl = undefined;
+			globalState.handoffGoalId = undefined;
+		}
+		if (latestCtx) clearStatus(latestCtx);
 	});
 
 	pi.on("agent_end", async (event, ctx) => {
@@ -562,23 +654,6 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Check turn limit
-		if (state.currentTurn >= state.maxTurns) {
-			pi.appendEntry(GOAL_STATE_ENTRY_TYPE, {
-				...state,
-				status: "paused",
-				lastEvalReason: `Turn limit reached (${state.maxTurns})`,
-			});
-			updateStatus(ctx, { ...state, status: "paused" });
-			if (ctx.hasUI) {
-				ctx.ui.notify(
-					`Goal paused: turn limit reached (${state.maxTurns})`,
-					"warning",
-				);
-			}
-			return;
-		}
-
 		// Run evaluator
 		await evaluateAndContinue(pi, ctx, state);
 	});
@@ -590,13 +665,6 @@ export default function (pi: ExtensionAPI) {
 		ctx: ExtensionCommandContext,
 		options: GoalOptions,
 	): Promise<void> {
-		sessionControl = {
-			newSession: ctx.newSession,
-			waitForIdle: ctx.waitForIdle,
-			isIdle: ctx.isIdle,
-			hasPendingMessages: ctx.hasPendingMessages,
-		};
-
 		const state: GoalState = {
 			version: 1,
 			goalId: randomUUID(),
@@ -609,14 +677,25 @@ export default function (pi: ExtensionAPI) {
 			parentSession: ctx.sessionManager.getSessionFile(),
 		};
 
+		setGoalSessionControl(ctx, state);
+
+		if (state.useFreshSession) {
+			const started = await openGoalSessionWithPrompt(pi, ctx, state, undefined);
+			if (!started) {
+				clearGoalSessionControl(state.goalId);
+				if (ctx.hasUI) {
+					ctx.ui.notify("Goal cancelled — fresh session was not started", "info");
+				}
+			}
+			return;
+		}
+
 		pi.appendEntry(GOAL_STATE_ENTRY_TYPE, state);
 		updateStatus(ctx, state);
 
-		setDirtyRepoGuardBypass(pi, state.goalId, true);
-
 		// Send the condition as the initial prompt
 		pi.sendUserMessage(
-			`Goal: ${options.condition}\n\nWork toward this goal. When you believe it is complete, describe what you did and the evidence of completion.`,
+			buildGoalWorkPrompt(state.condition),
 			{ deliverAs: "followUp" },
 		);
 	}
@@ -639,7 +718,6 @@ export default function (pi: ExtensionAPI) {
 		);
 
 		let result: EvaluationResult | undefined;
-		let retried = false;
 
 		for (let attempt = 0; attempt < 2; attempt++) {
 			try {
@@ -651,7 +729,6 @@ export default function (pi: ExtensionAPI) {
 				break;
 			} catch (error) {
 				if (attempt === 0) {
-					retried = true;
 					continue;
 				}
 				// Second failure — pause
@@ -664,6 +741,7 @@ export default function (pi: ExtensionAPI) {
 				};
 				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, pausedState);
 				updateStatus(ctx, pausedState);
+				clearGoalSessionControl(state.goalId);
 				if (ctx.hasUI) {
 					ctx.ui.notify(
 						`Goal paused: evaluator failed after retry — ${errorMsg}`,
@@ -693,6 +771,7 @@ export default function (pi: ExtensionAPI) {
 					pi.appendEntry(GOAL_STATE_ENTRY_TYPE, metState);
 					clearStatus(ctx);
 					setDirtyRepoGuardBypass(pi, state.goalId, false);
+					clearGoalSessionControl(state.goalId);
 					ctx.ui.notify("Goal achieved ✓", "info");
 				} else {
 					// User wants to keep going
@@ -704,13 +783,36 @@ export default function (pi: ExtensionAPI) {
 					};
 					pi.appendEntry(GOAL_STATE_ENTRY_TYPE, continueState);
 					updateStatus(ctx, continueState);
-					sendContinuationPrompt(pi, state, result.reason, true);
+					if (state.useFreshSession) {
+						await openNextFreshSession(pi, ctx, continueState, result.reason);
+					} else {
+						sendContinuationPrompt(pi, continueState, result.reason, true);
+					}
 				}
 			} else {
 				// Non-interactive — just clear
 				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, metState);
 				clearStatus(ctx);
 				setDirtyRepoGuardBypass(pi, state.goalId, false);
+				clearGoalSessionControl(state.goalId);
+			}
+			return;
+		}
+
+		if (state.currentTurn >= state.maxTurns) {
+			const pausedState: GoalState = {
+				...state,
+				status: "paused",
+				lastEvalReason: `Turn limit reached (${state.maxTurns}). Last evaluation: ${result.reason}`,
+			};
+			pi.appendEntry(GOAL_STATE_ENTRY_TYPE, pausedState);
+			updateStatus(ctx, pausedState);
+			clearGoalSessionControl(state.goalId);
+			if (ctx.hasUI) {
+				ctx.ui.notify(
+					`Goal paused: turn limit reached (${state.maxTurns})`,
+					"warning",
+				);
 			}
 			return;
 		}
@@ -725,12 +827,25 @@ export default function (pi: ExtensionAPI) {
 		pi.appendEntry(GOAL_STATE_ENTRY_TYPE, nextState);
 		updateStatus(ctx, nextState);
 
-		if (state.useFreshSession && sessionControl) {
+		if (state.useFreshSession) {
+			const control = getGoalSessionControl(state);
+			if (!control) {
+				const pausedState: GoalState = {
+					...nextState,
+					status: "paused",
+					lastEvalReason: "Fresh-session control unavailable. Start /goal again to continue autonomously.",
+				};
+				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, pausedState);
+				updateStatus(ctx, pausedState);
+				clearGoalSessionControl(state.goalId);
+				return;
+			}
+
 			// Fresh session mode: spawn a new session
 			await openNextFreshSession(pi, ctx, nextState, result.reason);
 		} else {
 			// Same session mode: send continuation message
-			sendContinuationPrompt(pi, state, result.reason, false);
+			sendContinuationPrompt(pi, nextState, result.reason, false);
 		}
 	}
 
@@ -745,15 +860,7 @@ export default function (pi: ExtensionAPI) {
 			: "The evaluator determined the goal is NOT yet met.";
 
 		pi.sendUserMessage(
-			[
-				`${prefix}`,
-				"",
-				`Goal: ${state.condition}`,
-				"",
-				`Evaluator feedback: ${evalReason}`,
-				"",
-				"Continue working toward the goal. Address the evaluator's feedback.",
-			].join("\n"),
+			buildGoalContinuationPrompt(state, evalReason, prefix),
 			{ deliverAs: "followUp" },
 		);
 	}
@@ -764,40 +871,60 @@ export default function (pi: ExtensionAPI) {
 		nextState: GoalState,
 		evalReason: string,
 	): Promise<void> {
-		if (!sessionControl) return;
+		const result = await openGoalSessionWithPrompt(pi, ctx, nextState, evalReason);
+		if (!result) {
+			const pausedState: GoalState = {
+				...nextState,
+				status: "paused",
+				lastEvalReason: "Fresh-session handoff cancelled.",
+			};
+			pi.appendEntry(GOAL_STATE_ENTRY_TYPE, pausedState);
+			updateStatus(ctx, pausedState);
+			clearGoalSessionControl(nextState.goalId);
+		}
+	}
 
-		setDirtyRepoGuardBypass(pi, nextState.goalId, true);
+	async function openGoalSessionWithPrompt(
+		pi: ExtensionAPI,
+		ctx: ExtensionContext,
+		state: GoalState,
+		evalReason: string | undefined,
+	): Promise<boolean> {
+		const control = getGoalSessionControl(state);
+		if (!control) return false;
+
+		setDirtyRepoGuardBypass(pi, state.goalId, true);
+		markGoalHandoff(state.goalId, true);
 
 		try {
-			const result = await sessionControl.newSession({
-				...(nextState.parentSession
-					? { parentSession: nextState.parentSession }
+			const result = await control.newSession({
+				...(state.parentSession
+					? { parentSession: state.parentSession }
 					: {}),
 				setup: async (sessionManager) => {
 					sessionManager.appendCustomEntry(
 						GOAL_STATE_ENTRY_TYPE,
-						nextState,
+						state,
 					);
 				},
 				withSession: async (freshCtx) => {
-					// Send the goal prompt in the fresh session
 					await freshCtx.sendUserMessage(
-						[
-							`Goal: ${nextState.condition}`,
-							"",
-							`Previous evaluation feedback: ${evalReason}`,
-							"",
-							`This is iteration ${nextState.currentTurn} of ${nextState.maxTurns}. Continue working toward the goal.`,
-						].join("\n"),
+						evalReason
+							? buildGoalContinuationPrompt(state, evalReason)
+							: buildGoalWorkPrompt(state.condition),
 					);
 				},
 			});
 
+			markGoalHandoff(state.goalId, false);
 			if (result.cancelled) {
-				setDirtyRepoGuardBypass(pi, nextState.goalId, false);
+				setDirtyRepoGuardBypass(pi, state.goalId, false);
+				return false;
 			}
+			return true;
 		} catch (error) {
-			setDirtyRepoGuardBypass(pi, nextState.goalId, false);
+			markGoalHandoff(state.goalId, false);
+			setDirtyRepoGuardBypass(pi, state.goalId, false);
 			throw error;
 		}
 	}
@@ -811,6 +938,7 @@ export default function (pi: ExtensionAPI) {
 		pi.appendEntry(GOAL_STATE_ENTRY_TYPE, cleared);
 		clearStatus(ctx);
 		setDirtyRepoGuardBypass(pi, state.goalId, false);
+		clearGoalSessionControl(state.goalId);
 
 		// Kill any running evaluator
 		const globalState = getGlobalState();
@@ -1022,10 +1150,12 @@ class GoalDialog implements Focusable {
 			return s + " ".repeat(Math.max(0, targetWidth - vis));
 		};
 
-		const row = (content: string) =>
-			th.fg("border", "│") +
-			pad(content, innerW) +
-			th.fg("border", "│");
+		const row = (content: string) => {
+			const clipped = truncateToWidth(content, innerW, "…");
+			return th.fg("border", "│") +
+				pad(clipped, innerW) +
+				th.fg("border", "│");
+		};
 
 		const renderInput = (
 			text: string,
@@ -1079,7 +1209,7 @@ class GoalDialog implements Focusable {
 			this.maxTurnsText,
 			this.maxTurnsCursor,
 			turnsActive,
-			"50",
+			"10",
 		);
 		lines.push(row(`${turnsLabel} ${turnsInput}`));
 		lines.push(row(""));
