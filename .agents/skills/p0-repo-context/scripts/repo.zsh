@@ -1,6 +1,8 @@
 function repo() {
   local command_to_run=""
-  local repo_path="$REPO_PATH"
+  local repo_path="${REPO_PATH:-}"
+  local organization_url="${AZURE_DEVOPS_ORG_URL:-}"
+  local project_name="${AZURE_DEVOPS_DEFAULT_PROJECT:-}"
   local no_cache=false
   local cache_file="$HOME/.local/state/repo/repos.txt"
   local cache_dir="$HOME/.local/state/repo"
@@ -16,6 +18,14 @@ function repo() {
     case $1 in
       --repo-path)
         repo_path="$2"
+        shift 2
+        ;;
+      --organization|--org-url)
+        organization_url="$2"
+        shift 2
+        ;;
+      --project)
+        project_name="$2"
         shift 2
         ;;
       --no-cache)
@@ -93,6 +103,14 @@ OPTIONS
       Override the base directory where repositories are cloned.
       Defaults to the REPO_PATH environment variable.
 
+  --organization <url>, --org-url <url>
+      Override the Azure DevOps organization URL used to fetch repositories.
+      Defaults to the AZURE_DEVOPS_ORG_URL environment variable.
+
+  --project <name>
+      Override the Azure DevOps project name used to fetch repositories.
+      Defaults to the AZURE_DEVOPS_DEFAULT_PROJECT environment variable.
+
   --no-cache
       Delete the local repository cache before running, forcing a fresh fetch
       from Azure DevOps.
@@ -103,7 +121,7 @@ OPTIONS
 
 ENVIRONMENT
   REPO_PATH                    Base directory for cloned repositories.
-  AZURE_DEVOPS_ORG_URL         Azure DevOps organisation URL.
+  AZURE_DEVOPS_ORG_URL         Default Azure DevOps organisation URL.
   AZURE_DEVOPS_DEFAULT_PROJECT Default Azure DevOps project name.
 
 EXAMPLES
@@ -128,6 +146,9 @@ EXAMPLES
   # Force cache refresh then open picker
   repo --no-cache
 
+  # Fully explicit usage without environment variables
+  repo --organization https://dev.azure.com/my-org --project MyProject --list
+
 LLM USAGE GUIDE
   LLMs cannot use the interactive fzf picker. Use this workflow instead:
 
@@ -144,6 +165,8 @@ LLM USAGE GUIDE
        repo --name <exact-name> --command "<shell-cmd>"
 
   If REPO_PATH is not set, pass --repo-path <dir> explicitly.
+  If AZURE_DEVOPS_ORG_URL or AZURE_DEVOPS_DEFAULT_PROJECT are not set,
+  pass --organization <url> and --project <name> when refreshing cache.
   Re-run with --no-cache if the repository list may be stale.
 EOF
         return 0
@@ -186,12 +209,17 @@ EOF
 
   # Check if cache file exists
   if [[ ! -f "$cache_file" ]]; then
+    if [[ -z "$organization_url" || -z "$project_name" ]]; then
+      echo "Error: Azure DevOps organization/project not set. Pass --organization <url> and --project <name>, or set AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_DEFAULT_PROJECT." >&2
+      return 1
+    fi
+
     # Create folder structure
     mkdir -p "$cache_dir"
 
     # Run az repos list command and save to cache
     echo "Fetching repository list..." >&2
-    az repos list --organization $AZURE_DEVOPS_ORG_URL --project $AZURE_DEVOPS_DEFAULT_PROJECT --output tsv --query '[].{Name:name,SSHUrl:sshUrl}' > "$cache_file"
+    az repos list --organization "$organization_url" --project "$project_name" --output tsv --query '[].{Name:name,SSHUrl:sshUrl}' > "$cache_file"
 
     if [[ $? -ne 0 ]]; then
       echo "Error: Failed to fetch repository list." >&2
