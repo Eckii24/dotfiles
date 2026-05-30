@@ -152,6 +152,7 @@ import { DEFAULT_TIMEOUT } from "./types.js";
 
 const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
 const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
+const DECISION_ENTRY_TYPE = "guardrails-decision";
 
 function allowWriteLabel(config: GuardrailsConfig): string {
   const aw = config.paths?.allowWrite;
@@ -297,8 +298,74 @@ async function confirmBashViolation(
 }
 
 export default function (pi: ExtensionAPI) {
+  pi.registerFlag("no-guardrails", {
+    description: "Disable Guardrails for this session",
+    type: "boolean",
+    default: false,
+  });
+  pi.registerFlag("no-preflight-guardrails", {
+    description: "Disable Guardrails Gate-2 preflight model checks for this session",
+    type: "boolean",
+    default: false,
+  });
+
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
+
+  function guardrailsDisabled(): boolean {
+    return Boolean(pi.getFlag("no-guardrails"));
+  }
+
+  function preflightDisabled(): boolean {
+    return guardrailsDisabled() || Boolean(pi.getFlag("no-preflight-guardrails"));
+  }
+
+  function recordDecision(
+    ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1],
+    action: string,
+    data: Record<string, unknown> = {},
+  ): void {
+    try {
+      pi.appendEntry(DECISION_ENTRY_TYPE, {
+        action,
+        cwd: ctx.cwd,
+        effectiveCwd: getEffectiveCwd(ctx.cwd),
+        timestamp: new Date().toISOString(),
+        ...data,
+      });
+    } catch {
+      // Decision persistence must never affect tool execution.
+    }
+  }
+
+  function restoreSessionAllows(ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1]): number {
+    const entries = ctx.sessionManager.getBranch() as Array<{
+      type: string;
+      customType?: string;
+      data?: unknown;
+    }>;
+    const restored = new Map<string, { scope: string; command: string }>();
+
+    for (const entry of entries) {
+      if (entry.type !== "custom" || entry.customType !== DECISION_ENTRY_TYPE) continue;
+      if (typeof entry.data !== "object" || entry.data === null) continue;
+
+      const data = entry.data as { action?: unknown; effectiveCwd?: unknown; command?: unknown };
+      if (typeof data.action !== "string" || typeof data.effectiveCwd !== "string" || typeof data.command !== "string") continue;
+
+      const key = `${data.effectiveCwd}\u0000${data.command}`;
+      if (data.action.endsWith("allowed-session")) {
+        restored.set(key, { scope: data.effectiveCwd, command: data.command });
+      } else if (data.action.includes("denied") || data.action.includes("blocked")) {
+        restored.delete(key);
+      }
+    }
+
+    for (const { scope, command } of restored.values()) {
+      sessionAllow.allowCommand(scope, command);
+    }
+    return restored.size;
+  }
 
   function refreshConfig(cwd: string, force = false): GuardrailsConfig {
     config = loadConfig(cwd, { force });
@@ -309,6 +376,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     config = refreshConfig(ctx.cwd, true);
     sessionAllow.clear();
+    const restoredAllows = restoreSessionAllows(ctx);
 
     const t = ctx.ui.theme;
     const astAvailable = isShfmtAvailable();
@@ -316,6 +384,9 @@ export default function (pi: ExtensionAPI) {
 
     const header = t.fg("mdHeading", "[Guardrails]");
     const lines: string[] = [header];
+
+    lines.push(t.fg("dim", `  Disabled:    ${guardrailsDisabled() ? "yes" : "no"}`));
+    lines.push(t.fg("dim", `  Gate 2:      ${preflightDisabled() ? "disabled" : "enabled"}`));
 
     if (config.paths?.denyRead?.length) {
       lines.push(t.fg("dim", `  Deny Read:   ${config.paths.denyRead.join(", ")}`));
@@ -335,6 +406,15 @@ export default function (pi: ExtensionAPI) {
     lines.push(t.fg("dim", `  Scope:       ${scopeLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
+    if (restoredAllows > 0) {
+      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} session allow(s)`));
+    }
+
+    recordDecision(ctx, "session-start", {
+      disabled: guardrailsDisabled(),
+      preflightDisabled: preflightDisabled(),
+      restoredAllows,
+    });
 
     if (lines.length === 1) {
       lines.push(t.fg("dim", `  No rules configured [${parserLabel}]`));
@@ -349,6 +429,10 @@ export default function (pi: ExtensionAPI) {
     const patternCwd = getEffectiveCwd(ctx.cwd);
     const timeout = currentConfig.timeout ?? DEFAULT_TIMEOUT;
 
+    if (guardrailsDisabled()) {
+      return undefined;
+    }
+
     // ─── Read Guard ───
     if (isToolCallEventType("read", event)) {
       const filePath = event.input.path;
@@ -356,6 +440,7 @@ export default function (pi: ExtensionAPI) {
 
       if (!result.allowed && result.requiresConfirmation) {
         if (!ctx.hasUI) {
+          recordDecision(ctx, "read-blocked-no-ui", { toolName: "read", path: filePath, reason: result.reason });
           return { block: true, reason: `[Guardrails] Read blocked (no UI): ${result.reason}` };
         }
 
@@ -374,11 +459,14 @@ export default function (pi: ExtensionAPI) {
         })();
 
         if (!confirmed) {
+          recordDecision(ctx, "read-denied", { toolName: "read", path: filePath, reason: result.reason });
           return {
             block: true,
             reason: `[Guardrails] Read denied by user or timed out after ${Math.round(timeout / 1000)}s: ${result.reason}`,
           };
         }
+
+        recordDecision(ctx, "read-allowed-once", { toolName: "read", path: filePath, reason: result.reason });
       }
     }
 
@@ -390,6 +478,7 @@ export default function (pi: ExtensionAPI) {
       if (!result.allowed) {
         if (result.requiresConfirmation) {
           if (!ctx.hasUI) {
+            recordDecision(ctx, "write-blocked-no-ui", { toolName: event.toolName, path: filePath, reason: result.reason });
             return { block: true, reason: `[Guardrails] Write blocked (no UI): ${result.reason}` };
           }
 
@@ -408,15 +497,19 @@ export default function (pi: ExtensionAPI) {
           })();
 
           if (!confirmed) {
+            recordDecision(ctx, "write-denied", { toolName: event.toolName, path: filePath, reason: result.reason });
             return {
               block: true,
               reason: `[Guardrails] Write denied by user or timed out after ${Math.round(timeout / 1000)}s: ${result.reason}`,
             };
           }
+
+          recordDecision(ctx, "write-allowed-once", { toolName: event.toolName, path: filePath, reason: result.reason });
         } else {
           if (ctx.hasUI) {
             ctx.ui.notify(`🛡️ Write blocked: ${filePath}\n${result.reason}`, "warning");
           }
+          recordDecision(ctx, "write-blocked", { toolName: event.toolName, path: filePath, reason: result.reason });
           return {
             block: true,
             reason: `[Guardrails] Write blocked: ${result.reason}`,
@@ -432,6 +525,7 @@ export default function (pi: ExtensionAPI) {
 
       // Check session allow-list first
       if (sessionAllow.isAllowed(sessionScope, command)) {
+        recordDecision(ctx, "bash-allowed-session-reuse", { toolName: "bash", command });
         return undefined;
       }
 
@@ -442,6 +536,7 @@ export default function (pi: ExtensionAPI) {
 
         if (!ctx.hasUI) {
           const reasons = activeViolations.map(v => `  • ${v.details ?? v.command}`).join("\n");
+          recordDecision(ctx, "bash-blocked-no-ui", { toolName: "bash", command, violations: activeViolations });
           return {
             block: true,
             reason: `[Guardrails] Bash blocked (no UI):\n${reasons}`,
@@ -465,6 +560,7 @@ export default function (pi: ExtensionAPI) {
             `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
             "info",
           );
+          recordDecision(ctx, "bash-allowed-session", { toolName: "bash", command, violations: activeViolations });
           return undefined;
         }
 
@@ -476,6 +572,7 @@ export default function (pi: ExtensionAPI) {
             return `  • File write detected: ${v.details}`;
           }).join("\n");
 
+          recordDecision(ctx, "bash-denied", { toolName: "bash", command, violations: activeViolations });
           return {
             block: true,
             reason: `[Guardrails] Bash denied by user or timed out after ${Math.round(timeout / 1000)}s:\n${violationLines}`,
@@ -483,11 +580,17 @@ export default function (pi: ExtensionAPI) {
         }
 
         // "allow" — allow this one time, continue
+        recordDecision(ctx, "bash-allowed-once", { toolName: "bash", command, violations: activeViolations });
         return undefined;
       }
 
       const gateResult = evaluateBashCommandGates(command, ctx.cwd, currentConfig);
       if (gateResult.decision === "allow") {
+        return undefined;
+      }
+
+      if (preflightDisabled()) {
+        recordDecision(ctx, "bash-preflight-disabled-allowed", { toolName: "bash", command, gate1Reason: gateResult.reason, gate1Hints: gateResult.hints });
         return undefined;
       }
 
@@ -500,6 +603,7 @@ export default function (pi: ExtensionAPI) {
         gate1Reason: gateResult.reason,
         gate1Hints: gateResult.hints,
         preflightRules: currentConfig.bash?.preflightRules ?? [],
+        sessionAllowedCommands: sessionAllow.commandsForScope(sessionScope),
       });
 
       let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
@@ -520,6 +624,7 @@ export default function (pi: ExtensionAPI) {
         };
 
         if (!ctx.hasUI) {
+          recordDecision(ctx, "bash-preflight-error-blocked-no-ui", { toolName: "bash", command, violation: fallbackViolation });
           return {
             block: true,
             reason: `[Guardrails] Bash blocked: Gate-2 preflight failed without UI:\n  • ${fallbackViolation.details}`,
@@ -541,20 +646,24 @@ export default function (pi: ExtensionAPI) {
             `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
             "info",
           );
+          recordDecision(ctx, "bash-preflight-error-allowed-session", { toolName: "bash", command, violation: fallbackViolation });
           return undefined;
         }
 
         if (confirmResult === "deny") {
+          recordDecision(ctx, "bash-preflight-error-denied", { toolName: "bash", command, violation: fallbackViolation });
           return {
             block: true,
             reason: `[Guardrails] Bash denied after Gate-2 preflight failure:\n  • ${fallbackViolation.details}`,
           };
         }
 
+        recordDecision(ctx, "bash-preflight-error-allowed-once", { toolName: "bash", command, violation: fallbackViolation });
         return undefined;
       }
 
       if (preflightVerdict.decision === "allow") {
+        recordDecision(ctx, "bash-preflight-allowed", { toolName: "bash", command, preflightVerdict });
         return undefined;
       }
 
@@ -567,6 +676,7 @@ export default function (pi: ExtensionAPI) {
       };
 
       if (!ctx.hasUI) {
+        recordDecision(ctx, "bash-preflight-blocked-no-ui", { toolName: "bash", command, preflightVerdict, violation: verdictViolation });
         return {
           block: true,
           reason: `[Guardrails] Bash blocked by Gate-2 preflight (no UI):\n  • ${verdictViolation.details}`,
@@ -589,15 +699,19 @@ export default function (pi: ExtensionAPI) {
           `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
           "info",
         );
+        recordDecision(ctx, "bash-preflight-allowed-session", { toolName: "bash", command, preflightVerdict, violation: verdictViolation });
         return undefined;
       }
 
       if (confirmResult === "deny") {
+        recordDecision(ctx, "bash-preflight-denied", { toolName: "bash", command, preflightVerdict, violation: verdictViolation });
         return {
           block: true,
           reason: `[Guardrails] Bash denied by preflight after ${Math.round(timeout / 1000)}s:\n  • ${verdictViolation.details}`,
         };
       }
+
+      recordDecision(ctx, "bash-preflight-allowed-once", { toolName: "bash", command, preflightVerdict, violation: verdictViolation });
     }
 
     return undefined;

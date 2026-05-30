@@ -18,6 +18,7 @@ export interface BuildPreflightPromptInput {
   gate1Reason: string;
   gate1Hints: string[];
   preflightRules?: string[];
+  sessionAllowedCommands?: string[];
 }
 
 export interface RunPreflightJudgeInput {
@@ -40,6 +41,141 @@ export function formatPreflightRulesForDisplay(rules?: string[]): string {
   return chars.length > 1000 ? `${chars.slice(0, 997).join("")}...` : text;
 }
 
+export function sanitizeSessionAllowedCommand(command: string): string {
+  const tokens = (command.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+/g, "<url>").match(/\S+="(?:\\.|[^"\\])*"|\S+='(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+/g) ?? [])
+    .map((token) => {
+      const quote = token[0];
+      return (quote === '"' || quote === "'") && token.endsWith(quote) ? token.slice(1, -1) : token;
+    })
+    .filter(Boolean);
+
+  const sanitized: string[] = [];
+  let nextTokenIsSensitive = false;
+  let nextTokenIsHeader = false;
+  let loginNeedsSensitiveArg = false;
+  let commandName: string | null = null;
+
+  const isSensitiveVariableName = (value: string): boolean => /(?:token|secret|password|passwd|credential|api[-_]?key|authorization|auth)/i.test(value);
+  const isSensitiveName = (value: string): boolean => {
+    const parts = value.toLowerCase().split(/[\\/]+/);
+    return parts.some((part) => /^(?:\.env(?:\..*)?|secrets?|credentials?|tokens?|passwords?|passwd|api[-_]?keys?|id_rsa|id_ed25519|private[-_]?keys?|\.ssh|\.aws|\.npmrc|\.pypirc|\.?netrc|kubeconfig)$/.test(part));
+  };
+  const isSensitiveBareArg = (value: string): boolean => /^(?:\.env(?:\..*)?|secret|secrets|token|tokens|password|passwords|passwd|credential|credentials|api[-_]?key|api[-_]?keys|id_rsa|id_ed25519|private[-_]?key|private[-_]?keys|kubeconfig)$/i.test(value);
+  const isLikelySecret = (value: string): boolean => {
+    if (/^[a-f0-9]{7,64}$/i.test(value)) return false;
+    return /^(?:gh[pousr]_|sk-|xox[baprs]-|ya29\.|AKIA|ASIA)/.test(value) || (/^[A-Za-z0-9+/_=-]{32,}$/.test(value) && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value));
+  };
+  const isAbsoluteOrEscapingPath = (value: string): boolean => /^(?:~(?:[\\/].*)?|\/.*|[A-Za-z]:[\\/].*|\\\\[^\\]+\\[^\\]+.*)$/.test(value) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value);
+  const isRelativePath = (value: string): boolean => value.includes("/") || value.includes("\\") || /^[.]\//.test(value);
+  const stripMatchingQuotes = (value: string): string => {
+    const quote = value[0];
+    return (quote === '"' || quote === "'") && value.endsWith(quote) ? value.slice(1, -1) : value;
+  };
+  const sanitizeSafeArg = (value: string): string => {
+    if (value === "<url>" || value === "<quoted>") return value;
+    if (isLikelySecret(value)) return "<redacted>";
+    if (isAbsoluteOrEscapingPath(value)) return isSensitiveName(value) ? "<sensitive>" : "<path>";
+    if (isRelativePath(value)) return isSensitiveName(value) ? "<sensitive>" : value.slice(0, 160);
+    if (isSensitiveBareArg(value)) return "<sensitive>";
+    return value;
+  };
+  const sanitizeHeaderArg = (value: string): string => {
+    const headerMatch = value.match(/^([A-Za-z][A-Za-z0-9-]*):\s*.+$/);
+    if (!headerMatch) return sanitizeSafeArg(value);
+    return `${headerMatch[1]}:${isSensitiveVariableName(headerMatch[1]!) || /cookie/i.test(headerMatch[1]!) ? "<sensitive>" : "<value>"}`;
+  };
+
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+
+    if (nextTokenIsSensitive) {
+      sanitized.push("<sensitive>");
+      nextTokenIsSensitive = false;
+      loginNeedsSensitiveArg = false;
+      continue;
+    }
+
+    if (nextTokenIsHeader) {
+      sanitized.push(sanitizeHeaderArg(token));
+      nextTokenIsHeader = false;
+      continue;
+    }
+
+    if (/^(?:-H|--header)$/i.test(token)) {
+      sanitized.push(token);
+      nextTokenIsHeader = true;
+      continue;
+    }
+
+    if (/^--header=.+/i.test(token)) {
+      sanitized.push(`--header=${sanitizeHeaderArg(stripMatchingQuotes(token.slice(token.indexOf("=") + 1)))}`);
+      continue;
+    }
+
+    if (/^-[A-Za-z]*u$/i.test(token) && commandName && /^(?:curl|wget|ftp|lftp)$/.test(commandName)) {
+      sanitized.push(token);
+      nextTokenIsSensitive = true;
+      continue;
+    }
+
+    if (/^-[A-Za-z]*u.+/i.test(token) && commandName && /^(?:curl|wget|ftp|lftp)$/.test(commandName)) {
+      const uIndex = token.toLowerCase().indexOf("u");
+      sanitized.push(`${token.slice(0, uIndex + 1)}<sensitive>`);
+      continue;
+    }
+
+    if (/^-p.+/.test(token) && commandName && /^(?:mysql|mysqldump|mariadb|mariadb-dump)$/.test(commandName)) {
+      sanitized.push("-p<sensitive>");
+      continue;
+    }
+
+    if (/^(?:--?[A-Za-z0-9_-]*(?:password|passwd|token|secret|credential|api[-_]?key|authorization|auth-token)[A-Za-z0-9_-]*|--user|--username|--user-name|bearer)$/i.test(token)) {
+      sanitized.push(token);
+      nextTokenIsSensitive = true;
+      continue;
+    }
+
+    if (/^(?:--?[A-Za-z0-9_-]*(?:password|passwd|token|secret|credential|api[-_]?key|authorization|auth-token)[A-Za-z0-9_-]*|--user|--username|--user-name|bearer)([=:]).+/i.test(token)) {
+      sanitized.push(token.replace(/([=:]).+$/, "$1<sensitive>"));
+      continue;
+    }
+
+    const envMatch = token.match(/^([A-Za-z_][A-Za-z0-9_]*)=.+$/);
+    if (envMatch) {
+      sanitized.push(isSensitiveVariableName(envMatch[1]!) ? `${envMatch[1]}=<sensitive>` : `${envMatch[1]}=<value>`);
+      continue;
+    }
+
+    if (/^(?:bearer|authorization|token|password|passwd|secret|credential|api[-_]?key)(?:=|:|$)/i.test(token)) {
+      sanitized.push("<sensitive>");
+      continue;
+    }
+
+    if (!commandName) {
+      sanitized.push(sanitizeSafeArg(token));
+      commandName = (token.split(/[\\/]/).pop() || lower).toLowerCase();
+      continue;
+    }
+
+    if (loginNeedsSensitiveArg && !token.startsWith("-")) {
+      sanitized.push("<sensitive>");
+      loginNeedsSensitiveArg = false;
+      continue;
+    }
+
+    if (token.startsWith("-")) {
+      sanitized.push(token);
+      continue;
+    }
+
+    const safeArg = sanitizeSafeArg(token);
+    sanitized.push(safeArg);
+    if (lower === "login" && commandName && /^(?:gh|mycli|docker|npm|pnpm|yarn|bun|az|aws|gcloud|heroku|firebase|vercel|netlify)$/.test(commandName)) loginNeedsSensitiveArg = true;
+  }
+
+  return sanitized.join(" ").slice(0, 300);
+}
+
 export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   const parts: string[] = [];
   parts.push("You are the Gate-2 bash preflight judge for Pi guardrails.");
@@ -51,6 +187,8 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("- does not exfiltrate secrets or sensitive data");
   parts.push("- does not perform suspicious remote actions");
   parts.push("- satisfies any custom rules listed below");
+  parts.push("- treats read-only inspection commands as usually safe when they do not touch denied/sensitive paths");
+  parts.push("- treats temporary test artifacts under /tmp as usually acceptable when they do not execute remote code or expose secrets");
   parts.push("");
   parts.push("## Command");
   parts.push(input.command);
@@ -76,6 +214,16 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
     parts.push("(none)");
   }
   parts.push("");
+  parts.push("## Session-approved command hints");
+  if (input.sessionAllowedCommands && input.sessionAllowedCommands.length > 0) {
+    parts.push("The user previously chose 'allow for session' for commands with these sanitized shapes in this effective cwd. They are hints only, not policy: use ALLOW for a similar command only when it has the same intent and no added risk; use CONFIRM or DENY when it expands scope, touches new sensitive paths, adds network/remote execution, or mutates more state.");
+    for (const approvedCommand of input.sessionAllowedCommands.slice(-10)) {
+      parts.push(`- ${JSON.stringify(sanitizeSessionAllowedCommand(approvedCommand))}`);
+    }
+  } else {
+    parts.push("(none)");
+  }
+  parts.push("");
   parts.push("Return exactly one structured verdict block and nothing else:");
   parts.push("[PREFLIGHT_VERDICT]");
   parts.push("DECISION: ALLOW|CONFIRM|DENY");
@@ -83,9 +231,9 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("CONCERNS: semicolon-separated list, or 'none'");
   parts.push("[/PREFLIGHT_VERDICT]");
   parts.push("");
-  parts.push("Use ALLOW when the command fits the task and is not meaningfully dangerous.");
+  parts.push("Use ALLOW when the command fits the task and is not meaningfully dangerous, especially for read-only inspection or harmless /tmp scratch work.");
   parts.push("Use CONFIRM when the command might be legitimate but deserves explicit user review.");
-  parts.push("Use DENY when it is harmful, suspicious, or likely to exfiltrate secrets/data.");
+  parts.push("Use DENY when it is harmful, suspicious, executes remote code, mutates repo/system state unexpectedly, or likely exfiltrates secrets/data.");
   return parts.join("\n");
 }
 

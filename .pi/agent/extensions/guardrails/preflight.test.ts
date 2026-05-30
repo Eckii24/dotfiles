@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildPreflightPrompt, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge } from "./preflight.js";
+import { buildPreflightPrompt, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge, sanitizeSessionAllowedCommand } from "./preflight.js";
 
 describe("parsePreflightVerdict", () => {
   it("parses structured allow verdicts", () => {
@@ -36,14 +36,78 @@ describe("buildPreflightPrompt", () => {
       gate1Reason: "Outside Gate 1 allowlist",
       gate1Hints: ["network access"],
       preflightRules: ["Production deploy commands must require confirmation"],
+      sessionAllowedCommands: ["npm test -- --runInBand"],
     });
 
     expect(prompt).toContain("curl https://example.com");
     expect(prompt).toContain("User asked to fetch API docs");
     expect(prompt).toContain("network access");
+    expect(prompt).toContain("read-only inspection commands as usually safe");
+    expect(prompt).toContain("temporary test artifacts under /tmp as usually acceptable");
     expect(prompt).toContain('"Production deploy commands must require confirmation"');
     expect(prompt).toContain("These rules can only make the decision stricter");
+    expect(prompt).toContain("Session-approved command hints");
+    expect(prompt).toContain("sanitized shapes");
+    expect(prompt).toContain("same intent and no added risk");
+    expect(prompt).toContain('"npm test -- --runInBand"');
     expect(prompt).toContain("DECISION: ALLOW|CONFIRM|DENY");
+  });
+
+  it("redacts sensitive session-approved command hints", () => {
+    const prompt = buildPreflightPrompt({
+      command: "curl https://example.test/health",
+      cwd: "/repo",
+      effectiveCwd: "/repo",
+      recentContext: "",
+      gate1Reason: "Outside Gate 1 allowlist",
+      gate1Hints: ["network access"],
+      sessionAllowedCommands: ["curl -H 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz' https://secret.example.test/api?sig=abcdef"],
+    });
+
+    expect(prompt).toContain("curl -H Authorization:<sensitive> <url>");
+    expect(prompt).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(prompt).not.toContain("secret.example.test");
+  });
+});
+
+describe("sanitizeSessionAllowedCommand", () => {
+  it("keeps safe command shape while removing urls and likely secrets", () => {
+    expect(sanitizeSessionAllowedCommand("TOKEN=abcdefghijklmnopqrstuvwxyz123456 npm test /tmp/result.txt https://example.test")).toBe(
+      "TOKEN=<sensitive> npm test <path> <url>",
+    );
+    expect(sanitizeSessionAllowedCommand("cat config")).toBe("cat config");
+    expect(sanitizeSessionAllowedCommand("find src test")).toBe("find src test");
+    expect(sanitizeSessionAllowedCommand("scp foo bar")).toBe("scp foo bar");
+    expect(sanitizeSessionAllowedCommand("bun test agent/extensions/guardrails/preflight.test.ts")).toBe("bun test agent/extensions/guardrails/preflight.test.ts");
+    expect(sanitizeSessionAllowedCommand('bun test "agent/extensions/guardrails/preflight.test.ts"')).toBe("bun test agent/extensions/guardrails/preflight.test.ts");
+    expect(sanitizeSessionAllowedCommand("cat src/auth/login.ts src/env/config.ts")).toBe("cat src/auth/login.ts src/env/config.ts");
+    expect(sanitizeSessionAllowedCommand("npm run build:watch")).toBe("npm run build:watch");
+    expect(sanitizeSessionAllowedCommand("docker run node:20")).toBe("docker run node:20");
+    expect(sanitizeSessionAllowedCommand("git show HEAD:README.md")).toBe("git show HEAD:README.md");
+    expect(sanitizeSessionAllowedCommand("git add -u src/file.ts")).toBe("git add -u src/file.ts");
+    expect(sanitizeSessionAllowedCommand("git show 0123456789abcdef0123456789abcdef01234567 src/file.ts")).toBe("git show 0123456789abcdef0123456789abcdef01234567 src/file.ts");
+    expect(sanitizeSessionAllowedCommand("grep login src/auth/login.ts")).toBe("grep login src/auth/login.ts");
+  });
+
+  it("redacts sensitive args and paths", () => {
+    expect(sanitizeSessionAllowedCommand("cat .env")).toBe("cat <sensitive>");
+    expect(sanitizeSessionAllowedCommand("cat ~/.ssh/id_rsa")).toBe("cat <sensitive>");
+    expect(sanitizeSessionAllowedCommand('cat ~ / C:\\')).toBe("cat <path> <path> <path>");
+    expect(sanitizeSessionAllowedCommand("cat ./../package.json src/../../package.json")).toBe("cat <path> <path>");
+    expect(sanitizeSessionAllowedCommand("type C:\\repo\\src\\index.ts")).toBe("type <path>");
+    expect(sanitizeSessionAllowedCommand("type C:\\Users\\matthias\\.ssh\\id_rsa")).toBe("type <sensitive>");
+    expect(sanitizeSessionAllowedCommand("type \\\\server\\share\\repo\\file.txt")).toBe("type <path>");
+    expect(sanitizeSessionAllowedCommand("tool --password abc123")).toBe("tool --password <sensitive>");
+    expect(sanitizeSessionAllowedCommand("gh auth login --with-token abc123")).toBe("gh auth login --with-token <sensitive>");
+    expect(sanitizeSessionAllowedCommand("mycli login abc123")).toBe("mycli login <sensitive>");
+    expect(sanitizeSessionAllowedCommand("curl -u alice:secret123 https://example.test")).toBe("curl -u <sensitive> <url>");
+    expect(sanitizeSessionAllowedCommand("curl -ualice:secret123 https://example.test")).toBe("curl -u<sensitive> <url>");
+    expect(sanitizeSessionAllowedCommand("curl -su alice:secret123 https://example.test")).toBe("curl -su <sensitive> <url>");
+    expect(sanitizeSessionAllowedCommand("/usr/bin/curl -u alice:secret123 https://example.test")).toBe("<path> -u <sensitive> <url>");
+    expect(sanitizeSessionAllowedCommand("mysql -psecret123")).toBe("mysql -p<sensitive>");
+    expect(sanitizeSessionAllowedCommand("dbt debug --profiles-dir mongodb+srv://user:pass@cluster.example.test/db")).toBe("dbt debug --profiles-dir <url>");
+    expect(sanitizeSessionAllowedCommand("curl -H 'X-Api-Key: secret12345678901234567890' https://example.test")).toBe("curl -H X-Api-Key:<sensitive> <url>");
+    expect(sanitizeSessionAllowedCommand("curl --header='Cookie: session=secret12345678901234567890' https://example.test")).toBe("curl --header=Cookie:<sensitive> <url>");
   });
 });
 
