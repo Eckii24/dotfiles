@@ -48,7 +48,7 @@ If the user wants a live smoke pass, reload Pi resources and run `/skill:learn r
 
 ## Pitfalls & surprises
 
-- Skill discovery rules depend on scope. In this repo, `skills/learn/SKILL.md` is valid because the repo root is also `~/.pi/agent`, so it is a globally discovered skill location rather than an ordinary project-root `skills/` folder. Evidence: `/Users/matthias.eck/.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/docs/skills.md`, `skills/learn/SKILL.md`
+- Skill discovery rules depend on scope. In this repo, `skills/learn/SKILL.md` is valid because the repo root is also `~/.pi/agent`, so it is a globally discovered skill location rather than an ordinary project-root `skills/` folder. Evidence: `/Users/matthias.eck/.cache/.bun/install/global/node_modules/@earendil-works/pi-coding-agent/docs/skills.md`, `skills/learn/SKILL.md`
 
 ## Failed attempts / rejected options
 
@@ -69,7 +69,7 @@ If the user wants a live smoke pass, reload Pi resources and run `/skill:learn r
 - Summary: Put reusable global workflows for this agent root under `skills/<name>/SKILL.md` when the repo root is also `~/.pi/agent`, instead of relying on ad hoc non-canonical skill drafts.
   - Why it matters: That keeps manual `/skill:...` triggering and explicit agent skill reads aligned with Pi's actual global discovery rules.
   - Evidence:
-    - `/Users/matthias.eck/.cache/.bun/install/global/node_modules/@mariozechner/pi-coding-agent/docs/skills.md`
+    - `/Users/matthias.eck/.cache/.bun/install/global/node_modules/@earendil-works/pi-coding-agent/docs/skills.md`
     - `skills/learn/SKILL.md`
   - Candidate target: project learning
 - Summary: Keep `current-work.md` Todo Trackers minimal and move detailed execution steps into the plan artifact when one exists.

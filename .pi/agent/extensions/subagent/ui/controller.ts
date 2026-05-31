@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RootRunSnapshot, RunTreeNode, RunTreeRow } from "../run-model.js";
 import { SubagentRunStore } from "../run-store.js";
 import { buildActiveRunsWidgetLines, resolveWidgetLineWidth } from "./widget.js";

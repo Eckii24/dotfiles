@@ -15,7 +15,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const IS_SUBAGENT = process.env.PI_SUBAGENT === "1";
 

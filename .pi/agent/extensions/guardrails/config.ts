@@ -65,7 +65,7 @@ const MAX_PREFLIGHT_RULES = 20;
 const MAX_PREFLIGHT_RULE_CHARS = 500;
 
 function getAgentDir(): string {
-  const configured = process.env.PI_AGENT_DIR;
+  const configured = process.env.PI_CODING_AGENT_DIR ?? process.env.PI_AGENT_DIR;
   if (configured && configured.trim().length > 0) {
     return resolve(configured);
   }

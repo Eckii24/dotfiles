@@ -16,8 +16,8 @@
 //   /notify        — show status
 //   /notify test   — trigger a test notification
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { exec, execSync } from "node:child_process";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { execFile, execSync } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
@@ -80,8 +80,9 @@ export default function (pi: ExtensionAPI) {
     try {
       const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       const titleEscaped = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      exec(
-        `osascript -e 'display notification "${escaped}" with title "${titleEscaped}" sound name "Glass"'`,
+      execFile(
+        "osascript",
+        ["-e", `display notification "${escaped}" with title "${titleEscaped}" sound name "Glass"`],
         { timeout: 5000 },
         () => {}, // fire-and-forget, ignore errors
       );

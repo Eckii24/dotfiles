@@ -16,8 +16,17 @@
         "**/.env.*",
         "~/.ssh/**",
         "~/.gnupg/**",
+        "~/.aws/**",
+        "~/.config/gh/**",
+        "~/.kube/**",
+        "~/.pi/agent/auth.json",
+        "~/.pi/agent/models.json",
+        "**/.npmrc",
+        "**/.pypirc",
+        "**/.netrc",
         "**/*.pem",
         "**/*.key",
+        "**/auth.json",
         "**/credentials.json",
         "**/secrets.json",
         "**/*secrets.zsh"
@@ -34,8 +43,16 @@
         "**/.env.*",
         "**/.git/**",
         "**/node_modules/**",
+        "~/.pi/agent/auth.json",
+        "~/.pi/agent/models.json",
+        "**/.npmrc",
+        "**/.pypirc",
+        "**/.netrc",
         "**/*.pem",
-        "**/*.key"
+        "**/*.key",
+        "**/auth.json",
+        "**/credentials.json",
+        "**/secrets.json"
       ]
     },
     "bash": {

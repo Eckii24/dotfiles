@@ -137,9 +137,9 @@
 //   a `/* ... */` comment early and break TypeScript parsing.
 
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
-import { wrapTextWithAnsi } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { getConfigSourceInfo, loadConfig } from "./config.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite } from "./path-guard.js";

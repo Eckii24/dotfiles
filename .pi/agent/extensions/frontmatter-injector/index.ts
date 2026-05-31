@@ -1,5 +1,5 @@
-import type { AgentMessage, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
+import type { AgentMessage, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import type { FrontmatterInjection, FrontmatterRuntimeState } from "./contracts.js";
 import { loadFrontmatterInjectorSources } from "./config.js";
 import { buildFrontmatterRuntimeState } from "./scan.js";

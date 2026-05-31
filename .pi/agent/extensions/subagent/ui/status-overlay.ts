@@ -1,5 +1,5 @@
-import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
+import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { flattenRunTree, isActiveStatus, type RunTreeNode, type RunTreeRow } from "../run-model.js";
 import { renderRunNodeDetailPane } from "./detail-overlay.js";
 import { SubagentUIController } from "./controller.js";

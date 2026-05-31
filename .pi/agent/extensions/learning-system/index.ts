@@ -1,5 +1,5 @@
-import type { AgentMessage, ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
+import type { AgentMessage, ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import type { LearningInjection, LearningSystemPaths } from "./contracts.js";
 import { listAllLearningFiles } from "./scan.js";
 import { initializeLearningSystemRuntime, refreshRuntimeState, registerLearningRuntimeTools } from "./runtime.js";

@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 
 interface RepoWideInstruction {
 	path: string;
@@ -542,7 +542,7 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 
 		return pi
 			.getCommands()
-			.some((command) => command.name === commandName && command.source === "prompt" && command.path === stubPath);
+			.some((command) => command.name === commandName && command.source === "prompt" && command.sourceInfo?.path === stubPath);
 	}
 
 	pi.on("resources_discover", (event) => {
@@ -601,7 +601,13 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 			for (const variable of missingValues) {
 				pi.events.emit("notify:input-needed", { message: `Copilot — input needed: ${variable.name}` });
 
-				const value = await ctx.ui.input(`/${invocation.commandName} → ${variable.name}`, variable.prompt);
+				const value = await (async () => {
+					try {
+						return await ctx.ui.input(`/${invocation.commandName} → ${variable.name}`, variable.prompt);
+					} finally {
+						pi.events.emit("notify:input-resolved");
+					}
+				})();
 				if (value === undefined) {
 					return { action: "handled" as const };
 				}
