@@ -1,3 +1,7 @@
+alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
+alias outdated-update='outdated -inc P0. -u && outdated -u -vl Major'
+alias dfs='dotnet format style'
+
 function dotnet() {
   if [[ "$1" == "--wrapper-help" ]]; then
     cat <<'EOF'

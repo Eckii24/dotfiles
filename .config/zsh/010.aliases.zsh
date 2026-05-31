@@ -17,19 +17,12 @@ alias allsync='wikisync && tasksync'
 alias ai='CC_LAYOUT_OVERRIDE=buffer OM nvim +"CodeCompanionChat Toggle"'
 alias db='OM nvim +"DBUI"'
 alias ado-deployments='OM ado-deployments'
-alias pi-read='pi --tools read,grep,find,ls'
-alias pi-chat='pi --no-tools -p'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
 
 # Mac specific
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
-
-# dotnet specific
-alias outdated='dotnet outdated -exc Roslynator -exc CSharpier'
-alias outdated-update='outdated -inc P0. -u && outdated -u -vl Major'
-alias dfs='dotnet format style'
 
 # General alias
 alias ..='cd ..'
