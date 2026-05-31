@@ -3,6 +3,7 @@
   "defaultThinkingLevel": "medium",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.4",
+  "chatModel": "openai-codex/gpt-5.4-mini",
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [

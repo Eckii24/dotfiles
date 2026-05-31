@@ -70,8 +70,8 @@ Files Changed:
       # Combine the template and the dynamic file list for the final prompt
       local FINAL_PROMPT="${AI_PROMPT_TEMPLATE}${DIFF_OUTPUT}"
 
-      # *** CALL TO PI PRINT MODE ***
-      COMMIT_MSG=$(_pi_print "" "$FINAL_PROMPT" 2>/dev/null)
+      # *** CALL TO PI CHAT PRINT MODE ***
+      COMMIT_MSG=$(pi-chat --prompt "$FINAL_PROMPT" 2>/dev/null)
 
       if [ -z "$COMMIT_MSG" ]; then
         echo "Error: Pi failed or returned an empty message. Aborting commit."

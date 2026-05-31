@@ -65,7 +65,7 @@ function meeting() {
 
   # Pass glossary + transcript to Pi; capture output so we can both print it and copy to clipboard.
   local pi_output
-  pi_output=$(printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | _pi_print_role "$role" "$model")
+  pi_output=$(printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | pi-chat --model "$model" --prompt "$role")
 
   # Print the Pi result to stdout (so it still appears in terminal)
   printf '%s\n' "$pi_output"

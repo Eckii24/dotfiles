@@ -181,8 +181,12 @@ EOF
             return 1
         fi
 
+        local -a pi_chat_args
+        pi_chat_args=(--prompt "$prompt")
+        [[ -n "$model" ]] && pi_chat_args+=(--model "$model")
+
         local summary
-        summary="$(_pi_print "$model" "$prompt" < "$transcript_file" 2>/dev/null)"
+        summary="$(pi-chat "${pi_chat_args[@]}" < "$transcript_file" 2>/dev/null)"
 
         rm -rf "$tmp_dir"
 

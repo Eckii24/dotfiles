@@ -84,7 +84,7 @@ EOF
   if ! summary=$({
     printf '%s\n\n' "$glossary_content"
     cat "$newest_vtt"
-  } | _pi_print_role "$role" "$model"); then
+  } | pi-chat --model "$model" --prompt "$role"); then
     _error "Failed to generate summary"
     return 1
   fi

@@ -196,9 +196,11 @@ EOF
             content="$(curl -sS -L --max-time 30 "$url")"
             if [[ -n "$content" ]]; then
                 _log_step "Summarizing page content with Pi"
-                _log_debug "Running: pi -p --no-tools ${model:+--model "$model"} 'Summarize this web content...'"
-                _pi_print "$model" \
-                    "Summarize this web content. Concise, high-signal, markdown format." \
+                _log_debug "Running: pi-chat ${model:+--model "$model" }--prompt 'Summarize this web content...'"
+                local -a pi_chat_args
+                pi_chat_args=(--prompt "Summarize this web content. Concise, high-signal, markdown format.")
+                [[ -n "$model" ]] && pi_chat_args+=(--model "$model")
+                pi-chat "${pi_chat_args[@]}" \
                     < <(printf '%s' "$content") \
                     >> "$output_file"
                 summary_result=$?

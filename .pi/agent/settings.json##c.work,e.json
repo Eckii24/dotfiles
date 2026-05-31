@@ -3,6 +3,7 @@
   "defaultThinkingLevel": "medium",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.4",
+  "chatModel": "github-copilot/gpt-5.4-mini",
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [

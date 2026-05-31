@@ -113,8 +113,12 @@ EOF
     _log_debug "Running: pi -p --no-tools <transcript>"
   fi
 
+  local -a pi_chat_args
+  pi_chat_args=(--prompt "$prompt")
+  [[ -n "$model" ]] && pi_chat_args+=(--model "$model")
+
   local summary
-  summary=$(_pi_print "$model" "$prompt" < "$transcript_file" 2>/dev/null)
+  summary=$(pi-chat "${pi_chat_args[@]}" < "$transcript_file" 2>/dev/null)
 
   if [[ -z "$summary" ]]; then
     _error "Failed to generate summary"
