@@ -1,7 +1,6 @@
 tap "huseyinbabal/tap"
 tap "jandedobbeleer/oh-my-posh"
 tap "oven-sh/bun"
-brew "aichat"
 brew "bat"
 brew "bob"
 brew "btop"

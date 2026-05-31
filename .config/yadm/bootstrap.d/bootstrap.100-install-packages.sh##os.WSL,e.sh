@@ -43,7 +43,6 @@ install_github_packages() {
   "$BIN" install github.com/ajeetdsouza/zoxide
   "$BIN" install github.com/astral-sh/uv
   "$BIN" install github.com/MordechaiHadad/bob
-  "$BIN" install github.com/sigoden/aichat
 }
 
 # Function to install Python packages
@@ -62,8 +61,13 @@ install_python_packages() {
 # Function to install Node packages
 install_node_packages() {
   if ! command -v repomix &>/dev/null; then
-    echo "Installing Node packages..."
+    echo "Installing repomix..."
     sudo -E npm install -g repomix
+  fi
+
+  if ! command -v pi &>/dev/null; then
+    echo "Installing Pi coding agent..."
+    sudo -E npm install -g --ignore-scripts @earendil-works/pi-coding-agent
   fi
 }
 

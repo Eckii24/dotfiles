@@ -1,7 +1,7 @@
 summarize-latest-vtt() {
   local -r FUNCTION_NAME="summarize-latest-vtt"
 
-  local model=""
+  local model="github-copilot/gpt-5.4"
   local delete_after_success=false
   local role="meeting"
   local downloads_dir="$HOME/Downloads"
@@ -30,14 +30,14 @@ summarize-latest-vtt() {
 Usage: summarize-latest-vtt [options]
 
 Find the newest .vtt file in ~/Downloads, summarize it via the same meeting
-setup (glossary + aichat role), print the summary, and copy it to the clipboard.
+setup (glossary + Pi prompt), print the summary, and copy it to the clipboard.
 
 Options:
-  -m, --model MODEL   Pass MODEL to aichat (-m)
+  -m, --model MODEL   Pass MODEL to Pi (--model)
       --delete        Delete the processed VTT file after a successful summary
   -h, --help          Show this help
 
-Dependencies: aichat
+Dependencies: pi
 EOF
         return 0
         ;;
@@ -62,8 +62,8 @@ EOF
     return 1
   fi
 
-  if ! command -v aichat >/dev/null 2>&1; then
-    _error "Missing dependency: aichat"
+  if ! command -v pi >/dev/null 2>&1; then
+    _error "Missing dependency: pi"
     return 1
   fi
 
@@ -80,20 +80,17 @@ EOF
   local glossary_content
   glossary_content=$(<"$glossary_file")
 
-  local aichat_args=("-r" "$role")
-  [[ -n "$model" ]] && aichat_args+=("-m" "$model")
-
   local summary
   if ! summary=$({
     printf '%s\n\n' "$glossary_content"
     cat "$newest_vtt"
-  } | aichat "${aichat_args[@]}"); then
+  } | _pi_print_role "$role" "$model"); then
     _error "Failed to generate summary"
     return 1
   fi
 
   if [[ -z "$summary" ]]; then
-    _error "aichat returned no summary"
+    _error "Pi returned no summary"
     return 1
   fi
 

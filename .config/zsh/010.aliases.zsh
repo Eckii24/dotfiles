@@ -18,6 +18,7 @@ alias ai='CC_LAYOUT_OVERRIDE=buffer OM nvim +"CodeCompanionChat Toggle"'
 alias db='OM nvim +"DBUI"'
 alias ado-deployments='OM ado-deployments'
 alias pi-read='pi --tools read,grep,find,ls'
+alias pi-chat='pi --no-tools -p'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'

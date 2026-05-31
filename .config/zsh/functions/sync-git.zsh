@@ -58,23 +58,23 @@ Files Changed:
         return 0
     fi
     
-    # Use custom message if provided, otherwise generate with aichat
+    # Use custom message if provided, otherwise generate with Pi
     if [ -n "$CUSTOM_MSG" ]; then
       COMMIT_MSG="$CUSTOM_MSG"
       echo "3. Using custom commit message..."
       echo "   -> Message:"
       echo -e "$COMMIT_MSG"
     else
-      echo "3. Generating commit message with aichat..."
+      echo "3. Generating commit message with Pi..."
 
       # Combine the template and the dynamic file list for the final prompt
       local FINAL_PROMPT="${AI_PROMPT_TEMPLATE}${DIFF_OUTPUT}"
 
-      # *** CALL TO AI CHAT TOOL ***
-      COMMIT_MSG=$(aichat "$FINAL_PROMPT" 2>/dev/null)
+      # *** CALL TO PI PRINT MODE ***
+      COMMIT_MSG=$(_pi_print "" "$FINAL_PROMPT" 2>/dev/null)
 
       if [ -z "$COMMIT_MSG" ]; then
-        echo "Error: aichat failed or returned an empty message. Aborting commit."
+        echo "Error: Pi failed or returned an empty message. Aborting commit."
         return 1
       fi
       

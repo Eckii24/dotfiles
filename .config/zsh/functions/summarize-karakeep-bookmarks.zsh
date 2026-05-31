@@ -22,11 +22,11 @@ Fetch bookmarks with tag SUMMARIZE from Karakeep, generate summaries, and save t
 Options:
   --token TOKEN       Karakeep API token (default: $KARAKEEP_TOKEN)
   --wiki DIR          Wiki home directory (default: $WIKI_HOME)
-  -m, --model MODEL   AI model to use (passed to aichat)
+  -m, --model MODEL   AI model to use (passed to Pi)
   -v, --verbose       Enable verbose output
   -h, --help          Show this help
 
-Dependencies: curl, jq, aichat, summarize-youtube
+Dependencies: curl, jq, pi, summarize-youtube
 EOF
         return 0
     fi
@@ -195,10 +195,11 @@ EOF
             local content
             content="$(curl -sS -L --max-time 30 "$url")"
             if [[ -n "$content" ]]; then
-                _log_step "Summarizing page content with aichat"
-                _log_debug "Running: aichat ${model:+-m "$model"} 'Summarize this web content...'"
-                printf '%s' "$content" | aichat ${model:+-m "$model"} \
+                _log_step "Summarizing page content with Pi"
+                _log_debug "Running: pi -p --no-tools ${model:+--model "$model"} 'Summarize this web content...'"
+                _pi_print "$model" \
                     "Summarize this web content. Concise, high-signal, markdown format." \
+                    < <(printf '%s' "$content") \
                     >> "$output_file"
                 summary_result=$?
             else

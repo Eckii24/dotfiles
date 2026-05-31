@@ -1,7 +1,5 @@
 ---
-name: meeting-short
-description: Prompt for creating concise meeting summaries in bullet journal style.
-model: azure:gpt-5.4
+description: Create concise meeting summaries in bullet journal style.
 ---
 # IDENTITY and PURPOSE
 
@@ -55,4 +53,3 @@ Brief 1-2 sentence overview.
   - [ ] Secondary task
 
 # INPUT
-

@@ -47,12 +47,12 @@ overview of all videos with their names and summaries.
 Options:
   -d, --days N        Only include videos from the last N days (default: 7)
   --token TOKEN       Karakeep API token (default: $KARAKEEP_TOKEN)
-  -m, --model MODEL   AI model to use (passed to aichat)
+  -m, --model MODEL   AI model to use (passed to Pi)
   -o, --output FILE   Write combined summary to FILE (default: stdout)
   -v, --verbose       Enable verbose output
   -h, --help          Show this help
 
-Dependencies: curl, jq, yt-dlp, aichat
+Dependencies: curl, jq, yt-dlp, pi
 EOF
     }
 
@@ -95,7 +95,7 @@ EOF
     }
 
     # Check dependencies
-    for cmd in curl jq yt-dlp aichat; do
+    for cmd in curl jq yt-dlp pi; do
         command -v "$cmd" >/dev/null || { _error "Missing dependency: $cmd"; return 1; }
     done
 
@@ -182,16 +182,12 @@ EOF
         fi
 
         local summary
-        if [[ -n "$model" ]]; then
-            summary="$(aichat -m "$model" "$prompt" < "$transcript_file" 2>/dev/null)"
-        else
-            summary="$(aichat "$prompt" < "$transcript_file" 2>/dev/null)"
-        fi
+        summary="$(_pi_print "$model" "$prompt" < "$transcript_file" 2>/dev/null)"
 
         rm -rf "$tmp_dir"
 
         if [[ -z "$summary" ]]; then
-            _error "aichat returned no summary for: $url"
+            _error "Pi returned no summary for: $url"
             return 1
         fi
 

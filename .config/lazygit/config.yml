@@ -67,7 +67,7 @@ customCommands:
           SELECTED_TYPE=\"{{.Form.Type}}\"
           COMMITS_TO_SUGGEST=8
 
-          aichat \"
+          pi -p --no-tools \"
 
           You are an expert at writing Git commits. Your job is to write commit messages that follow the Conventional Commits format.
 

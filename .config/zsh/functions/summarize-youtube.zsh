@@ -30,15 +30,15 @@ summarize-youtube() {
 Usage: summarize-youtube [options] <youtube-url>
 
 Summarize a YouTube video by fetching its English transcript via yt-dlp and
-sending it to aichat.
+sending it to Pi.
 
 Options:
   -o, --output FILE   Write summary to FILE (default: stdout)
-  -m, --model MODEL   Pass MODEL to aichat (-m)
+  -m, --model MODEL   Pass MODEL to Pi (--model)
   -v, --verbose       Enable verbose logs
   -h, --help          Show this help
 
-Dependencies: yt-dlp, aichat
+Dependencies: yt-dlp, pi
 EOF
         return 0
         ;;
@@ -60,7 +60,7 @@ EOF
 
   _log_info "Processing: $youtube_url"
 
-  for cmd in yt-dlp aichat; do
+  for cmd in yt-dlp pi; do
     command -v "$cmd" >/dev/null || { _error "Missing dependency: $cmd"; return 1; }
   done
 
@@ -106,19 +106,15 @@ EOF
   
   _log_step "Transcript file: $transcript_file"
 
-  _log_step "Summarizing transcript with aichat"
+  _log_step "Summarizing transcript with Pi"
   if [[ -n "$model" ]]; then
-    _log_debug "Running: aichat -m $model <transcript>"
+    _log_debug "Running: pi -p --no-tools --model $model <transcript>"
   else
-    _log_debug "Running: aichat <transcript>"
+    _log_debug "Running: pi -p --no-tools <transcript>"
   fi
 
   local summary
-  if [[ -n "$model" ]]; then
-    summary=$(aichat -m "$model" "$prompt" < "$transcript_file" 2>/dev/null)
-  else
-    summary=$(aichat "$prompt" < "$transcript_file" 2>/dev/null)
-  fi
+  summary=$(_pi_print "$model" "$prompt" < "$transcript_file" 2>/dev/null)
 
   if [[ -z "$summary" ]]; then
     _error "Failed to generate summary"

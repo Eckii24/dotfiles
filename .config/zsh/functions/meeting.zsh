@@ -1,6 +1,6 @@
 function meeting() {
   local role="meeting"
-  local model=""
+  local model="github-copilot/gpt-5.4"
   local interactive=""
   local glossary_file="$WIKI_HOME/resources/p0-glossar.md"
 
@@ -41,7 +41,7 @@ function meeting() {
 
   # Use a temp file to capture audiobot stdout while keeping stdin/stderr connected to the terminal.
   # This ensures: progress/timer visible (stderr), Ctrl+C works to stop recording (stdin),
-  # and only the final transcript (stdout) is captured for aichat.
+  # and only the final transcript (stdout) is captured for Pi.
   local temp_output
   temp_output=$(mktemp)
   # Ensure temp file is removed on function exit or if interrupted (INT, TERM) or on shell exit (EXIT).
@@ -63,20 +63,16 @@ function meeting() {
     return 1
   fi
 
-  # Build aichat args
-  local aichat_args=("-r" "$role")
-  [[ -n "$model" ]] && aichat_args+=("-m" "$model")
+  # Pass glossary + transcript to Pi; capture output so we can both print it and copy to clipboard.
+  local pi_output
+  pi_output=$(printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | _pi_print_role "$role" "$model")
 
-  # Pass glossary + transcript to aichat; capture output so we can both print it and copy to clipboard.
-  local aichat_output
-  aichat_output=$(printf '%s\n\n%s\n' "$glossary_content" "$audiobot_output" | aichat "${aichat_args[@]}")
-
-  # Print the aichat result to stdout (so it still appears in terminal)
-  printf '%s\n' "$aichat_output"
+  # Print the Pi result to stdout (so it still appears in terminal)
+  printf '%s\n' "$pi_output"
 
   # Copy the result to macOS clipboard
   if command -v pbcopy >/dev/null 2>&1; then
-    printf '%s\n' "$aichat_output" | pbcopy
+    printf '%s\n' "$pi_output" | pbcopy
   else
     echo "Warning: pbcopy not found — output not copied to clipboard" >&2
   fi
