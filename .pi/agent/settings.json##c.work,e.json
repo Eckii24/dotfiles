@@ -1,0 +1,102 @@
+{
+  "lastChangelogVersion": "0.75.5",
+  "defaultThinkingLevel": "medium",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "gpt-5.4",
+  "enableInstallTelemetry": false,
+  "packages": [],
+  "npmCommand": [
+    "bun"
+  ],
+  "guardrails": {
+    "timeout": 300000,
+    "paths": {
+      "denyRead": [
+        "**/.env",
+        "**/.env.*",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.aws/**",
+        "~/.config/gh/**",
+        "~/.kube/**",
+        "~/.pi/agent/auth.json",
+        "~/.pi/agent/models.json",
+        "**/.npmrc",
+        "**/.pypirc",
+        "**/.netrc",
+        "**/*.pem",
+        "**/*.key",
+        "**/auth.json",
+        "**/credentials.json",
+        "**/secrets.json",
+        "**/*secrets.zsh"
+      ],
+      "allowWrite": [
+        "./**",
+        "/tmp/**",
+        "**/.ai/**",
+        "~/.agents/**",
+        "~/.pi/**"
+      ],
+      "denyWrite": [
+        "**/.env",
+        "**/.env.*",
+        "**/.git/**",
+        "**/node_modules/**",
+        "~/.pi/agent/auth.json",
+        "~/.pi/agent/models.json",
+        "**/.npmrc",
+        "**/.pypirc",
+        "**/.netrc",
+        "**/*.pem",
+        "**/*.key",
+        "**/auth.json",
+        "**/credentials.json",
+        "**/secrets.json"
+      ]
+    },
+    "bash": {
+      "allow": [
+        "pwd",
+        "which",
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "nl",
+        "grep",
+        "sort",
+        "uniq",
+        "cut",
+        "paste",
+        "tr",
+        "strings",
+        "xxd",
+        "hexdump",
+        "od",
+        "file",
+        "stat",
+        "sha256sum",
+        "shasum",
+        "diff"
+      ],
+      "preflightModel": "github-copilot/gpt-5.4-mini",
+      "deny": [
+        "rm",
+        "sudo",
+        "chmod",
+        "chown",
+        "mkfs",
+        "dd",
+        "shutdown",
+        "reboot",
+        "poweroff",
+        "halt",
+        "kill",
+        "killall",
+        "pkill"
+      ]
+    }
+  }
+}
