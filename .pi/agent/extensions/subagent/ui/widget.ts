@@ -1,4 +1,4 @@
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth } from "@mariozechner/pi-tui";
 import { flattenRunTree, getRunStatusIcon, isActiveStatus, toInlinePreview, type RunTreeNode, type RunTreeRow } from "../run-model.js";
 
 export const MAX_WIDGET_TOTAL_LINES = 10;

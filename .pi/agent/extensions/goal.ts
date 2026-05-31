@@ -26,14 +26,14 @@ import type {
 	ExtensionCommandContext,
 	ExtensionContext,
 	Theme,
-} from "@earendil-works/pi-coding-agent";
+} from "@mariozechner/pi-coding-agent";
 import {
 	CURSOR_MARKER,
 	type Focusable,
 	matchesKey,
 	truncateToWidth,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
+} from "@mariozechner/pi-tui";
 
 // ── Constants ────────────────────────────────────────────────────────
 

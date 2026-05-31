@@ -60,14 +60,14 @@
  *     slot is now our wrapper.  No model reference update is needed.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
-import type { Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
+import type { Context, Model, SimpleStreamOptions } from "@mariozechner/pi-ai";
 import {
 	streamSimpleAnthropic,
 	streamSimpleOpenAICompletions,
 	streamSimpleOpenAIResponses,
-} from "@earendil-works/pi-ai";
+} from "@mariozechner/pi-ai";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

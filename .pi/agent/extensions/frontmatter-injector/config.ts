@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type { ConfiguredSource } from "./contracts.js";
 
 function loadJsonObject(path: string): Record<string, unknown> | undefined {

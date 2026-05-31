@@ -18,8 +18,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
-import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@earendil-works/pi-tui";
+import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@mariozechner/pi-coding-agent";
+import { CURSOR_MARKER, type Focusable, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
 
 const DEFAULT_MAX_LOOPS = 5;
 const SAME_SESSION_FLAG = "--same-session";

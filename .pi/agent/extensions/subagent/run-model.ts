@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import type { Message, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { AgentScope } from "./agents.js";
 
 export type SubagentMode = "single" | "parallel" | "chain";

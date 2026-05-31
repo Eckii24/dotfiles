@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { StringEnum } from "@earendil-works/pi-ai";
-import type { Message, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import { StringEnum } from "@mariozechner/pi-ai";
+import type { Message, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents, formatAgentsForPrompt } from "./agents.js";
 import { SUBAGENT_CONTROL_SOCKET_ENV, startSubagentControlServer, type SubagentControlServerHandle } from "./run-control-proxy.js";

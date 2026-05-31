@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import type { LeafRunSnapshot, RunTreeNode } from "../run-model.js";
 
 const STEER_BODY_SEPARATOR = "---";

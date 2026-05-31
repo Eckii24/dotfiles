@@ -19,7 +19,7 @@
  *   bypass only affects fresh-session handoffs.
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
