@@ -19,7 +19,7 @@ pi-chat() {
     [[ -n "$settings_chat_model" ]] && model="$settings_chat_model"
   fi
 
-  local -a pi_args=(-p --no-tools --model "$model")
+  local -a pi_args=(--model "$model")
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -140,9 +140,9 @@ EOF
 
     [[ -n "$prompt_path" ]] && resolved_prompt="$(<"$prompt_path")"
 
-    command pi "${pi_args[@]}" --append-system-prompt "$resolved_prompt" "${passthrough[@]}"
+    command pi -p --no-tools --no-extensions "${pi_args[@]}" --append-system-prompt "$resolved_prompt" "${passthrough[@]}"
     return
   fi
 
-  command pi "${pi_args[@]}" "${passthrough[@]}"
+  command pi -p --no-tools --no-extensions "${pi_args[@]}" "${passthrough[@]}"
 }
