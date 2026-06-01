@@ -15,6 +15,9 @@
 // Commands:
 //   /notify        — show status
 //   /notify test   — trigger a test notification
+//
+// Suppression:
+//   -p             — skip all notifications for this session
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { execFile, execSync } from "node:child_process";
@@ -71,6 +74,7 @@ export default function (pi: ExtensionAPI) {
   const isTmux = !!process.env.TMUX;
   const tmuxPaneId = process.env.TMUX_PANE ?? null;
   const isSubagent = process.env[SUBAGENT_ENV] === "1";
+  const notificationsSuppressed = process.argv.includes("-p");
   const ntfyTopic = process.env[NTFY_TOPIC_ENV]?.trim() || null;
   const ntfyPublishUrl = ntfyTopic ? resolveNtfyPublishUrl(ntfyTopic) : null;
 
@@ -381,7 +385,7 @@ export default function (pi: ExtensionAPI) {
   // ─── Core ────────────────────────────────────────────────────────────
 
   function triggerNotification(message: string, remoteKind?: RemoteNotificationKind) {
-    if (notified) return; // debounce
+    if (notificationsSuppressed || notified) return; // debounce / -p mode
     notified = true;
     sendMacOSNotification(withTmuxNotificationContext(message));
     if (remoteKind) {
@@ -455,6 +459,11 @@ export default function (pi: ExtensionAPI) {
       const trimmed = (args || "").trim().toLowerCase();
 
       if (trimmed === "test") {
+        if (notificationsSuppressed) {
+          ctx.ui.notify("Input notifications suppressed by -p flag", "info");
+          return;
+        }
+
         // Force a test notification regardless of debounce state
         const wasNotified = notified;
         notified = false;
@@ -477,6 +486,7 @@ export default function (pi: ExtensionAPI) {
         t.fg("dim", `  ntfy payloads:    fixed safe strings only`),
         t.fg("dim", `  ntfy title:       ${NTFY_TITLE}`),
         t.fg("dim", `  ntfy priority:    interaction/input=${NTFY_INTERACTION_PRIORITY}, finished/test=${NTFY_DEFAULT_PRIORITY}`),
+        t.fg("dim", `  suppressed:       ${notificationsSuppressed ? "yes (-p)" : "no"}`),
         t.fg("dim", `  tmux detected:    ${isTmux ? "yes" : "no"}`),
         t.fg("dim", `  tmux source pane: ${tmuxPaneId ?? "(unknown)"}`),
         t.fg("dim", `  tmux pane title:  ${getSourcePaneTitle() ?? "(unknown)"}`),
