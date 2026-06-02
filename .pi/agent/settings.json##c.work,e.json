@@ -2,7 +2,7 @@
   "lastChangelogVersion": "0.75.5",
   "defaultThinkingLevel": "medium",
   "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.4",
+  "defaultModel": "gpt-5.4-mini",
   "chatModel": "github-copilot/gpt-5.4-mini",
   "enableInstallTelemetry": false,
   "packages": [],
@@ -83,6 +83,9 @@
         "diff"
       ],
       "preflightModel": "github-copilot/gpt-5-mini",
+      "preflightRules": [
+        "Executing local tests is fine, even if test code runs arbitrary project code, as long as it does not exfiltrate secrets or mutate unrelated system state."
+      ],
       "deny": [
         "rm",
         "sudo",
