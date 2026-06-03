@@ -35,7 +35,7 @@ export DB_UI_PROD="op://Employee/DB_UI_PROD/password"
 export DB_UI_REDIS="op://Employee/DB_UI_REDIS/password"
 
 export VIP_CONNECTIONSTRING_CENTRAL="op://Employee/vip-db-connectionString/local"
-export OMR_CONNECTIONSTRING_CENTRAL="op://Employee/omr-connectionString-central/dev"
+export OMR_CONNECTIONSTRING_CENTRAL="op://Employee/omr-connectionString-central/local"
 # export COSMOS_CONNECTIONSTRING="op://Employee/cosmosdb-connectionString/test"
 
 # Azure DevOps
