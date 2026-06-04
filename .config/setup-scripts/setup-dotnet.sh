@@ -1,39 +1,40 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_SH="$SCRIPT_DIR/lib/setup-common.sh"
+
+if [ -f "$COMMON_SH" ]; then
+  # shellcheck source=./lib/setup-common.sh
+  . "$COMMON_SH"
+else
+  . <(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/lib/setup-common.sh)
+fi
+
 echo "Starting setup for dotnet..."
+
+if [[ "$(uname)" == "Linux" && -f "/.dockerenv" ]]; then
+  ensure_brew_in_path
+fi
 
 echo "Set YADM class dotnet"
 yadm config --add local.class dotnet
 
 echo "Install dependencies for dotnet..."
 if [[ "$(uname)" == "Linux" ]]; then
-  # Add Microsoft package repository for .NET
-  curl -sSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
-
-  if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
-    sudo dpkg -i /tmp/packages-microsoft-prod.deb
-    sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0 dotnet-sdk-9.0
+  if have_brew; then
+    ensure_brew_in_path
+    brew install dotnet@8 dotnet@9
   else
-    dpkg -i /tmp/packages-microsoft-prod.deb
-    apt-get update && apt-get install -y dotnet-sdk-8.0 dotnet-sdk-9.0
-  fi
+    # Add Microsoft package repository for .NET
+    curl -sSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
 
-  rm /tmp/packages-microsoft-prod.deb
-elif [[ "$(uname)" == "Darwin" ]]; then
-  # Function to add Homebrew to PATH on macOS
-  if ! command -v brew &>/dev/null; then
-    echo "Homebrew not found. Adding to PATH..."
-    if [[ -x "/opt/homebrew/bin/brew" ]]; then
-      # Apple Silicon (ARM)
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -x "/usr/local/bin/brew" ]]; then
-      # Intel Mac
-      eval "$(/usr/local/bin/brew shellenv)"
-    else
-      echo "Homebrew not found. Exiting..."
-      exit 1
-    fi
+    run_root dpkg -i /tmp/packages-microsoft-prod.deb
+    run_root apt-get update && run_root apt-get install -y dotnet-sdk-8.0 dotnet-sdk-9.0
+
+    rm /tmp/packages-microsoft-prod.deb
   fi
+elif [[ "$(uname)" == "Darwin" ]]; then
+  ensure_brew_in_path
   brew install --cask dotnet-sdk
 fi
 

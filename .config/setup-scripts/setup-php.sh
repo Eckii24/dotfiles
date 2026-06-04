@@ -1,26 +1,18 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_SH="$SCRIPT_DIR/lib/setup-common.sh"
+
+if [ -f "$COMMON_SH" ]; then
+  # shellcheck source=./lib/setup-common.sh
+  . "$COMMON_SH"
+else
+  . <(curl -fsSL https://raw.githubusercontent.com/Eckii24/dotfiles/refs/heads/master/.config/setup-scripts/lib/setup-common.sh)
+fi
+
 echo "Starting setup for php..."
 
-# Function to add Homebrew to PATH
-if ! command -v brew &>/dev/null; then
-  echo "Homebrew not found. Adding to PATH..."
-  if [[  -x "/opt/homebrew/bin/brew"  ]]; then
-    # Apple Silicon (ARM)
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [[  -x "/usr/local/bin/brew"  ]]; then
-    # Intel Mac
-    eval "$(/usr/local/bin/brew shellenv)"
-  elif [[  -x "/home/linuxbrew/.linuxbrew/bin/brew"  ]]; then
-    # Linux
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  else
-    echo "Homebrew not found. Exiting..."
-    exit 1
-  fi
-else
-  echo "Homebrew already added to PATH."
-fi
+ensure_brew_in_path
 
 echo "Set YADM class php"
 yadm config --add local.class php
