@@ -19,7 +19,7 @@ echo "Install bugwarrior"
 uv tool install bugwarrior -w setuptools --force
 
 echo "Install mockoon-cli"
-sudo npm install -g @mockoon/cli
+sudo bun install -g @mockoon/cli
 
 echo "Install dotnet tools..."
 dotnet tool install -g csharpier
