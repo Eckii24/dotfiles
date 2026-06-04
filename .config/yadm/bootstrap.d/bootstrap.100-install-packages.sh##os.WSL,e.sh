@@ -58,19 +58,6 @@ install_python_packages() {
   fi
 }
 
-# Function to install Node packages
-install_node_packages() {
-  if ! command -v repomix &>/dev/null; then
-    echo "Installing repomix..."
-    sudo -E npm install -g repomix
-  fi
-
-  if ! command -v pi &>/dev/null; then
-    echo "Installing Pi coding agent..."
-    sudo -E npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-  fi
-}
-
 # Function to install ZSH plugins
 install_zsh_plugins() {
   local zsh_plugins_dir="$HOME/.local/share/zsh-plugins"
@@ -105,7 +92,6 @@ install_zsh_plugins() {
 install_apt_packages
 install_github_packages
 install_python_packages
-install_node_packages
 install_zsh_plugins
 
 echo "Linux package installation completed!"
