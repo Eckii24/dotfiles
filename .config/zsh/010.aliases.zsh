@@ -3,7 +3,7 @@ alias lg='lazygit'
 alias lzd='lazydocker'
 alias ylg='lazygit --git-dir ~/.local/share/yadm/repo.git/'
 alias ynvim='yadm enter nvim ~'
-alias dnvim='OM nvim'
+alias 1nvim='OM nvim'
 alias diff='delta -n -s'
 alias rm='trash-put'
 
