@@ -1,5 +1,5 @@
 # GitHub Copilot Usage
-# Fetches and pretty prints the current GitHub Copilot premium request usage
+# Fetches and pretty prints the current GitHub Copilot premium credit usage
 
 copilot-usage() {
     local -r FUNCTION_NAME="copilot-usage"
@@ -15,7 +15,7 @@ copilot-usage() {
         cat << EOF
 Usage: $FUNCTION_NAME [OPTIONS]
 
-Fetches and pretty prints the current GitHub Copilot premium request usage
+Fetches and pretty prints the current GitHub Copilot premium credit usage
 for the billing period.
 
 OPTIONS:
@@ -26,7 +26,7 @@ OPTIONS:
 DESCRIPTION:
     Reads the OAuth token from ~/.config/github-copilot/apps.json and
     calls the GitHub Copilot quota API to display used / remaining /
-    total premium requests, a progress bar, a simple linear month-end
+    total premium credits, a progress bar, a simple linear month-end
     forecast, and the next reset date.
 EOF
     }
@@ -191,22 +191,22 @@ EOF
     # Pretty print
     # ---------------------------------------------------------------------------
     echo ""
-    printf "  ${c_label}GitHub Copilot — Premium Request Usage${c_reset}\n"
+    printf "  ${c_label}GitHub Copilot — Premium Credit Usage${c_reset}\n"
     printf "  ${c_dim}%s${c_reset}\n" "──────────────────────────────────────────"
 
     if [[ "$unlimited" == "true" ]]; then
         printf "  %-14s %s\n" "Plan:" "Unlimited ∞"
         printf "  ${c_dim}No usage limits apply to your current plan.${c_reset}\n"
     else
-        printf "  %-14s ${c_usage}%d / %d${c_reset} requests\n" "Used:" "$used" "$entitlement"
-        printf "  %-14s ${c_usage}%d${c_reset} requests\n"      "Remaining:" "$remaining"
+        printf "  %-14s ${c_usage}%d / %d${c_reset} credits\n" "Used:" "$used" "$entitlement"
+        printf "  %-14s ${c_usage}%d${c_reset} credits\n"      "Remaining:" "$remaining"
         printf "  %-14s [${c_usage}%s${c_reset}] ${c_usage}%d%%${c_reset}\n" "Progress:" "$bar" "$pct"
         printf "  %-14s %s\n"                                    "Resets on:" "$reset_date"
 
         if [[ $projection_delta -gt 0 ]]; then
-            printf "  %-14s ${c_projection}%d${c_reset} requests ${c_dim}(%s${c_projection}+%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "over: " "$projection_delta"
+            printf "  %-14s ${c_projection}%d${c_reset} credits ${c_dim}(%s${c_projection}+%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "over: " "$projection_delta"
         else
-            printf "  %-14s ${c_projection}%d${c_reset} requests ${c_dim}(%s${c_projection}%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "left: " "$(( -projection_delta ))"
+            printf "  %-14s ${c_projection}%d${c_reset} credits ${c_dim}(%s${c_projection}%d${c_reset}${c_dim})${c_reset}\n" "Forecast:" "$projected_used" "left: " "$(( -projection_delta ))"
         fi
     fi
 
