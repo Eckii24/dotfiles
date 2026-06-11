@@ -4,4 +4,4 @@
 -- Add any additional options here
 vim.opt.colorcolumn = "120"
 
-
+pcall(require, "config.more-options")
