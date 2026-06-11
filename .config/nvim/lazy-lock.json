@@ -5,11 +5,7 @@
   "blink.cmp": { "branch": "main", "commit": "78336bc89ee5365633bcf754d93df01678b5c08f" },
   "bufferline.nvim": { "branch": "main", "commit": "261a72b90d6db4ed8014f7bda976bcdc9dd7ce76" },
   "catppuccin": { "branch": "main", "commit": "0303a7208dba448c459767486a38a6ec05c4216b" },
-  "codecompanion-agentskills.nvim": { "branch": "master", "commit": "94ad73f660f2da0e9714b5b1daab65540f4569a8" },
-  "codecompanion-copilot-enterprise.nvim": { "branch": "main", "commit": "2e5edc4fd32775dfff578c283624ed97334a9372" },
-  "codecompanion-history.nvim": { "branch": "main", "commit": "bc1b4fe06eaaf0aa2399be742e843c22f7f1652a" },
-  "codecompanion-spinners.nvim": { "branch": "main", "commit": "86926cbf7554d69d40d2a5c3cf576063814a42d5" },
-  "codecompanion.nvim": { "branch": "main", "commit": "6cbbcb4503430644f04ea5f087c8e2ea4cdc6f6e" },
+
   "conform.nvim": { "branch": "master", "commit": "619363c30309d29ffa631e67c8183f2a72caa373" },
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },
   "easy-dotnet.nvim": { "branch": "main", "commit": "d60090d101c1f039c86f887bb682b0b53b6a30f8" },

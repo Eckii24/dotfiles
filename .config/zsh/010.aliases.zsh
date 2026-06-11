@@ -15,7 +15,6 @@ alias tasksync='gitsync $TASKDATA'
 alias allsync='wikisync && tasksync'
 
 # AI related stuff
-alias ai='CC_LAYOUT_OVERRIDE=buffer OM nvim +"CodeCompanionChat Toggle"'
 alias db='OM nvim +"DBUI"'
 alias ado-deployments='OM ado-deployments'
 

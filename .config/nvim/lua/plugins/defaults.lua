@@ -187,7 +187,12 @@ return {
       dashboard = {
         preset = {
           keys = {
-            { icon = "󰚩", key = "a", desc = "CodeCompanion", action = ":CodeCompanionChat" },
+            {
+              icon = "󰚩",
+              key = "a",
+              desc = "Sidekick Pi",
+              action = ":lua require('sidekick.cli').toggle({ name = 'pi', focus = true })",
+            },
             { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
             {
               icon = " ",
@@ -303,13 +308,14 @@ return {
   {
     "folke/sidekick.nvim",
     keys = {
-      { "<leader>ap", false },
-      { "<leader>aa", false },
-      { "<leader>ac", false },
-      { "<leader>ad", false },
-      { "<leader>af", false },
-      { "<leader>as", false },
-      { "<leader>at", false },
+      {
+        "<leader>ap",
+        function()
+          require("sidekick.cli").toggle({ name = "pi", focus = true })
+        end,
+        mode = { "n", "x" },
+        desc = "Sidekick Toggle Pi",
+      },
     },
   },
   {

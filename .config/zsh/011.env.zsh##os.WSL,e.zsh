@@ -18,10 +18,6 @@ export AZURE_API_BASE="op://Employee/AZURE_API_BASE/password"
 export AZURE_RESOURCE_NAME="op://Employee/AZURE_RESOURCE_NAME/password"
 export AZURE_API_VERSION="2025-04-01-preview"
 
-# Copilot
-export COPILOT_BASE="zeiss.ghe.com"
-export COPILOT_API_BASE="https://copilot-api.zeiss.ghe.com"
-
 # Database connection strings
 export DB_UI_DOCKER="op://Employee/DB_UI_DOCKER/password"
 export DB_UI_DEV="op://Employee/DB_UI_DEV/password"
