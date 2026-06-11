@@ -9,7 +9,7 @@
  * - forks (`/fork`)
  *
  * Autonomous-loop compatibility:
- * - Ralph and Goal fresh-session loops intentionally create many `newSession()` calls.
+ * - Fresh-session handoff loops may create many `newSession()` calls.
  * - While a loop is actively handing off to the next fresh session, it emits a
  *   temporary bypass token on `dirty-repo-guard:bypass`.
  * - The guard only trusts bypass events from known loop sources and skips only
@@ -114,7 +114,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.events.on(DIRTY_REPO_GUARD_BYPASS_EVENT, (data) => {
 		const payload = data as DirtyRepoGuardBypassEvent | undefined;
-		if ((payload?.source !== "ralph-loop" && payload?.source !== "goal") || !payload.token) return;
+		if (payload?.source !== "goal" || !payload.token) return;
 
 		if (payload.active) {
 			activeBypassTokens.add(payload.token);
