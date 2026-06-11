@@ -1,8 +1,8 @@
 {
-  "lastChangelogVersion": "0.75.5",
+  "lastChangelogVersion": "0.78.1",
   "defaultThinkingLevel": "medium",
   "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.4-mini",
+  "defaultModel": "gpt-5.4",
   "chatModel": "github-copilot/gpt-5.4-mini",
   "enableInstallTelemetry": false,
   "packages": [],
@@ -82,7 +82,7 @@
         "shasum",
         "diff"
       ],
-      "preflightModel": "github-copilot/gpt-5-mini",
+      "preflightModel": "github-copilot/gpt-5.4-mini",
       "preflightRules": [
         "Executing local tests is fine, even if test code runs arbitrary project code, as long as it does not exfiltrate secrets or mutate unrelated system state."
       ],
