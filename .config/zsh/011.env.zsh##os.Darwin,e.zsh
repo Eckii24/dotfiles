@@ -9,11 +9,17 @@ export HERD_PHP_74_INI_SCAN_DIR="$HOME/Library/Application Support/Herd/config/p
 
 export PATH
 
-export GEMINI_API_KEY="op://Private/GEMINI_API_KEY/password"
-export KARAKEEP_HOST="op://Private/Karakeep/Host"
-export KARAKEEP_TOKEN="op://Private/Karakeep/password"
-export TASKSERVER_HOST="op://Private/Taskwarrior/Host"
-export TASKSERVER_ENCRYPTION_SECRET="op://Private/Taskwarrior/Secret"
-export TASKSERVER_CLIENT_ID="op://Private/Taskwarrior/ClientId"
+: "${GEMINI_API_KEY:=op://Private/GEMINI_API_KEY/password}"
+export GEMINI_API_KEY
+: "${KARAKEEP_HOST:=op://Private/Karakeep/Host}"
+export KARAKEEP_HOST
+: "${KARAKEEP_TOKEN:=op://Private/Karakeep/password}"
+export KARAKEEP_TOKEN
+: "${TASKSERVER_HOST:=op://Private/Taskwarrior/Host}"
+export TASKSERVER_HOST
+: "${TASKSERVER_ENCRYPTION_SECRET:=op://Private/Taskwarrior/Secret}"
+export TASKSERVER_ENCRYPTION_SECRET
+: "${TASKSERVER_CLIENT_ID:=op://Private/Taskwarrior/ClientId}"
+export TASKSERVER_CLIENT_ID
 
 

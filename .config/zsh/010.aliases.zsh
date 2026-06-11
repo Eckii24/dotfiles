@@ -41,3 +41,21 @@ alias -g DN='>/dev/null'
 alias -g NUL='>/dev/null 2>&1'
 alias -g O='op run --'
 alias -g OM='op run --no-masking --'
+
+Oz() {
+  if [[ $# -eq 0 ]]; then
+    echo 'Usage: Oz <command string or args...>' >&2
+    return 1
+  fi
+
+  op run -- zsh -ic "$*"
+}
+
+OMz() {
+  if [[ $# -eq 0 ]]; then
+    echo 'Usage: OMz <command string or args...>' >&2
+    return 1
+  fi
+
+  op run --no-masking -- zsh -ic "$*"
+}
