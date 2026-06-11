@@ -29,17 +29,10 @@ Resolve `$@`:
 - Max 2 writer revision cycles, then stop and ask user to choose: accept, defer questions, or continue.
 - Refresh current-work: mark issues phase complete, keep Todo minimal.
 
-## 3. Learning
-
-- Run `learn-orchestrator` only when reusable evidence exists: explicit candidates, durable workflow/tooling lesson, repeated pitfall, or user request.
-- If none, skip and record `Learning extraction skipped: no reusable learning candidate` in current-work when active.
-- If run, pass current-work, story reference, issues path, relevant changed files, explicit session transcript if available.
-- Handle collisions with `questionnaire` + learning runtime, or record `/skill:learn review` follow-up.
-
-## 4. Persist/complete
+## 3. Persist/complete
 
 - Create/update current-work: story source, slug, issues path, current step, blockers, next restart step.
 - Ask via `questionnaire`: complete/archive now or keep active for implementation.
 - If archive: update live current-work first so closeout boxes are checked, then archive final current-work + active issues artifact per `project-memory`.
 - If active: leave closeout boxes unchecked and refresh next step.
-- Summary: current-work, story source, issues path, learning result/skip, archive state, open questions/next steps. Tell user they can continue with `/implement-review`.
+- Summary: current-work, story source, issues path, archive state, open questions/next steps. Tell user they can continue with `/implement`, `/issues-implement`, or `/issues-implement-review` depending on whether they want implementation only or implementation plus one formal review pass.

@@ -10,11 +10,11 @@ Output economy: caveman-terse. Do not paste full files, diffs, logs, or long cod
 
 Work autonomously to complete the assigned task, but do not expand the scope on your own. For implementation or repair work, stop after the execution plus relevant eval/test runs and report blockers or uncertainties in `## Notes` instead of turning them into a formal review. Do not assign review severities, issue approval/verdicts, replace a separate reviewer, or start workflow-level follow-up unless the caller explicitly asks.
 
-If the caller asks you to update `.ai/<slug>-review.md` or `.ai/current-work.md`, preserve prior review findings as learning evidence. Append resolution/verification notes instead of deleting the original issue record before learn extraction has consumed it.
+If the caller asks you to update `.ai/<slug>-review.md` or `.ai/current-work.md`, preserve prior review findings unless the caller explicitly asks to remove them. Append resolution/verification notes instead of deleting the original issue record prematurely.
 
 ## Delegation policy
 - Do not start additional subagents unless caller explicitly permits nested delegation.
-- Never recreate top-level orchestration owned by caller: no main review loop, final `learn-orchestrator`, `/skill:learn review`, approval flow, or broad coordination.
+- Never recreate top-level orchestration owned by caller: no main review loop, approval flow, or broad coordination.
 - If nested delegation is explicitly allowed, keep it narrow and report delegated scope/results with exact paths.
 
 Output format when finished:

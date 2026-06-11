@@ -36,17 +36,10 @@ Creates tracked-work artifacts under `.ai/`.
 - Max 2 issues revision cycles, then ask user to accept, defer questions, or continue.
 - Refresh current-work: mark issues phase complete, keep Todo minimal.
 
-## 4. Learning
-
-- Run `learn-orchestrator` only when reusable evidence exists: explicit candidates, durable workflow/tooling lesson, repeated pitfall, or user request.
-- If none, skip and record `Learning extraction skipped: no reusable learning candidate` in current-work when active.
-- If run, pass current-work, PRD path, issues path, relevant changed files, explicit session transcript if available.
-- Handle collisions with `questionnaire` + learning runtime, or record `/skill:learn review` follow-up.
-
-## 5. Persist/complete
+## 4. Persist/complete
 
 - Create/update current-work: slug, PRD path, issues path, current step, blockers, next restart step.
 - Ask via `questionnaire`: complete/archive now or keep active for implementation.
 - If archive: update live current-work first so closeout boxes are checked, then archive final current-work + active PRD/issues artifacts per `project-memory`.
 - If active: leave closeout boxes unchecked and refresh next step.
-- Summary: current-work, PRD path, issues path, learning result/skip, archive state, open questions/next steps. Tell user they can continue with `/implement-review`.
+- Summary: current-work, PRD path, issues path, archive state, open questions/next steps. Tell user they can continue with `/implement`, `/prd-issues-implement`, or `/prd-issues-implement-review` depending on whether they want implementation only or implementation plus one formal review pass.
