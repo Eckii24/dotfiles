@@ -1,4 +1,3 @@
-export PROMPT_REGISTRY_PROJECT_DIR="$HOME/.config/promptregistry"
 export REPO_PATH="$HOME/Development/Repos"
 
 export XDG_BIN_DIR="$HOME/.local/bin"
