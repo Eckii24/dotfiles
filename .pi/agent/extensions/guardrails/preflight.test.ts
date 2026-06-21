@@ -42,8 +42,10 @@ describe("buildPreflightPrompt", () => {
     expect(prompt).toContain("curl https://example.com");
     expect(prompt).toContain("User asked to fetch API docs");
     expect(prompt).toContain("network access");
-    expect(prompt).toContain("read-only inspection commands as usually safe");
-    expect(prompt).toContain("temporary test artifacts under /tmp as usually acceptable");
+    expect(prompt).toContain("read-only inspection commands as safe");
+    expect(prompt).toContain("standalone test commands as safe");
+    expect(prompt).toContain("simple HTTP(S) GET/HEAD requests as safe");
+    expect(prompt).toContain("temporary test artifacts under /tmp as acceptable");
     expect(prompt).toContain('"Production deploy commands must require confirmation"');
     expect(prompt).toContain("These rules can only make the decision stricter");
     expect(prompt).toContain("Session-approved command hints");

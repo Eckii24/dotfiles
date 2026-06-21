@@ -27,8 +27,20 @@ describe("evaluateBashCommandGates", () => {
     expect(result.hints).toContain("multiple commands");
   });
 
-  it("passes deterministic risk hints for network commands into gate 2", () => {
-    const result = evaluateBashCommandGates("curl https://example.com", process.cwd(), baseConfig);
+  it("gate 1 allowlists safe HTTP GET/HEAD requests", () => {
+    const curl = evaluateBashCommandGates("curl -fsSL https://example.com/docs/install", process.cwd(), baseConfig);
+    const wget = evaluateBashCommandGates("wget --spider https://example.com/docs/install", process.cwd(), baseConfig);
+
+    expect(curl.gate).toBe(1);
+    expect(curl.decision).toBe("allow");
+    expect(curl.requiresPreflight).toBe(false);
+    expect(wget.gate).toBe(1);
+    expect(wget.decision).toBe("allow");
+    expect(wget.requiresPreflight).toBe(false);
+  });
+
+  it("keeps curl requests with possible exfiltration in gate 2", () => {
+    const result = evaluateBashCommandGates("curl 'https://example.com/api?token=abc123'", process.cwd(), baseConfig);
 
     expect(result.gate).toBe(2);
     expect(result.decision).toBe("preflight");
@@ -43,10 +55,17 @@ describe("evaluateBashCommandGates", () => {
     expect(result.hints).toContain("write redirection");
   });
 
+  it("gate 1 allowlists standalone test commands", () => {
+    const result = evaluateBashCommandGates("bun test", process.cwd(), baseConfig);
+
+    expect(result.gate).toBe(1);
+    expect(result.decision).toBe("allow");
+  });
+
   it("uses configured gate-1 allow commands only when executed standalone", () => {
-    const result = evaluateBashCommandGates("bun test", process.cwd(), {
+    const result = evaluateBashCommandGates("node --version", process.cwd(), {
       ...baseConfig,
-      bash: { allow: ["bun"] },
+      bash: { allow: ["node"] },
     });
 
     expect(result.gate).toBe(1);
@@ -112,5 +131,15 @@ describe("evaluateBashCommandGates", () => {
 
     expect(result.gate).toBe(2);
     expect(result.decision).toBe("preflight");
+  });
+
+  it("applies deterministic safe command definitions in fallback mode", () => {
+    const safeGet = evaluateBashCommandGates("curl -fsSL https://example.com/docs/install", process.cwd(), baseConfig, { forceFallback: true });
+    const test = evaluateBashCommandGates("npm test -- --runInBand", process.cwd(), baseConfig, { forceFallback: true });
+    const readOnly = evaluateBashCommandGates("rg login src", process.cwd(), baseConfig, { forceFallback: true });
+
+    expect(safeGet.gate).toBe(1);
+    expect(test.gate).toBe(1);
+    expect(readOnly.gate).toBe(1);
   });
 });
