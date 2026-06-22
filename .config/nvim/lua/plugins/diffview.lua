@@ -22,6 +22,13 @@ return {
       { "<leader>gVf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
       { "<leader>gVq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
       {
+        "<leader>gVa",
+        function()
+          require("config.diffview_ai_review").open_notes()
+        end,
+        desc = "Open AI Review Notes",
+      },
+      {
         "<leader>gVc",
         function()
           require("snacks.picker").git_log({
@@ -48,18 +55,31 @@ return {
         desc = "HEAD to Branch (Picker)",
       },
     },
-    opts = {
-      keymaps = {
-        view = {
-          ["q"] = "<cmd>DiffviewClose<cr>",
+    opts = function()
+      local ai_review = require("config.diffview_ai_review")
+      ai_review.setup()
+
+      return {
+        keymaps = {
+          view = {
+            ["q"] = "<cmd>DiffviewClose<cr>",
+
+            -- AI review workflow
+            ["a"] = ai_review.add_note,
+            ["A"] = ai_review.open_notes,
+          },
+          file_panel = {
+            ["q"] = "<cmd>DiffviewClose<cr>",
+
+            -- File-Panel: öffnet Hinweis, Inline-Kommentare im Diff-Fenster setzen.
+            ["a"] = ai_review.add_note,
+            ["A"] = ai_review.open_notes,
+          },
+          file_history_panel = {
+            ["q"] = "<cmd>DiffviewClose<cr>",
+          },
         },
-        file_panel = {
-          ["q"] = "<cmd>DiffviewClose<cr>",
-        },
-        file_history_panel = {
-          ["q"] = "<cmd>DiffviewClose<cr>",
-        },
-      },
-    },
+      }
+    end,
   },
 }
