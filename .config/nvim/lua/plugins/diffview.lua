@@ -1,6 +1,30 @@
+local function git_ref_exists(ref)
+  local result = vim.fn.systemlist({ "git", "rev-parse", "--verify", "--quiet", ref })
+  return vim.v.shell_error == 0 and result[1] ~= nil and result[1] ~= ""
+end
+
+local function default_base_ref()
+  for _, ref in ipairs({ "origin/main", "origin/master", "main", "master" }) do
+    if git_ref_exists(ref) then
+      return ref
+    end
+  end
+end
+
+local function open_default_base_diff()
+  local ref = default_base_ref()
+
+  if not ref then
+    vim.notify("No base branch found: origin/main, origin/master, main, master", vim.log.levels.ERROR)
+    return
+  end
+
+  vim.cmd("DiffviewOpen " .. ref)
+end
+
 return {
   {
-    "sindrets/diffview.nvim",
+    "dlyongemallo/diffview-plus.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "folke/snacks.nvim",
@@ -15,9 +39,8 @@ return {
     keys = {
       { "<leader>gV", desc = "+diffview" },
       { "<leader>gVi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
-      { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "HEAD to Last Commit" },
-      { "<leader>gVm", "<cmd>DiffviewOpen origin/master<cr>", desc = "HEAD to Origin/master" },
-      { "<leader>gVM", "<cmd>DiffviewOpen origin/main<cr>", desc = "HEAD to Origin/main" },
+      { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "Working Tree to Last Commit" },
+      { "<leader>gVm", open_default_base_diff, desc = "Working Tree to main/master" },
       { "<leader>gVf", "<cmd>DiffviewFileHistory %<cr>", desc = "Current File History" },
       { "<leader>gVf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
       { "<leader>gVq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
@@ -39,7 +62,7 @@ return {
             end,
           })
         end,
-        desc = "HEAD to Commit (Picker)",
+        desc = "Working Tree to Commit (Picker)",
       },
       {
         "<leader>gVb",
@@ -52,14 +75,34 @@ return {
             end,
           })
         end,
-        desc = "HEAD to Branch (Picker)",
+        desc = "Working Tree to Branch (Picker)",
       },
     },
     opts = function()
       local ai_review = require("config.diffview_ai_review")
+      local git_adapter = require("diffview.vcs.adapters.git").GitAdapter
       ai_review.setup()
 
+      if not git_adapter._show_untracked_override then
+        local orig_show_untracked = git_adapter.show_untracked
+
+        function git_adapter:show_untracked(opt)
+          opt = opt or {}
+
+          if opt.dv_opt and opt.dv_opt.show_untracked == true then
+            return true
+          end
+
+          return orig_show_untracked(self, opt)
+        end
+
+        git_adapter._show_untracked_override = true
+      end
+
       return {
+        default_args = {
+          DiffviewOpen = { "--imply-local", "--untracked-files=all" },
+        },
         keymaps = {
           view = {
             ["q"] = "<cmd>DiffviewClose<cr>",
