@@ -1,3 +1,35 @@
+local function is_test_picker_item(item)
+  local path = Snacks.picker.util.path(item)
+  if not path or path == "" then
+    return false
+  end
+
+  path = vim.fs.normalize(path)
+
+  local segments = {
+    "/test/",
+    "/tests/",
+    "/__tests__/",
+    "/spec/",
+    "/specs/",
+    "/unittest/",
+    "/unittests/",
+    "/integrationtest/",
+    "/integrationtests/",
+  }
+
+  for _, segment in ipairs(segments) do
+    if path:find(segment, 1, true) then
+      return true
+    end
+  end
+
+  return path:match("%.Tests?/") ~= nil
+    or path:match("%.Specs?/") ~= nil
+    or path:match("%.UnitTests?/") ~= nil
+    or path:match("%.IntegrationTests?/") ~= nil
+end
+
 return {
   {
     "akinsho/bufferline.nvim",
@@ -70,6 +102,27 @@ return {
         },
       },
       picker = {
+        toggles = {
+          no_tests = { icon = "x" },
+        },
+        transform = function(item, ctx)
+          if ctx.picker.opts.no_tests and is_test_picker_item(item) then
+            return false
+          end
+          return item
+        end,
+        win = {
+          input = {
+            keys = {
+              ["<a-x>"] = { "toggle_no_tests", mode = { "n", "i" } },
+            },
+          },
+          list = {
+            keys = {
+              ["<a-x>"] = "toggle_no_tests",
+            },
+          },
+        },
         sources = {
           projects = {
             dev = { "~/Development/" },
