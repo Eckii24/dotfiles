@@ -362,12 +362,21 @@ return {
     "folke/sidekick.nvim",
     keys = {
       {
-        "<leader>ap",
+        "<leader>aa",
         function()
           require("sidekick.cli").toggle({ name = "pi", focus = true })
         end,
         mode = { "n", "x" },
         desc = "Sidekick Toggle Pi",
+      },
+    },
+    opts = {
+      cli = {
+        win = {
+          split = {
+            width = 120,
+          },
+        },
       },
     },
   },
