@@ -59,7 +59,7 @@ OPTIONS
   --ignore <path>
       Exclude a file or folder relative to the effective input root.
       May be supplied multiple times.
-      Any folder named .git is ignored recursively by default.
+      Any path named .git is ignored recursively by default.
 
   -h, --help
       Show this help text and exit.
@@ -85,7 +85,7 @@ NOTES
   - Positional arguments are not supported; use named parameters.
   - The output root keeps an index file at <output>/${INDEX_FILENAME}.
   - Mermaid fences are left as ordinary code blocks.
-  - Any folder named .git is ignored automatically.
+  - Any path named .git is ignored automatically.
 EOF
 }
 
@@ -903,7 +903,7 @@ _collect_input_manifests() {
   local ignored_file_path
   local -a find_args=()
 
-  find_args=("$EFFECTIVE_INPUT" "(" "-type" "d" "-name" ".git")
+  find_args=("$EFFECTIVE_INPUT" "(" "-name" ".git")
 
   if _path_is_nested_under "$EFFECTIVE_OUTPUT" "$EFFECTIVE_INPUT"; then
     find_args+=("-o" "-path" "$EFFECTIVE_OUTPUT")
