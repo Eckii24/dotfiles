@@ -26,9 +26,19 @@ A good PRD lets an executor with zero prior context know what to build, why, for
 | Medium feature/integration | User stories, decisions, acceptance criteria, key interfaces/examples. |
 | Large system/multi-team | Full template: definitions, interfaces, edge cases, rationale, risks. |
 
+### New tracked artifact default
+
+Prefer story-named artifacts for tracked work:
+
+```text
+.ai/<slug>-stories.md
+```
+
 ## Project-memory integration
 
 If tracked work is active, follow `project-memory`. PRD supports `.ai/current-work.md`; it is not the anchor. Make constraints, decisions, rationale, rejected alternatives, and open questions easy to lift into current-work. Avoid exact file paths unless a prototype snippet is the clearest decision record.
+
+If you propose the next execution artifact, use `.ai/<slug>-stories.md`.
 
 ## Template
 
@@ -110,5 +120,5 @@ tags: [optional]
 
 ## See also
 
-- `to-issues` — break PRD into vertical slices.
+- `to-stories` — break PRD into vertical slices.
 - `project-memory` — tracked-work lifecycle and learning/archive rules.

@@ -17,14 +17,16 @@ Avoid generic parallel memory files (`.ai/project.md`, `.ai/conventions.md`, `.a
 
 ## When to track
 
-Track when work spans sessions, creates PRD/issues/review artifacts, has costly context, or user asks for handoff/resume. Skip for quick questions/one-off edits.
+Track when work spans sessions, creates PRD/stories/review artifacts, has costly context, or user asks for handoff/resume. Skip for quick questions/one-off edits.
 
-If `.ai/current-work.md` already exists for another feature, ask before replacing it. Keep exactly one active top-level feature anchor and same slug across active artifacts:
+If `.ai/current-work.md` already exists for another feature, ask before replacing it. Keep exactly one active top-level feature anchor and same slug across active artifacts.
+
+Preferred naming:
 
 ```text
 .ai/current-work.md
 .ai/<slug>-prd.md
-.ai/<slug>-issues.md
+.ai/<slug>-stories.md
 .ai/<slug>-review.md
 .ai/learnings/pending/*.md
 .ai/archive/
@@ -35,7 +37,7 @@ If `.ai/current-work.md` already exists for another feature, ask before replacin
 1. Find root: `git rev-parse --show-toplevel 2>/dev/null || pwd`.
 2. Read in order, only as needed:
    - `.ai/current-work.md`
-   - active `.ai/<slug>-prd.md`, `.ai/<slug>-issues.md`, `.ai/<slug>-review.md`
+   - active `.ai/<slug>-prd.md`, `.ai/<slug>-stories.md`, `.ai/<slug>-review.md`
    - injected approved learning refs; full learning files only when directly relevant
    - `AGENTS.md`
 3. Validate memory claims against live code before relying on them.
@@ -43,7 +45,7 @@ If `.ai/current-work.md` already exists for another feature, ask before replacin
 
 ## `current-work.md` contract
 
-Keep compact; working record, not transcript. Always include a minimal Todo Tracker when active. If an issues file exists, put detailed tasks there, not in `current-work.md`.
+Keep compact; working record, not transcript. Always include a minimal Todo Tracker when active. If a stories file exists, put detailed tasks there, not in `current-work.md`.
 
 Template:
 
@@ -95,7 +97,7 @@ Template:
 ```
 
 Rules:
-- Todo = major phases only; no detailed checklist when `.ai/<slug>-issues.md` exists.
+- Todo = major phases only; no detailed checklist when `.ai/<slug>-stories.md` exists.
 - Keep evidence sections bounded to ~3-5 terse, high-signal items.
 - Preserve original review findings until learning extraction mined them; append fix/verification notes instead of deleting evidence.
 - Keep `Next restart step` exact and current.
@@ -138,7 +140,7 @@ Then archive final snapshots with dated prefixes:
 ```text
 .ai/archive/YYYY-MM-DD-<slug>-current-work.md
 .ai/archive/YYYY-MM-DD-<slug>-prd.md
-.ai/archive/YYYY-MM-DD-<slug>-issues.md
+.ai/archive/YYYY-MM-DD-<slug>-stories.md
 .ai/archive/YYYY-MM-DD-<slug>-review.md
 ```
 
@@ -156,7 +158,7 @@ Before finishing meaningful tracked work, verify:
 ## Response snippets
 
 ```md
-Memory checked: `.ai/current-work.md`, `.ai/<slug>-issues.md`
+Memory checked: `.ai/current-work.md`, `.ai/<slug>-stories.md`
 Feature anchor active: <slug> (in progress)
 Relevant: next restart step is ...; review artifact has ...
 ```
