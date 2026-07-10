@@ -1,7 +1,7 @@
 summarize-latest-vtt() {
   local -r FUNCTION_NAME="summarize-latest-vtt"
 
-  local model="github-copilot/gpt-5.4"
+  local model="github-copilot/gpt-5.6-terra"
   local delete_after_success=false
   local role="meeting"
   local downloads_dir="$HOME/Downloads"

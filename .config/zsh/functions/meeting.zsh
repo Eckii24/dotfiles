@@ -1,6 +1,6 @@
 function meeting() {
   local role="meeting"
-  local model="github-copilot/gpt-5.4"
+  local model="github-copilot/gpt-5.6-terra"
   local interactive=""
   local glossary_file="$WIKI_HOME/resources/p0-glossar.md"
 
