@@ -154,7 +154,7 @@ Locations:
 - `~/.pi/agent/agents/*.md` - user-level
 - `.pi/agents/*.md` - project-level (only with `agentScope: "project"` or `"both"`)
 
-When `agentScope: "both"` is used, project agents override user agents with the same name.
+When `agentScope: "both"` is used, project agents override user agents with the same name. `model` may be either `provider/model` (explicit provider) or a bare model ID. Bare IDs are expanded at discovery using the active `~/.pi/agent/settings.json` `defaultProvider` before the child process receives `--model`.
 
 ## Limitations
 

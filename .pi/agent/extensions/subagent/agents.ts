@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
+import { resolveModelReference } from "../shared/model-reference.js";
 
 export type AgentScope = "user" | "project" | "both";
 
@@ -60,11 +61,19 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			.map((t: string) => t.trim())
 			.filter(Boolean);
 
+		let model: string | undefined;
+		try {
+			model = frontmatter.model ? resolveModelReference(frontmatter.model) : undefined;
+		} catch (error) {
+			console.error(`[subagent] Ignoring ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+			continue;
+		}
+
 		agents.push({
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools: tools && tools.length > 0 ? tools : undefined,
-			model: frontmatter.model,
+			model,
 			systemPrompt: body,
 			source,
 			filePath,

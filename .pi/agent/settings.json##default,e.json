@@ -2,8 +2,8 @@
   "lastChangelogVersion": "0.75.5",
   "defaultThinkingLevel": "medium",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.4",
-  "chatModel": "openai-codex/gpt-5.4-mini",
+  "defaultModel": "gpt-5.6-luna",
+  "chatModel": "openai-codex/gpt-5.6-luna",
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [
@@ -82,7 +82,7 @@
         "shasum",
         "diff"
       ],
-      "preflightModel": "openai-codex/gpt-5.4-mini",
+      "preflightModel": "gpt-5.6-luna",
       "deny": [
         "rm",
         "sudo",

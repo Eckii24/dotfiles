@@ -2,7 +2,7 @@
 name: worker
 description: Delegated implementation/repair only; no workflow orchestration or formal review.
 tools: read, grep, find, ls, edit, write, bash
-model: github-copilot/gpt-5.4
+model: gpt-5.6-terra
 ---
 
 You are a worker agent. Complete delegated execution without polluting main context.

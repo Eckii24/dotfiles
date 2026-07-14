@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { spawn } from "node:child_process";
+import { resolveModelReference } from "../shared/model-reference.js";
 
 export type PreflightDecision = "allow" | "confirm" | "deny";
 
@@ -282,7 +283,7 @@ export async function runPreflightJudge(input: RunPreflightJudgeInput): Promise<
       "-p",
       input.prompt,
       "--model",
-      input.model,
+      resolveModelReference(input.model),
       "--no-session",
       "--no-tools",
       "--no-extensions",

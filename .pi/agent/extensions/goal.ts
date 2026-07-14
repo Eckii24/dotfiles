@@ -34,6 +34,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@mariozechner/pi-tui";
+import { resolveModelReference } from "./shared/model-reference.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -328,7 +329,7 @@ async function runEvaluator(
 			"-p",
 			prompt,
 			"--model",
-			evaluatorModel,
+			resolveModelReference(evaluatorModel),
 			"--no-session",
 			"--thinking-level",
 			"off",
