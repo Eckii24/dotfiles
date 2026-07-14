@@ -15,10 +15,11 @@ Read and follow:
 2. If `.ai/current-work.md` exists and is relevant, read it. If stale/completed/unrelated, ignore it.
 3. Use a narrow `scout` only when repo context is genuinely unclear.
 4. Delegate one bounded implementation task to `worker`.
-5. Build a compact review packet from requirements, changed files, key symbols, and eval/test results.
-6. Run at most one independent formal review pass with `code-reviewer`.
-7. Do **not** auto-fix review findings.
-8. Only update/archive `.ai/` artifacts in tracked mode, or when the user explicitly wants a review artifact.
+5. Define the review focus before delegation: requirements/spec fidelity, a stated risk, a named concern, or full review.
+6. Build a compact review packet from the focus, requirements, changed files, key symbols, and eval/test results.
+7. Run at most one independent formal review pass with `code-reviewer`; pass the focus explicitly.
+8. Do **not** auto-fix review findings.
+9. Only update/archive `.ai/` artifacts in tracked mode, or when the user explicitly wants a review artifact.
 
 ## Final summary requirements
 

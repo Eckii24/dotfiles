@@ -1,6 +1,6 @@
 ---
 name: implementation-workflow
-description: Implement a bounded code change from a request, PRD, stories doc, or plan. Use when executing implementation work and choosing between quick, bounded, and tracked modes.
+description: Implement a bounded code change from a request, spec, or implementation plan. Use when executing implementation work and choosing between quick, bounded, and tracked modes.
 ---
 
 # Implementation Workflow
@@ -27,7 +27,7 @@ Rules:
 Before delegating implementation, collect only the minimum useful context:
 - requirement summary / acceptance criteria
 - relevant files or symbols if already known
-- stories / plan / PRD paths when they materially help
+- spec / implementation-plan paths when they materially help
 - constraints, non-goals, and tests to preserve
 
 If codebase location is unclear, run a narrow scout first.
@@ -76,7 +76,7 @@ After worker output:
 Only in tracked mode:
 - read/update `.ai/current-work.md`
 - keep Todo Tracker at major-phase granularity only
-- keep detailed execution structure in stories/plan artifacts, not current-work
+- keep detailed execution structure in the implementation plan, not current-work
 - ask about archive/closeout only when the task is actually tracked
 
 ## Output expectations
@@ -92,7 +92,7 @@ Summaries should include:
 ## Anti-patterns
 
 Avoid:
-- universal PRD/stories/tracked workflow for every small change
+- universal spec/plan/tracked workflow for every small change
 - auto-creating `.ai/*` files for one-shot tasks
 - using multiple subagents when one worker would do
 - mixing implementation and formal review in one worker

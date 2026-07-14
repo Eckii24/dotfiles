@@ -225,24 +225,29 @@ export interface ShellFile {
   Stmts: Stmt[];
 }
 
-// ─── Redirect Op constants (shfmt v3) ───
+// ─── Redirect Op constants (shfmt v3.13.x) ─────────────────────────────
+//
+// `shfmt -tojson` emits mvdan.cc/sh token numeric values. Keep this mapping
+// aligned with the installed shfmt and cover it with redirect-policy tests:
+// stale values silently skip write-redirect enforcement.
 
-export const REDIR_OUT = 54;      // >
-export const REDIR_APPEND = 55;   // >>
-export const REDIR_IN = 56;       // <
-export const REDIR_INOUT = 57;    // <>
-export const REDIR_DPLOUT = 59;   // >&  (e.g. 2>&1)
-export const REDIR_HDOC = 61;     // <<
-export const REDIR_DASHHDOC = 62; // <<-
-export const REDIR_HERESTR = 63;  // <<<
-export const REDIR_ALL = 64;      // &>
-export const REDIR_APPALL = 65;   // &>>
+export const REDIR_OUT = 63;      // >
+export const REDIR_APPEND = 64;   // >>
+export const REDIR_IN = 65;       // <
+export const REDIR_INOUT = 66;    // <>
+export const REDIR_DPLOUT = 68;   // >&  (e.g. 2>&1)
+export const REDIR_HDOC = 71;     // <<
+export const REDIR_DASHHDOC = 72; // <<-
+export const REDIR_HERESTR = 73;  // <<<
+export const REDIR_ALL = 74;      // &>
+export const REDIR_APPALL = 76;   // &>>
 
 /** Redirect ops that write to files (not fd duplication or heredocs) */
 export const WRITE_REDIRECT_OPS = new Set([
   REDIR_OUT,     // >
   REDIR_APPEND,  // >>
   REDIR_INOUT,   // <>
+  REDIR_DPLOUT,  // >& when target is a path, not a file descriptor
   REDIR_ALL,     // &>
   REDIR_APPALL,  // &>>
 ]);
@@ -439,7 +444,9 @@ function walkCommand(
           for (const redir of parentStmt.Redirs) {
             if (WRITE_REDIRECT_OPS.has(redir.Op)) {
               const target = wordToString(redir.Word);
-              if (target && !target.startsWith("/dev/")) {
+              const isFdDuplicationOrClose =
+                redir.Op === REDIR_DPLOUT && /^(?:\d+|-)$/.test(target);
+              if (!isFdDuplicationOrClose && target && !target.startsWith("/dev/")) {
                 writeRedirects.push(target);
               }
             }

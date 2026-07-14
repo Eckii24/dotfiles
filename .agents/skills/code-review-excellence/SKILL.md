@@ -9,7 +9,7 @@ Review changes systematically. Prioritize impact. Be specific/actionable; no nit
 
 ## Gather context first
 
-1. Requirements: spec/story/plan/PR description.
+1. Requirements: spec, implementation plan, or PR description.
 2. Changed files and scope.
 3. Test/eval signals from plan or relevant commands.
 4. Neighboring code patterns for conventions/error handling.

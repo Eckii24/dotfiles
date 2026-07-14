@@ -88,4 +88,34 @@ describe("checkBash parsing", () => {
     expect(result.allowed).toBe(false);
     expect(result.violations.some((violation) => violation.details?.includes("Path not in allowWrite list"))).toBe(true);
   });
+
+  it("treats >& file redirects as writes but ignores fd duplication", () => {
+    const config = {
+      timeout: 300000,
+      paths: {
+        allowWrite: ["./sandbox/**"],
+      },
+      bash: {},
+    };
+
+    const fileRedirect = checkBash("echo x >& denied.txt", "/tmp/repo", config, {
+      patternCwd: "/tmp/repo",
+    });
+    const fdDuplication = checkBash("echo x 2>&1", "/tmp/repo", config, {
+      patternCwd: "/tmp/repo",
+    });
+    const dynamicTarget = checkBash("echo x >& \"$DEST\"", "/tmp/repo", config, {
+      patternCwd: "/tmp/repo",
+    });
+    const fdClose = checkBash("echo x >&-", "/tmp/repo", config, {
+      patternCwd: "/tmp/repo",
+    });
+
+    expect(fileRedirect.allowed).toBe(false);
+    expect(fileRedirect.violations[0]?.details).toContain("Path not in allowWrite list");
+    expect(fdDuplication.allowed).toBe(true);
+    expect(dynamicTarget.allowed).toBe(false);
+    expect(dynamicTarget.violations[0]?.details).toContain("Path not in allowWrite list");
+    expect(fdClose.allowed).toBe(true);
+  });
 });
