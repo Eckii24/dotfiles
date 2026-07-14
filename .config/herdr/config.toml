@@ -1,0 +1,37 @@
+# Herdr configuration
+# Reference: https://herdr.dev/docs/configuration/
+
+# Skip the interactive first-run flow; this file is the intended setup.
+onboarding = false
+
+[theme]
+name = "catppuccin"
+
+[keys]
+prefix = "ctrl+y"
+
+# Same core pane workflow.
+split_vertical = "prefix+v"    # side by side, like tmux prefix+v
+split_horizontal = "prefix+s"  # stacked, like tmux prefix+s
+close_pane = "prefix+x"
+focus_pane_left = "prefix+h"
+focus_pane_down = "prefix+j"
+focus_pane_up = "prefix+k"
+focus_pane_right = "prefix+l"
+
+# tmux prefix+r reloads its configuration; preserve that muscle memory.
+reload_config = "prefix+r"
+# Herdr's default resize binding moves because prefix+r is now reload.
+resize_mode = "prefix+shift+r"
+
+[ui]
+mouse_capture = true
+pane_borders = true
+pane_gaps = false
+
+[ui.toast]
+delivery = "terminal"
+
+[ui.sound]
+# tmux has no audio feedback.
+enabled = false
