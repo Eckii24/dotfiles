@@ -3,7 +3,12 @@
   "defaultThinkingLevel": "medium",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-luna",
-  "chatModel": "openai-codex/gpt-5.6-luna",
+  "modelTiers": {
+    "small": "gpt-5.6-luna",
+    "medium": "gpt-5.6-terra",
+    "large": "gpt-5.6-sol"
+  },
+  "chatModel": "gpt-5.6-luna",
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [
@@ -82,7 +87,7 @@
         "shasum",
         "diff"
       ],
-      "preflightModel": "gpt-5.6-luna",
+      "preflightModel": "@small",
       "deny": [
         "rm",
         "sudo",

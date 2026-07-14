@@ -41,7 +41,7 @@ import { resolveModelReference } from "./shared/model-reference.js";
 const GOAL_STATE_ENTRY_TYPE = "goal-state";
 const GOAL_GLOBAL_STATE_KEY = "__piGoalGlobalState";
 const DEFAULT_MAX_TURNS = 10;
-const DEFAULT_EVALUATOR_MODEL = "github-copilot/claude-haiku-4.5";
+const DEFAULT_EVALUATOR_MODEL = "@small";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 
 const VERDICT_REGEX =

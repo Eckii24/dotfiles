@@ -154,7 +154,7 @@ Locations:
 - `~/.pi/agent/agents/*.md` - user-level
 - `.pi/agents/*.md` - project-level (only with `agentScope: "project"` or `"both"`)
 
-When `agentScope: "both"` is used, project agents override user agents with the same name. `model` may be either `provider/model` (explicit provider) or a bare model ID. Bare IDs are expanded at discovery using the active `~/.pi/agent/settings.json` `defaultProvider` before the child process receives `--model`.
+When `agentScope: "both"` is used, project agents override user agents with the same name. `model` may be `provider/model` (explicit provider), a bare model ID, or a quoted `@identifier` model-tier alias (for example `model: "@medium"`). Aliases resolve from active settings `modelTiers` before bare IDs receive `defaultProvider`; discovery always passes a concrete `provider/model` to the child process. Quote `@` aliases because YAML reserves `@` at the start of a plain scalar.
 
 ## Limitations
 

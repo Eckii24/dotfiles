@@ -1,9 +1,14 @@
 {
   "lastChangelogVersion": "0.80.6",
   "defaultThinkingLevel": "medium",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-luna",
-  "chatModel": "openai-codex/gpt-5.6-luna",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "claude-sonnet-5",
+  "modelTiers": {
+    "small": "gpt-5.4-mini",
+    "medium": "claude-sonnet-5",
+    "large": "claude-opus-4.8"
+  },
+  "chatModel": "gpt-5.4-mini",
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [
@@ -82,7 +87,7 @@
         "shasum",
         "diff"
       ],
-      "preflightModel": "gpt-5.6-luna",
+      "preflightModel": "@small",
       "preflightRules": [
         "Executing local tests is fine, even if test code runs arbitrary project code, as long as it does not exfiltrate secrets or mutate unrelated system state."
       ],

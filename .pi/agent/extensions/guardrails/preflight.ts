@@ -32,7 +32,7 @@ export interface RunPreflightJudgeInput {
   piExecutable?: string;
 }
 
-export const DEFAULT_PREFLIGHT_MODEL = "github-copilot/claude-haiku-4.5";
+export const DEFAULT_PREFLIGHT_MODEL = "@small";
 export const DEFAULT_PREFLIGHT_TIMEOUT_MS = 30000;
 
 export function formatPreflightRulesForDisplay(rules?: string[]): string {
