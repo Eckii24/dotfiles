@@ -7,14 +7,22 @@ onboarding = false
 name = "catppuccin"
 
 [keys]
-prefix = "ctrl+x"
+prefix = "ctrl+y"
 
+settings = "prefix+,"
+focus_agent = "prefix+alt+1..9"
+
+# Workspace
+new_workspace = "prefix+n"
+rename_workspace = "prefix+shift+n"
+switch_workspace = "prefix+shift+1..9"
+
+# Tabs + panes
+rename_tab = "prefix+shift+c"
 split_horizontal = "prefix+s"  
 
 [ui]
 confirm_close = false
-mouse_capture = true
-pane_borders = true
 pane_gaps = false
 prompt_new_tab_name = false
 
