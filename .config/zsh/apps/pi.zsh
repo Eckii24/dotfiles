@@ -11,15 +11,15 @@ pi-chat() {
   local search_dir=""
   local prompt_name=""
   local prompt_file=""
+  local settings_chat_model=""
+  local settings_default_provider=""
   local -a passthrough=()
 
   if [[ -f "$settings_file" ]] && command -v jq >/dev/null 2>&1; then
-    local settings_chat_model
     settings_chat_model="$(jq -r '.chatModel // empty' "$settings_file" 2>/dev/null)"
+    settings_default_provider="$(jq -r '.defaultProvider // empty' "$settings_file" 2>/dev/null)"
     [[ -n "$settings_chat_model" ]] && model="$settings_chat_model"
   fi
-
-  local -a pi_args=(--model "$model")
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -41,12 +41,10 @@ pi-chat() {
           return 1
         fi
         model="$2"
-        pi_args=(--no-tools --model "$model")
         shift 2
         ;;
       --model=*)
         model="${1#--model=}"
-        pi_args=(--no-tools --model "$model")
         shift
         ;;
       --help|-h)
@@ -55,7 +53,8 @@ Usage: pi-chat [options] [-- <pi args>]
 
 Options:
   -p, --prompt PROMPT  Prompt text or prompt name; prepended to system prompt
-  -m, --model MODEL    Model to use (default: ~/.pi/agent/settings.json chatModel or github-copilot/gpt-5-mini)
+  -m, --model MODEL    Model to use; bare IDs resolve through settings.json defaultProvider
+                       (default: settings.json chatModel or github-copilot/gpt-5-mini)
   -h, --help           Show this help
 
 Prompt resolution:
@@ -81,6 +80,11 @@ EOF
         ;;
     esac
   done
+
+  if [[ "$model" != */* ]] && [[ -n "$settings_default_provider" ]]; then
+    model="$settings_default_provider/$model"
+  fi
+  local -a pi_args=(--model "$model")
 
   if [[ -n "$prompt" ]]; then
     prompt_candidate="$prompt"
