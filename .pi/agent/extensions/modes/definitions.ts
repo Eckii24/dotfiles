@@ -117,3 +117,16 @@ export function resolveRequestedSkills<T extends ModeSkill>(requested: string[],
 		return matches[0];
 	});
 }
+
+/** Omitted `skills` preserves Pi's normal discovered-skill index. */
+export function selectModeSkills<T extends ModeSkill>(requested: string[] | undefined, available: readonly T[]): T[] {
+	return requested === undefined ? [...available] : resolveRequestedSkills(requested, available);
+}
+
+/** Replace Pi's metadata-only skill index. Never read or inject SKILL.md bodies. */
+export function replaceSkillIndex(systemPrompt: string, availableSkillIndex: string, selectedSkillIndex: string): string {
+	if (!availableSkillIndex) return systemPrompt;
+	const index = systemPrompt.indexOf(availableSkillIndex);
+	if (index === -1) throw new Error("Mode skill index was not found in Pi's system prompt");
+	return `${systemPrompt.slice(0, index)}${selectedSkillIndex}${systemPrompt.slice(index + availableSkillIndex.length)}`;
+}

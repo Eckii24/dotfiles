@@ -1,7 +1,6 @@
-import * as fs from "node:fs";
 import { join } from "node:path";
-import { getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { loadModes, resolveRequestedSkills, type ModeDefinition } from "./definitions.js";
+import { formatSkillsForPrompt, getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { loadModes, replaceSkillIndex, selectModeSkills, type ModeDefinition } from "./definitions.js";
 import { resolveModelReference } from "../shared/model-reference.js";
 
 const MODE_STATE_ENTRY_TYPE = "pi-modes-active-mode";
@@ -34,9 +33,8 @@ function describeModeValue(value: string | string[] | undefined): string {
 	return Array.isArray(value) ? value.join(", ") : value;
 }
 
-function buildModePrompt(mode: ModeDefinition, ctx: ExtensionContext & { getSystemPrompt(): string }, skills: Array<{ name: string; filePath: string }>): string {
-	const loadedSkills = skills.map((skill) => `\n\n<mode_skill name="${skill.name}" path="${skill.filePath}">\n${fs.readFileSync(skill.filePath, "utf-8").trim()}\n</mode_skill>`).join("");
-	return `${ctx.getSystemPrompt()}\n\n<active_mode command="${mode.command}" model="${mode.model}">\n${mode.systemPrompt}${loadedSkills}\n</active_mode>`;
+function buildModePrompt(mode: ModeDefinition, systemPrompt: string): string {
+	return `${systemPrompt}\n\n<active_mode command="${mode.command}" model="${mode.model}">\n${mode.systemPrompt}\n</active_mode>`;
 }
 
 async function activateMode(
@@ -123,11 +121,17 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!activeMode) return undefined;
 		try {
-			// Omitted skills already remain in Pi's effective system prompt; named skills are explicit additions.
-			const skills = activeMode.skills === undefined
-				? []
-				: resolveRequestedSkills(activeMode.skills, event.systemPromptOptions.skills ?? []);
-			return { systemPrompt: buildModePrompt(activeMode, ctx, skills) };
+			let systemPrompt = ctx.getSystemPrompt();
+			if (activeMode.skills !== undefined) {
+				const availableSkills = event.systemPromptOptions.skills ?? [];
+				const selectedSkills = selectModeSkills(activeMode.skills, availableSkills);
+				systemPrompt = replaceSkillIndex(
+					systemPrompt,
+					formatSkillsForPrompt(availableSkills),
+					formatSkillsForPrompt(selectedSkills),
+				);
+			}
+			return { systemPrompt: buildModePrompt(activeMode, systemPrompt) };
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error);
 			return {

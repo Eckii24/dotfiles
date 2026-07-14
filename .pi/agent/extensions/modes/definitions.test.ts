@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadModes, resolveRequestedSkills } from "./definitions.js";
+import { loadModes, replaceSkillIndex, resolveRequestedSkills, selectModeSkills } from "./definitions.js";
 
 function makeTempDir(): string {
 	return mkdtempSync(join(tmpdir(), "pi-modes-test-"));
@@ -92,18 +92,35 @@ Do the smallest useful thing.`,
 	});
 });
 
-describe("resolveRequestedSkills", () => {
-	it("preserves declared order and rejects missing or ambiguous skills", () => {
-		const available = [
-			{ name: "caveman", filePath: "/skills/caveman/SKILL.md" },
-			{ name: "implementation-workflow", filePath: "/skills/implementation/SKILL.md" },
-		];
+describe("mode skill selection", () => {
+	const available = [
+		{ name: "caveman", filePath: "/skills/caveman/SKILL.md" },
+		{ name: "implementation-workflow", filePath: "/skills/implementation/SKILL.md" },
+	];
 
+	it("uses a declared list as the visible skill allowlist without reading skill files", () => {
 		expect(resolveRequestedSkills(["implementation-workflow", "caveman"], available)).toEqual([
 			{ name: "implementation-workflow", filePath: "/skills/implementation/SKILL.md" },
 			{ name: "caveman", filePath: "/skills/caveman/SKILL.md" },
 		]);
 		expect(() => resolveRequestedSkills(["missing"], available)).toThrow('Mode requests unavailable skill: "missing"');
 		expect(() => resolveRequestedSkills(["caveman"], [...available, available[0]])).toThrow('Mode skill is ambiguous: "caveman"');
+	});
+
+	it("keeps all normally discovered skills visible when skills is omitted", () => {
+		expect(selectModeSkills(undefined, available)).toEqual(available);
+	});
+
+	it("replaces only Pi's skill index and never injects full skill text", () => {
+		const prompt = "base\n\n<available_skills>all</available_skills>\nend";
+		const filtered = replaceSkillIndex(
+			prompt,
+			"<available_skills>all</available_skills>",
+			"<available_skills>implementation-workflow</available_skills>",
+		);
+
+		expect(filtered).toBe("base\n\n<available_skills>implementation-workflow</available_skills>\nend");
+		expect(filtered).not.toContain("<mode_skill");
+		expect(() => replaceSkillIndex("base", "<available_skills>all</available_skills>", "")).toThrow("Mode skill index was not found");
 	});
 });
