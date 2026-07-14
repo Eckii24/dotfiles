@@ -9,9 +9,10 @@ Default to the lightest workflow that can succeed.
 1. Decide tracked vs untracked:
    - Untracked by default.
    - Track only when the work is clearly multi-session, there is real restart/handoff value, or the user explicitly wants `.ai/` artifacts.
-2. If `.ai/current-work.md` exists and is relevant to this exact task, read it. If stale/completed/unrelated, ignore it.
-3. Delegate to `plan-writer` and rely on `~/.agents/skills/to-plan/SKILL.md` for the planning contract.
-4. Inspect the repository, existing conventions, and the source spec before deciding architecture. Ask only blocking questions.
+2. If tracked work is selected or a relevant `.ai/current-work.md` exists, read and follow `~/.agents/skills/project-memory/SKILL.md`.
+3. If `.ai/current-work.md` exists and is relevant to this exact task, read it. If stale/completed/unrelated, ignore it.
+4. Delegate to `plan-writer` and rely on `~/.agents/skills/to-plan/SKILL.md` for the planning contract.
+5. Inspect the repository, existing conventions, and the source spec before deciding architecture. Ask only blocking questions.
 
 ## Workflow
 

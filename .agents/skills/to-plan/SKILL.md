@@ -12,7 +12,7 @@ A plan is not a work-item breakdown.
 
 ## Process
 
-1. Read the source spec fully. Inspect the repository, `CONTEXT.md`, ADRs, conventions, and analogous implementation paths before planning.
+1. Read the source spec fully. Inspect the repository, ADRs, conventions, and analogous implementation paths before planning.
 2. Resolve only critical gaps. Do not invent interfaces, paths, or migrations. State assumptions and open questions explicitly.
 3. Make consequential decisions visible: recommendation, rationale, trade-offs, rejected alternatives, and when the decision does not apply.
 4. Design the smallest approach that meets the spec. Prefer existing abstractions over new frameworks; apply YAGNI.

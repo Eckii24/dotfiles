@@ -13,7 +13,7 @@ A good spec lets an executor with zero prior context know what to build, why, co
 
 ## Process
 
-1. Synthesize existing context, code, `CONTEXT.md`, ADRs, and wayfinder output first. Do not start with a broad interview.
+1. Synthesize existing context, code, ADRs, and wayfinder output first. Do not start with a broad interview.
 2. Ask targeted questions only for critical gaps: scope, constraints, acceptance criteria, and conflicting requirements. Use `questionnaire` when several decisions belong together.
 3. Explore the repository when needed; follow established conventions and domain language.
 4. Match spec weight to complexity.

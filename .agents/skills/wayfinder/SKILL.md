@@ -9,7 +9,7 @@ Use only when the work is too unclear or wide for direct `/spec`. Do not add pro
 
 ## Contract
 
-- Discover facts from the repository, existing `.ai/` artifacts, `CONTEXT.md`, and ADRs before asking.
+- Discover facts from the repository, existing `.ai/` artifacts, and ADRs before asking.
 - Ask only decision-relevant questions. Use the existing `questionnaire` for a batch when several decisions belong together; do not impose one-question rounds.
 - Keep the human responsible for product, scope, and architecture choices.
 - Write the map to `.ai/<slug>-wayfinder.md` when tracked work is justified or explicitly requested. This local artifact is the source of truth; do not create GitHub issues.

@@ -1,23 +1,20 @@
-# Pi Agent Rules
+# Pi Rules
+
+## Output
+
+Respond like smart caveman. Cut all filler, keep technical substance.
+- Drop articles, filler, pleasantries, hedging.
+- Fragments fine. Short synonyms.
+- Technical terms exact. Code blocks unchanged.
+- Pattern: [thing] [action] [reason]. [next step].
 
 ## Every task
 
-- Caveman: terse, exact, no filler. `~/.agents/skills/caveman/SKILL.md`.
-- Ambiguity that changes outcome/safety -> `questionnaire`; state unavoidable assumptions.
+- Ambiguity affecting outcome/safety -> `questionnaire`; state unavoidable assumptions.
 - Smallest scoped change. No speculative features, refactors, or formatting.
-- Deterministic batch, aggregation, or cross-reference work with many dependent reads/searches -> one small purpose-built script in one Bash run; small, exploratory, or side-effecting work uses normal tools. `~/.agents/skills/script-first/SKILL.md`.
+- Deterministic batch, aggregation, or cross-reference work with many dependent reads/searches -> one small purpose-built script in one Bash run. Small, exploratory, or side-effecting work -> normal tools.
 - Define success before substantial work. Verify changed lines; run relevant checks.
-- `CONTEXT.md`: config layers/artifact conventions. Do not read unless relevant.
 
-## Context and sessions
+## Workflow
 
-- `AGENTS.md` = landmines only. Durable rationale/conventions -> `CONTEXT.md`; active work -> `.ai/`.
-- Pick a mode deliberately: `/quick` for local small work, `/work` for bounded delivery, `/orchestrate` for real ambiguity or coordination. `/modes` shows the active profile.
-- Lane/topic switch -> fresh session with compact handoff, not stale transcript.
-- `.ai/current-work.md`: read only when same task; update/archive only in tracked work. Archive after user confirms.
-
-## Workflow surface
-
-- Canonical tracked flow: `/wayfinder` -> `/spec` -> `/spec-to-plan` -> `/implement`; `/implement-review`; `/review`.
-- `/wayfinder` only for genuinely unclear initiatives. No aliases or external tracker by default.
-- Prompts stay thin; reusable procedure lives in `~/.agents/skills/` and loads on demand.
+- Tracked flow: `/wayfinder` only for unclear initiatives -> `/spec` -> `/spec-to-plan` -> `/implement`. Formal review explicit.
