@@ -12,20 +12,12 @@
 ## Context and sessions
 
 - `AGENTS.md` = landmines only. Durable rationale/conventions -> `CONTEXT.md`; active work -> `.ai/`.
-- Keep lane stable in long work: `{model, tools/extensions, agent/profile}`.
+- Pick a mode deliberately: `/quick` for local small work, `/work` for bounded delivery, `/orchestrate` for real ambiguity or coordination. `/modes` shows the active profile.
 - Lane/topic switch -> fresh session with compact handoff, not stale transcript.
-- Use lightest mode: Quick; Bounded; Tracked only for real handoff/restart value.
 - `.ai/current-work.md`: read only when same task; update/archive only in tracked work. Archive after user confirms.
-
-## Subagents
-
-- Optional narrow scout only when context unclear. One bounded worker; no swarm.
-- Planner/spec writer define artifacts; worker implements/tests; reviewer reviews only.
-- Formal review only on explicit `/review` or `/implement-review`; focus required; never auto-fix findings.
-- Pass exact artifact paths. Return paths plus compact evidence, never full files/logs.
 
 ## Workflow surface
 
-- Canonical: `/wayfinder` -> `/spec` -> `/spec-to-plan` -> `/implement`; `/implement-review`; `/review`.
+- Canonical tracked flow: `/wayfinder` -> `/spec` -> `/spec-to-plan` -> `/implement`; `/implement-review`; `/review`.
 - `/wayfinder` only for genuinely unclear initiatives. No aliases or external tracker by default.
 - Prompts stay thin; reusable procedure lives in `~/.agents/skills/` and loads on demand.
