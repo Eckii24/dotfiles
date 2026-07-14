@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Review-only subagent using code-review-excellence; reports concise findings.
-tools: read, bash, find, ls
+tools: [read, bash, find, ls]
 model: "@small"
 ---
 

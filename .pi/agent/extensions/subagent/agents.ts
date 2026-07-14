@@ -50,29 +50,46 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			continue;
 		}
 
-		const { frontmatter, body } = parseFrontmatter<Record<string, string>>(content);
-
-		if (!frontmatter.name || !frontmatter.description) {
+		let frontmatter: Record<string, unknown>;
+		let body: string;
+		try {
+			({ frontmatter, body } = parseFrontmatter<Record<string, unknown>>(content));
+		} catch (error) {
+			console.error(`[subagent] Ignoring ${filePath}: invalid YAML frontmatter: ${error instanceof Error ? error.message : String(error)}`);
 			continue;
 		}
 
-		const tools = frontmatter.tools
-			?.split(",")
-			.map((t: string) => t.trim())
-			.filter(Boolean);
+		const name = frontmatter.name;
+		const description = frontmatter.description;
+		if (typeof name !== "string" || !name.trim() || typeof description !== "string" || !description.trim()) {
+			continue;
+		}
+
+		const toolsValue = frontmatter.tools;
+		if (toolsValue !== undefined && (!Array.isArray(toolsValue) || toolsValue.length === 0 || toolsValue.some((tool) => typeof tool !== "string" || !tool.trim()))) {
+			console.error(`[subagent] Ignoring ${filePath}: tools must be a non-empty YAML array of strings`);
+			continue;
+		}
+		const tools = toolsValue?.map((tool) => (tool as string).trim());
+
+		const modelValue = frontmatter.model;
+		if (modelValue !== undefined && (typeof modelValue !== "string" || !modelValue.trim())) {
+			console.error(`[subagent] Ignoring ${filePath}: model must be a non-empty YAML string`);
+			continue;
+		}
 
 		let model: string | undefined;
 		try {
-			model = frontmatter.model ? resolveModelReference(frontmatter.model) : undefined;
+			model = typeof modelValue === "string" ? resolveModelReference(modelValue.trim()) : undefined;
 		} catch (error) {
 			console.error(`[subagent] Ignoring ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
 			continue;
 		}
 
 		agents.push({
-			name: frontmatter.name,
-			description: frontmatter.description,
-			tools: tools && tools.length > 0 ? tools : undefined,
+			name: name.trim(),
+			description: description.trim(),
+			tools,
 			model,
 			systemPrompt: body,
 			source,

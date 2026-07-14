@@ -142,7 +142,7 @@ Agents are Markdown files with YAML frontmatter:
 ---
 name: my-agent
 description: What this agent does
-tools: read, grep, find, ls
+tools: [read, grep, find, ls]
 model: claude-haiku-4-5
 ---
 

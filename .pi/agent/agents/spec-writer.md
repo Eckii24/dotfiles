@@ -1,7 +1,7 @@
 ---
 name: spec-writer
 description: Creates/refines functional specs only; no implementation plan, implementation, or review.
-tools: read, write, grep, find, ls
+tools: [read, write, grep, find, ls]
 model: "@medium"
 ---
 

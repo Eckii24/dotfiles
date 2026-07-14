@@ -18,8 +18,10 @@ describe("loadModes", () => {
 command: quick
 description: Direct small work
 model: openai-codex/gpt-5.6-luna
-tools: read, grep, find, ls, edit, write, bash
-skills: caveman, implementation-workflow
+tools: [read, grep, find, ls, edit, write, bash]
+skills:
+  - caveman
+  - implementation-workflow
 thinking: low
 ---
 # Quick
@@ -81,6 +83,30 @@ Do the smallest useful thing.`,
 		rmSync(root, { recursive: true, force: true });
 	});
 
+	it("accepts skills: [] as an explicit empty visible-skill list", () => {
+		const root = makeTempDir();
+		writeFileSync(join(root, "quick.md"), "---\ncommand: quick\nskills: []\n---\nDirect work.");
+
+		expect(loadModes(root)[0]?.skills).toEqual([]);
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("accepts block-style YAML arrays for tools", () => {
+		const root = makeTempDir();
+		writeFileSync(join(root, "work.md"), "---\ncommand: work\ntools:\n  - read\n  - grep\n---\nBounded work.");
+
+		expect(loadModes(root)[0]?.tools).toEqual(["read", "grep"]);
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("rejects scalar list fields", () => {
+		const root = makeTempDir();
+		writeFileSync(join(root, "quick.md"), "---\ncommand: quick\ntools: read, grep\nskills: caveman\n---\nDirect work.");
+
+		expect(() => loadModes(root)).toThrow("tools must be a YAML array of strings");
+		rmSync(root, { recursive: true, force: true });
+	});
+
 	it("rejects duplicate commands", () => {
 		const root = makeTempDir();
 		writeFileSync(join(root, "one.md"), "---\ncommand: quick\n---\na");
@@ -109,6 +135,12 @@ describe("mode skill selection", () => {
 
 	it("keeps all normally discovered skills visible when skills is omitted", () => {
 		expect(selectModeSkills(undefined, available)).toEqual(available);
+	});
+
+	it("uses skills: [] to hide every visible skill without loading any skill body", () => {
+		expect(selectModeSkills([], available)).toEqual([]);
+		const prompt = "base\n\n<available_skills>all</available_skills>\nend";
+		expect(replaceSkillIndex(prompt, "<available_skills>all</available_skills>", "")).toBe("base\n\n\nend");
 	});
 
 	it("replaces only Pi's skill index and never injects full skill text", () => {

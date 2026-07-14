@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parseDocument } from "yaml";
 
 export interface ModeDefinition {
 	command: string;
@@ -20,52 +21,54 @@ export interface ModeSkill {
 	filePath: string;
 }
 
+type Frontmatter = Record<string, unknown>;
+
 const COMMAND_PATTERN = /^[a-z][a-z0-9-]*$/;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
 
-function asStringList(value: string | undefined): string[] {
-	if (!value) return [];
-	return value
-		.split(",")
-		.map((item) => item.trim())
-		.filter(Boolean);
+function isRecord(value: unknown): value is Frontmatter {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function requireString(frontmatter: Record<string, string>, field: string, filePath: string): string {
-	const value = frontmatter[field]?.trim();
-	if (!value) throw new Error(`Mode ${filePath} requires frontmatter field: ${field}`);
-	return value;
-}
-
-function parseScalar(value: string, filePath: string, line: string): string {
-	if (value.startsWith('"') && value.endsWith('"')) {
-		try {
-			const parsed: unknown = JSON.parse(value);
-			if (typeof parsed === "string") return parsed;
-		} catch {
-			// Fall through to the consistent frontmatter error below.
-		}
-		throw new Error(`Invalid quoted mode frontmatter value in ${filePath}: ${line}`);
+function requireString(frontmatter: Frontmatter, field: string, filePath: string): string {
+	const value = frontmatter[field];
+	if (typeof value !== "string" || !value.trim()) {
+		throw new Error(`Mode ${filePath} requires frontmatter string field: ${field}`);
 	}
-	if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
-	return value;
+	return value.trim();
 }
 
-function parseModeFrontmatter(content: string, filePath: string): { frontmatter: Record<string, string>; body: string } {
-	if (!content.startsWith("---\n")) throw new Error(`Mode ${filePath} must start with YAML frontmatter`);
-	const closingIndex = content.indexOf("\n---\n", 4);
+function optionalString(frontmatter: Frontmatter, field: string, filePath: string): string | undefined {
+	const value = frontmatter[field];
+	if (value === undefined) return undefined;
+	if (typeof value !== "string" || !value.trim()) {
+		throw new Error(`Mode ${filePath} ${field} must be a non-empty YAML string`);
+	}
+	return value.trim();
+}
+
+function stringList(frontmatter: Frontmatter, field: "tools" | "skills", filePath: string): string[] | undefined {
+	const value = frontmatter[field];
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) {
+		throw new Error(`Mode ${filePath} ${field} must be a YAML array of strings`);
+	}
+	return [...new Set(value.map((item) => item.trim()))];
+}
+
+function parseModeFrontmatter(content: string, filePath: string): { frontmatter: Frontmatter; body: string } {
+	const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+	if (!normalized.startsWith("---\n")) throw new Error(`Mode ${filePath} must start with YAML frontmatter`);
+	const closingIndex = normalized.indexOf("\n---\n", 4);
 	if (closingIndex === -1) throw new Error(`Mode ${filePath} has unterminated YAML frontmatter`);
-	const frontmatter: Record<string, string> = {};
-	for (const line of content.slice(4, closingIndex).split("\n")) {
-		if (!line.trim() || line.trimStart().startsWith("#")) continue;
-		const separator = line.indexOf(":");
-		if (separator <= 0) throw new Error(`Invalid mode frontmatter line in ${filePath}: ${line}`);
-		const key = line.slice(0, separator).trim();
-		const value = parseScalar(line.slice(separator + 1).trim(), filePath, line);
-		if (!key || !value) throw new Error(`Invalid mode frontmatter line in ${filePath}: ${line}`);
-		frontmatter[key] = value;
+
+	const document = parseDocument(normalized.slice(4, closingIndex), { prettyErrors: false, uniqueKeys: true });
+	if (document.errors.length > 0) {
+		throw new Error(`Invalid YAML frontmatter in ${filePath}: ${document.errors.map((error) => error.message).join("; ")}`);
 	}
-	return { frontmatter, body: content.slice(closingIndex + "\n---\n".length) };
+	const frontmatter = document.toJS();
+	if (!isRecord(frontmatter)) throw new Error(`Mode ${filePath} frontmatter must be a YAML mapping`);
+	return { frontmatter, body: normalized.slice(closingIndex + "\n---\n".length) };
 }
 
 function parseMode(filePath: string): ModeDefinition {
@@ -75,20 +78,20 @@ function parseMode(filePath: string): ModeDefinition {
 	if (!COMMAND_PATTERN.test(command)) {
 		throw new Error(`Invalid mode command in ${filePath}: ${command}`);
 	}
-	const model = frontmatter.model?.trim();
-	const tools = frontmatter.tools === undefined ? undefined : asStringList(frontmatter.tools);
+	const model = optionalString(frontmatter, "model", filePath);
+	const tools = stringList(frontmatter, "tools", filePath);
 	if (tools && tools.length === 0) throw new Error(`Mode ${filePath} tools must not be empty`);
-	const thinking = frontmatter.thinking?.trim();
+	const thinking = optionalString(frontmatter, "thinking", filePath);
 	if (thinking && !THINKING_LEVELS.has(thinking)) {
 		throw new Error(`Invalid mode thinking level in ${filePath}: ${thinking}`);
 	}
 
 	return {
 		command,
-		description: frontmatter.description?.trim() || `Activate ${command} mode`,
+		description: optionalString(frontmatter, "description", filePath) || `Activate ${command} mode`,
 		model,
-		tools: tools && [...new Set(tools)],
-		skills: frontmatter.skills === undefined ? undefined : [...new Set(asStringList(frontmatter.skills))],
+		tools,
+		skills: stringList(frontmatter, "skills", filePath),
 		thinking: thinking as ModeDefinition["thinking"],
 		systemPrompt: body.trim(),
 		filePath,

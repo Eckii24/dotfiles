@@ -1,7 +1,7 @@
 ---
 name: plan-writer
 description: Creates/refines implementation plans from bounded specs; architecture, code structure, sequencing, and verification only.
-tools: read, write, grep, find, ls
+tools: [read, write, grep, find, ls]
 model: "@medium"
 ---
 

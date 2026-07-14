@@ -10,3 +10,6 @@ data/
 .deps
 .ai
 
+# Build stuff
+node_modules/
+__pycache__/

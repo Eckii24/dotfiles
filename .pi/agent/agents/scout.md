@@ -1,7 +1,7 @@
 ---
 name: scout
 description: Fast recon; returns compact file/path context for handoff.
-tools: read, grep, find, ls, bash
+tools: [read, grep, find, ls, bash]
 model: "@small"
 ---
 

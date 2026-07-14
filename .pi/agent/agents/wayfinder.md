@@ -1,7 +1,7 @@
 ---
 name: wayfinder
 description: Maps unclear initiatives to a local decision frontier; no spec, implementation plan, implementation, or review.
-tools: read, write, bash, find, ls
+tools: [read, write, bash, find, ls]
 model: "@large"
 ---
 

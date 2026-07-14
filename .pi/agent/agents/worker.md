@@ -1,7 +1,7 @@
 ---
 name: worker
 description: Delegated implementation/repair only; no workflow orchestration or formal review.
-tools: read, grep, find, ls, edit, write, bash
+tools: [read, grep, find, ls, edit, write, bash]
 model: "@medium"
 ---
 

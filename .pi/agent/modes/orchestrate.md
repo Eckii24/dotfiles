@@ -2,7 +2,7 @@
 command: orchestrate
 description: Read-only Sol orchestration over isolated subagents
 model: "@large"
-tools: subagent, read, grep, find, ls
+tools: [subagent, read, grep, find, ls]
 thinking: high
 ---
 Use only for consequential ambiguity, coordination, or independent evidence. This is tracked work: `.ai/current-work.md` is required.
