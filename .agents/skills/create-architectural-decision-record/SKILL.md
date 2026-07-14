@@ -1,122 +1,45 @@
 ---
 name: create-architectural-decision-record
-description: 'Create an Architectural Decision Record (ADR) document for AI-optimized decision documentation.'
+description: Create a concise ADR for a durable, consequential architectural decision.
 ---
 
 # Create Architectural Decision Record
 
-Create an ADR document for `${input:DecisionTitle}` using structured formatting optimized for AI consumption and human readability.
-
-## When to create an ADR
-
-Create an ADR when a decision should outlive the current feature and be easy to discover later, especially when it:
-- affects multiple features, teams, or systems
-- changes project conventions or architecture boundaries
-- includes meaningful tradeoffs that future work must understand
-- rejects alternatives that would otherwise be re-proposed repeatedly
-- deserves formal visibility beyond `.ai/current-work.md`
-
-For decisions that are still evolving during implementation, keep them in `.ai/current-work.md` first. Use the `project-memory` skill to decide when the decision is stable enough to promote into an ADR.
+Use only for a durable, consequential choice with considered alternatives and costly reversal. Keep ordinary implementation decisions in the spec, plan, code, or review evidence.
 
 ## Inputs
 
-- **Context**: `${input:Context}`
-- **Decision**: `${input:Decision}`
-- **Alternatives**: `${input:Alternatives}`
-- **Stakeholders**: `${input:Stakeholders}`
+Derive context, decision, alternatives, and consequences from the task and existing artifacts. Read `.ai/current-work.md` and related artifacts when the decision originated in tracked work. Ask only for critical missing information; do not invent rationale, alternatives, or stakeholders.
 
-## Input Validation
-If any of the required inputs are not provided or cannot be determined from the conversation history, ask the user to provide the missing information before proceeding with ADR generation.
+## Location
 
-## Integration with `project-memory`
+Use a task-provided path. Otherwise use `docs/adr/` relative to the repository only when that directory or its convention exists; otherwise ask where to save it. Follow the repository's existing ADR naming convention. Do not write outside the repository root.
 
-If the decision originated in tracked feature work, read `.ai/current-work.md` and related artifacts first. Treat them as source material for the original rationale, rejected alternatives, constraints, and consequences.
+## Required format
 
-Follow `project-memory` conventions to distinguish:
-- active feature reasoning that should stay in the feature record
-- durable project decisions that should be promoted into an ADR
+Follow the local ADR convention. If none exists, use this minimal format:
 
-## Requirements
+```md
+# ADR-<nnn>: <decision title>
 
-- Use precise, unambiguous language
-- Follow standardized ADR format with front matter
-- Include both positive and negative consequences
-- Document alternatives with rejection rationale
-- Preserve the real reasoning from the feature work, not just the final choice
-- Structure for machine parsing and human reference
-- Use coded bullet points (3-4 letter codes + 3-digit numbers) for multi-item sections
+- **Status**: proposed | accepted | superseded
+- **Date**: YYYY-MM-DD
 
-The ADR must be saved in the `/docs/adr/` directory using the naming convention: `adr-NNNN-[title-slug].md`, where NNNN is the next sequential 4-digit number (e.g., `adr-0001-database-selection.md`).
+## Context
+[Constraint or problem that makes this decision necessary.]
+
+## Decision
+[Chosen direction and rationale.]
+
+## Consequences
+[Benefits, costs, and follow-up constraints.]
+
+## Alternatives considered
+- [Alternative] — [why not chosen]
+```
+
+Use concise, precise language. Preserve real rationale and rejected alternatives. ADRs are append-only history: supersede old ADRs; do not rewrite them.
 
 ## See also
 
-- `project-memory` — project memory, feature anchor, tracked work lifecycle, promotion review
-
-## Required Documentation Structure
-
-The documentation file must follow the template below, ensuring that all sections are filled out appropriately. The front matter for the markdown should be structured correctly as per the example following:
-
-```md
----
-title: "ADR-NNNN: [Decision Title]"
-status: "Proposed"
-date: "YYYY-MM-DD"
-authors: "[Stakeholder Names/Roles]"
-tags: ["architecture", "decision"]
-supersedes: ""
-superseded_by: ""
----
-
-# ADR-NNNN: [Decision Title]
-
-## Status
-
-**Proposed** | Accepted | Rejected | Superseded | Deprecated
-
-## Context
-
-[Problem statement, technical constraints, business requirements, environmental factors, and any important feature-history context requiring this decision.]
-
-## Decision
-
-[Chosen solution with clear rationale for selection.]
-
-## Consequences
-
-### Positive
-
-- **POS-001**: [Beneficial outcomes and advantages]
-- **POS-002**: [Performance, maintainability, scalability improvements]
-- **POS-003**: [Alignment with architectural principles]
-
-### Negative
-
-- **NEG-001**: [Trade-offs, limitations, drawbacks]
-- **NEG-002**: [Technical debt or complexity introduced]
-- **NEG-003**: [Risks and future challenges]
-
-## Alternatives Considered
-
-### [Alternative 1 Name]
-
-- **ALT-001**: **Description**: [Brief technical description]
-- **ALT-002**: **Rejection Reason**: [Why this option was not selected]
-
-### [Alternative 2 Name]
-
-- **ALT-003**: **Description**: [Brief technical description]
-- **ALT-004**: **Rejection Reason**: [Why this option was not selected]
-
-## Implementation Notes
-
-- **IMP-001**: [Key implementation considerations]
-- **IMP-002**: [Migration or rollout strategy if applicable]
-- **IMP-003**: [Monitoring and success criteria]
-
-## References
-
-- **REF-001**: [Related ADRs]
-- **REF-002**: [Feature anchor, specs, or plans that informed this ADR]
-- **REF-003**: [External documentation]
-- **REF-004**: [Standards or frameworks referenced]
-```
+- `project-memory` — tracked-work context and archive rules.

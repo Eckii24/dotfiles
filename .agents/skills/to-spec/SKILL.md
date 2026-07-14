@@ -5,7 +5,7 @@ description: Turn current context into a concise implementation spec. Use when a
 
 # To Spec
 
-Create a spec for `${input:Feature}`. Save to the task-provided output path; if missing, follow `project-memory` artifact conventions.
+Create a spec from the task context. Use the task-provided output path; if missing, follow `project-memory` artifact conventions. Ask only for critical missing scope, constraints, or acceptance criteria.
 
 ## Goal
 

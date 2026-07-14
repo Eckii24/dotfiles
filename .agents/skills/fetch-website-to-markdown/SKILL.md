@@ -2,7 +2,7 @@
 name: fetch-website-to-markdown
 description: Fetch public URLs/articles/docs/blogs and save clean Markdown with source URL, headings, lists, links, and code blocks.
 compatibility:
-  tools: bash, write
+  tools: bash, read, write
 ---
 
 # Fetch Website to Markdown
@@ -49,11 +49,10 @@ Use these defaults if the user does not specify them:
    - If they gave a directory, create one Markdown file per URL inside that directory.
    - If they gave nothing, ask once or use a sensible local directory only if the user clearly does not care.
 
-3. Use the bundled script for the conversion.
-   - Run:
+3. Use the bundled script for the conversion. Replace `<SKILL_DIR>` with the directory containing this `SKILL.md`.
 
 ```bash
-python3 /Users/matthias.eck/.agents/skills/fetch-website-to-markdown/scripts/fetch_to_markdown.py \
+python3 <SKILL_DIR>/scripts/fetch_to_markdown.py \
   --url "<URL>" \
   --output "<OUTPUT_FILE>.md"
 ```
@@ -67,7 +66,7 @@ python3 /Users/matthias.eck/.agents/skills/fetch-website-to-markdown/scripts/fet
    - If the output is obviously broken, rerun with a different extractor:
 
 ```bash
-python3 /Users/matthias.eck/.agents/skills/fetch-website-to-markdown/scripts/fetch_to_markdown.py \
+python3 <SKILL_DIR>/scripts/fetch_to_markdown.py \
   --url "<URL>" \
   --output "<OUTPUT_FILE>.md" \
   --extractor readability

@@ -1,17 +1,16 @@
 ---
 name: project-memory
-description: Manage tracked feature work with `.ai/current-work.md`, learnings, AGENTS.md guidance, handoffs, and archive rules.
+description: Manage tracked feature work with `.ai/current-work.md`, AGENTS.md guidance, handoffs, and archive rules.
 compatibility:
   tools: bash, read, write, edit
 ---
 
 # Project Memory
 
-Use this skill for resumable feature work, handoffs, learning extraction, and archive decisions. Memory has 3 layers:
+Use this skill for resumable feature work, handoffs, and archive decisions. Memory has 2 layers:
 
 1. `.ai/current-work.md` = active feature anchor / restart state.
-2. `.ai/learnings/*` and `~/.agents/learnings/*` = curated reusable lessons; pending first, approved injected as refs only.
-3. `AGENTS.md` = tiny durable operating rules, not evidence storage.
+2. `AGENTS.md` = tiny durable operating rules, not evidence storage.
 
 Avoid generic parallel memory files (`.ai/project.md`, `.ai/conventions.md`, `.ai/pitfalls.md`, `.ai/README.md`, broad `.ai/decisions/`) unless user explicitly asks. Use ADR skill for real ADRs.
 
@@ -29,7 +28,6 @@ Preferred naming:
 .ai/<slug>-spec.md
 .ai/<slug>-plan.md
 .ai/<slug>-review.md
-.ai/learnings/pending/*.md
 .ai/archive/
 ```
 
@@ -39,7 +37,6 @@ Preferred naming:
 2. Read in order, only as needed:
    - `.ai/current-work.md`
    - active `.ai/<slug>-wayfinder.md`, `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`
-   - injected approved learning refs; full learning files only when directly relevant
    - `AGENTS.md`
 3. Validate memory claims against live code before relying on them.
 4. Report briefly: files checked, active feature, 2-5 relevant takeaways, stale/conflicting info.
@@ -63,7 +60,6 @@ Template:
 
 ## Todo Tracker
 - [ ] [Major phase only]
-- [ ] Learn extraction run
 - [ ] User confirmed feature complete
 - [ ] Active artifacts archived
 
@@ -89,20 +85,13 @@ Template:
 ## Review findings & fixes
 - [Finding] — [fix/status] — Evidence: [exact path]
 
-## Learning candidates
-- Summary: [one sentence]
-  - Why it matters: [1-2 lines]
-  - Evidence:
-    - [exact path]
-  - Candidate target: project learning | global learning | AGENTS.md | archive only
 ```
 
 Rules:
 - Todo = major phases only; no detailed checklist when `.ai/<slug>-plan.md` exists.
 - Keep evidence sections bounded to ~3-5 terse, high-signal items.
-- Preserve original review findings until learning extraction mined them; append fix/verification notes instead of deleting evidence.
+- Preserve original review findings; append fix/verification notes instead of deleting evidence.
 - Keep `Next restart step` exact and current.
-- Do not create approved learnings directly.
 
 ## During active work
 
@@ -111,22 +100,9 @@ Update `current-work.md` when state materially changes:
 - decisions / rejected options
 - blockers / assumptions
 - review findings and fixes
-- reusable learning candidates with evidence paths
 - artifact links and eval/test results
 
-Prefer explicit learning candidates in `current-work.md`; then review artifacts, changed files, session context.
-
-## Learning flow
-
-Use `learn-orchestrator` for extraction when reusable evidence exists. Pending learnings are ok; approved changes and AGENTS.md promotion happen through `/skill:learn review`.
-
-Candidate buckets:
-- Keep in `current-work.md`: only needed for active restart.
-- Promote to learning: reusable, needs context (`Why`, `When`, `Details`).
-- Promote to `AGENTS.md`: stable short operating rule.
-- Archive only: historical, not worth injecting.
-
-Promote only compact durable essence to `AGENTS.md`.
+Keep reusable evidence in the active artifact. Promote only compact, durable operating rules to `AGENTS.md` after explicit review; do not invent a separate learning pipeline.
 
 ## Archive / closeout
 
@@ -153,8 +129,7 @@ Archive final `current-work.md` too, so feature can be reconstructed.
 Before finishing meaningful tracked work, verify:
 - `current-work.md` is enough for cold restart.
 - Todo Tracker is minimal and accurate.
-- pitfalls/rejected options/review fixes/learning candidates are captured with evidence.
-- reusable learning extraction was run or explicitly skipped because no candidate exists.
+- pitfalls/rejected options/review fixes are captured with evidence.
 - no archive happened without user confirmation.
 
 ## Response snippets
@@ -174,5 +149,4 @@ Feature anchor updated:
 Tracked work archived:
 - `.ai/archive/YYYY-MM-DD-<slug>-current-work.md`
 - `.ai/archive/YYYY-MM-DD-<slug>-review.md`
-- `learn-orchestrator` — pending learnings created from current-work/review evidence
 ```

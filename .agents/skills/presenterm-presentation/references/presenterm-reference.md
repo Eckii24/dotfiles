@@ -95,8 +95,6 @@ author: Matthias
 Intro
 ---
 
-<!-- jump_to_middle -->
-
 - Goal
 - Scope
 - Outcome
@@ -106,8 +104,6 @@ Intro
 <!-- alignment: center -->
 Deep Dive
 ---
-
-<!-- jump_to_middle -->
 
 - Point 1
 - Point 2
@@ -291,7 +287,7 @@ presenterm --list-comment-commands
 - Use `<!-- end_slide -->` explicitly for clarity.
 - Prefer front matter with `title`, `sub_title`, and `author`.
 - Prefer slide titles written with `---`.
-- Default to `<!-- alignment: center -->` and `<!-- jump_to_middle -->` unless the user asks otherwise.
+- Default to `<!-- alignment: center -->`. Use `<!-- jump_to_middle -->` only on divider, transition, or otherwise very sparse slides with at most 1-3 short visible content lines.
 - Prefer local assets with stable relative paths.
 - Use Presenterm column/layout commands instead of HTML layout hacks.
 - Use authoring mode with hot reload while drafting.
