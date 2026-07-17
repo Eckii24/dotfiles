@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"session-branch","timestamp":"x","cwd":"/tmp"}
+{"type":"message","id":"root","parentId":null,"timestamp":"x","message":{"role":"user","content":"root"}}
+{"type":"message","id":"anchor","parentId":"root","timestamp":"x","message":{"role":"user","content":"TURN_BRANCH task"}}
+{"type":"message","id":"alternate","parentId":"root","timestamp":"x","message":{"role":"user","content":"human branch"}}
+{"type":"message","id":"final","parentId":"anchor","timestamp":"x","message":{"role":"assistant","content":[{"type":"text","text":"right"}],"stopReason":"stop"}}

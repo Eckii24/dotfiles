@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"session-tools","timestamp":"x","cwd":"/tmp"}
+{"type":"message","id":"anchor","parentId":null,"timestamp":"x","message":{"role":"user","content":"TURN_TOOLS task"}}
+{"type":"message","id":"call","parentId":"anchor","timestamp":"x","message":{"role":"assistant","content":[{"type":"toolCall","id":"call-1","name":"read","arguments":{}}],"stopReason":"toolUse"}}
+{"type":"message","id":"result","parentId":"call","timestamp":"x","message":{"role":"toolResult","toolCallId":"call-1","toolName":"read","content":[{"type":"text","text":"tool output"}],"isError":false}}
+{"type":"message","id":"final","parentId":"result","timestamp":"x","message":{"role":"assistant","content":[{"type":"text","text":"tool done"}],"stopReason":"stop"}}

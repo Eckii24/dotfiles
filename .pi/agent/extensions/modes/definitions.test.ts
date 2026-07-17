@@ -118,6 +118,12 @@ Do the smallest useful thing.`,
 	});
 });
 
+it("orchestrate mode exposes standard and Herdr orchestration tools", () => {
+	const mode = loadModes(join(import.meta.dir, "..", "..", "modes")).find(value => value.command === "orchestrate");
+	expect(mode?.tools).toEqual(["subagent", "herdr_subagent", "herdr_subagent_control", "read", "grep", "find", "ls"]);
+	expect(mode?.systemPrompt).toContain("never silently fall back");
+});
+
 describe("mode skill selection", () => {
 	const available = [
 		{ name: "caveman", filePath: "/skills/caveman/SKILL.md" },

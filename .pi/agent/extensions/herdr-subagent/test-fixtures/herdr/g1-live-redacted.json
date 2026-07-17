@@ -1,0 +1,12 @@
+{
+  "source": "herdr:pi",
+  "agent": "pi",
+  "kind": "path",
+  "value": "<redacted live Pi session path>",
+  "sessionId": "<redacted live Pi session ID>",
+  "turns": [
+    {"marker": "G1_FIXTURE_TURN_ONE", "states": [{"at": 0, "state": "working"}, {"at": 400, "state": "done"}], "anchorEntryId": "074640cd", "finalEntryId": "c0f5024b", "stopReason": "stop", "paneExists": true, "foregroundPiLive": true, "sessionIdentityUnchanged": true},
+    {"marker": "G1_FIXTURE_TURN_TWO", "states": [{"at": 0, "state": "done"}, {"at": 123, "state": "working"}, {"at": 1513, "state": "done"}], "anchorEntryId": "130d939b", "finalEntryId": "bcbe9dfe", "stopReason": "stop", "paneExists": true, "foregroundPiLive": true, "sessionIdentityUnchanged": true}
+  ],
+  "note": "Live-redacted fixture: successful 2026-07-17 G1 run. Literal newline-free agent-send turns each used one pane send-keys enter. done is candidate-settled evidence only; no runtime semantics are changed."
+}

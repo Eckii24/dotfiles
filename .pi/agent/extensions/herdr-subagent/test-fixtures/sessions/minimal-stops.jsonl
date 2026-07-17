@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"session-stops","timestamp":"x","cwd":"/tmp"}
+{"type":"message","id":"anchor","parentId":null,"timestamp":"x","message":{"role":"user","content":"TURN_STOP task"}}
+{"type":"message","id":"length","parentId":"anchor","timestamp":"x","message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"length"}}
