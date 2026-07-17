@@ -23,14 +23,20 @@
         {
           "type": "os",
           "style": "plain",
-          "foreground": "p:lavender",
-          "template": "{{ if .WSL }}WSL at {{ end }}{{ .Icon }} "
+          "foreground": "p:overlay",
+          "template": "{{ if .WSL }}WSL at {{ end }}{{ .Icon }} ",
+          "foreground_templates": [
+            "{{ if eq .OS \"darwin\" }}p:lavender{{ end }}"
+          ]
         },
         {
           "type": "session",
           "style": "plain",
-          "foreground": "p:blue",
-          "template": "{{ .UserName }} "
+          "foreground": "p:overlay",
+          "template": "{{ .UserName }} ",
+          "foreground_templates": [
+            "{{ if eq .OS \"darwin\" }}p:blue{{ end }}"
+          ]
         },
         {
           "type": "path",
