@@ -19,6 +19,7 @@ switch_workspace = "prefix+ctrl+1..9"
 
 # Tabs + panes
 rename_tab = "prefix+shift+c"
+rename_pane = "prefix+shift+v"
 split_horizontal = "prefix+s"  
 
 [ui]
