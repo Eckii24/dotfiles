@@ -22,8 +22,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
-const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
-const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
+const HERDR_BLOCKED_EVENT = "herdr:blocked";
 const STARTUP_GUARD_STATE_KEY = "__piDirtyRepoGuardStartupChecked";
 const IS_SUBAGENT_PROCESS = process.env.PI_SUBAGENT === "1";
 
@@ -79,7 +78,7 @@ async function shouldCancelForDirtyRepo(
 		return true;
 	}
 
-	pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Dirty repo — confirmation needed" });
+	pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Dirty repo — confirmation needed" });
 
 	const choice = await (async () => {
 		try {
@@ -88,7 +87,7 @@ async function shouldCancelForDirtyRepo(
 				"No, let me commit first",
 			]);
 		} finally {
-			pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+			pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
 		}
 	})();
 

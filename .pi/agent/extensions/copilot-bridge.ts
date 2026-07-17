@@ -599,13 +599,13 @@ export default function githubCopilotBridge(pi: ExtensionAPI) {
 
 		if (missingValues.length > 0 && ctx.hasUI) {
 			for (const variable of missingValues) {
-				pi.events.emit("notify:input-needed", { message: `Copilot — input needed: ${variable.name}` });
+				pi.events.emit("herdr:blocked", { active: true, label: `Copilot — input needed: ${variable.name}` });
 
 				const value = await (async () => {
 					try {
 						return await ctx.ui.input(`/${invocation.commandName} → ${variable.name}`, variable.prompt);
 					} finally {
-						pi.events.emit("notify:input-resolved");
+						pi.events.emit("herdr:blocked", { active: false });
 					}
 				})();
 				if (value === undefined) {

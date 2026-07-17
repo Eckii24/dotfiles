@@ -150,8 +150,7 @@ import { SessionAllowList } from "./session-allow-list.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 
-const NOTIFY_INPUT_NEEDED_EVENT = "notify:input-needed";
-const NOTIFY_INPUT_RESOLVED_EVENT = "notify:input-resolved";
+const HERDR_BLOCKED_EVENT = "herdr:blocked";
 const DECISION_ENTRY_TYPE = "guardrails-decision";
 
 function allowWriteLabel(config: GuardrailsConfig): string {
@@ -444,7 +443,7 @@ export default function (pi: ExtensionAPI) {
           return { block: true, reason: `[Guardrails] Read blocked (no UI): ${result.reason}` };
         }
 
-        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — read confirmation needed" });
+        pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — read confirmation needed" });
 
         const confirmed = await (async () => {
           try {
@@ -454,7 +453,7 @@ export default function (pi: ExtensionAPI) {
               { timeout }
             );
           } finally {
-            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+            pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
           }
         })();
 
@@ -482,7 +481,7 @@ export default function (pi: ExtensionAPI) {
             return { block: true, reason: `[Guardrails] Write blocked (no UI): ${result.reason}` };
           }
 
-          pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — write confirmation needed" });
+          pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — write confirmation needed" });
 
           const confirmed = await (async () => {
             try {
@@ -492,7 +491,7 @@ export default function (pi: ExtensionAPI) {
                 { timeout }
               );
             } finally {
-              pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+              pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
             }
           })();
 
@@ -543,13 +542,13 @@ export default function (pi: ExtensionAPI) {
           };
         }
 
-        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — bash confirmation needed" });
+        pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — bash confirmation needed" });
 
         const confirmResult = await (async () => {
           try {
             return await confirmBashViolation(command, activeViolations, ctx, timeout);
           } finally {
-            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+            pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
           }
         })();
 
@@ -631,12 +630,12 @@ export default function (pi: ExtensionAPI) {
           };
         }
 
-        pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — Gate-2 preflight judge failed; confirmation needed" });
+        pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — Gate-2 preflight judge failed; confirmation needed" });
         const confirmResult = await (async () => {
           try {
             return await confirmBashViolation(command, [fallbackViolation], ctx, timeout);
           } finally {
-            pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+            pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
           }
         })();
 
@@ -683,13 +682,13 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      pi.events.emit(NOTIFY_INPUT_NEEDED_EVENT, { message: "Guardrails — bash preflight confirmation needed" });
+      pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — bash preflight confirmation needed" });
 
       const confirmResult = await (async () => {
         try {
           return await confirmBashViolation(command, [verdictViolation], ctx, timeout);
         } finally {
-          pi.events.emit(NOTIFY_INPUT_RESOLVED_EVENT);
+          pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
         }
       })();
 

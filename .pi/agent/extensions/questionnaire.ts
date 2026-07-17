@@ -72,6 +72,8 @@ function errorResult(
 }
 
 export default function questionnaire(pi: ExtensionAPI) {
+	const HERDR_BLOCKED_EVENT = "herdr:blocked";
+
 	pi.registerTool({
 		name: "questionnaire",
 		label: "Questionnaire",
@@ -96,7 +98,10 @@ export default function questionnaire(pi: ExtensionAPI) {
 			const isMulti = questions.length > 1;
 			const totalTabs = questions.length + 1; // questions + Submit
 
-			const result = await ctx.ui.custom<QuestionnaireResult>((tui, theme, _kb, done) => {
+			pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Questionnaire — input needed" });
+			const result = await (async () => {
+				try {
+					return await ctx.ui.custom<QuestionnaireResult>((tui, theme, _kb, done) => {
 				// State
 				let currentTab = 0;
 				let optionIndex = 0;
@@ -371,7 +376,11 @@ export default function questionnaire(pi: ExtensionAPI) {
 					},
 					handleInput,
 				};
-			});
+				});
+			} finally {
+				pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
+			}
+			})();
 
 			if (result.cancelled) {
 				return {

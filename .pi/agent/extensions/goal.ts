@@ -43,6 +43,7 @@ const GOAL_GLOBAL_STATE_KEY = "__piGoalGlobalState";
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_EVALUATOR_MODEL = "@small";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
+const HERDR_BLOCKED_EVENT = "herdr:blocked";
 
 const VERDICT_REGEX =
 	/\[GOAL_VERDICT\]\s*MET:\s*(YES|NO)\s*REASON:\s*([\s\S]*?)\s*\[\/GOAL_VERDICT\]/i;
@@ -539,21 +540,25 @@ export default function (pi: ExtensionAPI) {
 			// /goal with no args and no active goal → open dialog
 			if (!trimmed) {
 				const settings = readSettings();
-				pi.events.emit("notify:input-needed", {
-					message: "Goal — configuration needed",
-				});
+				pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Goal — configuration needed" });
 
-				const result = await ctx.ui.custom<GoalOptions | null>(
-					(_tui, theme, _kb, done) =>
-						new GoalDialog(theme, done, {
-							maxTurns:
-								settings.maxTurns ?? DEFAULT_MAX_TURNS,
-							evaluatorModel:
-								settings.evaluatorModel ??
-								DEFAULT_EVALUATOR_MODEL,
-						}),
-					{ overlay: true },
-				);
+				const result = await (async () => {
+					try {
+						return await ctx.ui.custom<GoalOptions | null>(
+							(_tui, theme, _kb, done) =>
+								new GoalDialog(theme, done, {
+									maxTurns:
+										settings.maxTurns ?? DEFAULT_MAX_TURNS,
+									evaluatorModel:
+										settings.evaluatorModel ??
+										DEFAULT_EVALUATOR_MODEL,
+								}),
+							{ overlay: true },
+						);
+					} finally {
+						pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
+					}
+				})();
 
 				if (!result) {
 					ctx.ui.notify("Goal cancelled", "info");
