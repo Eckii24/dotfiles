@@ -23,16 +23,15 @@ checkout = git clone 'git@github.com:Eckii24/nutrition-journal.git' 'nutrition-j
 [docker-container]
 checkout = git clone 'git@gitlab.com:eckii24/docker-container.git' 'docker-container'
 
-[${HOME}/.local/share/yadm/repo.git]
+[.local/share/yadm/repo.git]
 checkout = yadm clone 'git@github.com:Eckii24/dotfiles.git' --no-bootstrap
-clean = echo "clean is intentionally disabled for the yadm repository"
+update = yadm pull "$@"
+fetch = yadm fetch --all --prune --tags "$@"
+status = yadm status -s "$@" || true; yadm --no-pager log --branches --not --remotes --simplify-by-decoration --decorate --oneline || true; yadm --no-pager stash list
 commit = yadm commit -a "$@" && yadm push --all
-diff = yadm diff "$@"
-fetch = yadm fetch "$@"
-grep = yadm grep "$@"
-log = yadm log "$@"
-push = yadm push "$@"
 record = yadm commit -a "$@"
-run = yadm enter "$@"
-status = yadm status --short --branch "$@"
-update = yadm pull --ff-only "$@"
+push = yadm push "$@"
+diff = yadm diff "$@"
+log = yadm log "$@"
+grep = yadm grep "$@"
+clean = echo "Skipping clean: yadm disables git clean for safety"
