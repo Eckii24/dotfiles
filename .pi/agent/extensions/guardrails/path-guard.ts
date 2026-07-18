@@ -1,7 +1,7 @@
 /**
  * Guardrails Extension — Path Guard
  *
- * Checks paths against denyRead / allowWrite / denyWrite glob patterns.
+ * Checks paths against confirmRead / allowWrite / confirmWrite glob patterns.
  *
  * Path resolution matches Pi's built-in tool behavior:
  * - Strip leading '@' prefix (some models add it)
@@ -215,23 +215,23 @@ export function checkRead(
 ): PathCheckResult {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
-  const denyRead = config.paths?.denyRead;
+  const confirmRead = config.paths?.confirmRead;
 
-  if (!denyRead || denyRead.length === 0) {
-    return { allowed: true, requiresConfirmation: false, reason: "No denyRead rules" };
+  if (!confirmRead || confirmRead.length === 0) {
+    return { allowed: true, requiresConfirmation: false, reason: "No confirmRead rules" };
   }
 
-  const matched = matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, getPatternCwd(cwd, options));
+  const matched = matchesAnyPatternWithCanonical(absolutePath, canonical, confirmRead, getPatternCwd(cwd, options));
   if (matched) {
     return {
       allowed: false,
       requiresConfirmation: true,
-      reason: `Path matches denyRead pattern: ${matched}`,
+      reason: `Path matches confirmRead pattern: ${matched}`,
       matchedPattern: matched,
     };
   }
 
-  return { allowed: true, requiresConfirmation: false, reason: "Path not in denyRead" };
+  return { allowed: true, requiresConfirmation: false, reason: "Path not in confirmRead" };
 }
 
 /**
@@ -246,16 +246,16 @@ export function checkWrite(
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
   const allowWrite = config.paths?.allowWrite;
-  const denyWrite = config.paths?.denyWrite;
+  const confirmWrite = config.paths?.confirmWrite;
 
-  // 1. Check denyWrite first (always wins)
-  if (denyWrite && denyWrite.length > 0) {
-    const denyMatch = matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, getPatternCwd(cwd, options));
+  // 1. Check confirmWrite first (always wins)
+  if (confirmWrite && confirmWrite.length > 0) {
+    const denyMatch = matchesAnyPatternWithCanonical(absolutePath, canonical, confirmWrite, getPatternCwd(cwd, options));
     if (denyMatch) {
       return {
         allowed: false,
         requiresConfirmation: true,
-        reason: `Path matches denyWrite pattern: ${denyMatch}`,
+        reason: `Path matches confirmWrite pattern: ${denyMatch}`,
         matchedPattern: denyMatch,
       };
     }
@@ -293,9 +293,9 @@ export function checkWrite(
 }
 
 /**
- * Check if a path matches denyWrite (used by bash guard for file operations).
+ * Check if a path matches confirmWrite (used by bash guard for file operations).
  */
-export function matchesDenyWrite(
+export function matchesConfirmWrite(
   filePath: string,
   cwd: string,
   config: GuardrailsConfig,
@@ -303,15 +303,15 @@ export function matchesDenyWrite(
 ): string | undefined {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
-  const denyWrite = config.paths?.denyWrite;
-  if (!denyWrite || denyWrite.length === 0) return undefined;
-  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyWrite, getPatternCwd(cwd, options));
+  const confirmWrite = config.paths?.confirmWrite;
+  if (!confirmWrite || confirmWrite.length === 0) return undefined;
+  return matchesAnyPatternWithCanonical(absolutePath, canonical, confirmWrite, getPatternCwd(cwd, options));
 }
 
 /**
- * Check if a path matches denyRead (used by bash guard for read commands).
+ * Check if a path matches confirmRead (used by bash guard for read commands).
  */
-export function matchesDenyRead(
+export function matchesConfirmRead(
   filePath: string,
   cwd: string,
   config: GuardrailsConfig,
@@ -319,9 +319,9 @@ export function matchesDenyRead(
 ): string | undefined {
   const absolutePath = resolvePath(filePath, cwd);
   const canonical = canonicalizePath(absolutePath);
-  const denyRead = config.paths?.denyRead;
-  if (!denyRead || denyRead.length === 0) return undefined;
-  return matchesAnyPatternWithCanonical(absolutePath, canonical, denyRead, getPatternCwd(cwd, options));
+  const confirmRead = config.paths?.confirmRead;
+  if (!confirmRead || confirmRead.length === 0) return undefined;
+  return matchesAnyPatternWithCanonical(absolutePath, canonical, confirmRead, getPatternCwd(cwd, options));
 }
 
 /**

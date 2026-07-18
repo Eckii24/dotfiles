@@ -5,17 +5,17 @@
 // policy checks and confirmation prompts for common risky operations.
 //
 // What it guards:
-// - read  -> `paths.denyRead` requires confirmation
-// - write -> `paths.allowWrite` whitelist + `paths.denyWrite` deny list
+// - read  -> `paths.confirmRead` requires confirmation
+// - write -> `paths.allowWrite` whitelist + `paths.confirmWrite` confirmation list
 // - edit  -> same rules as `write`
-// - bash  -> `bash.deny` command checks + path-based read/write detection
+// - bash  -> `bash.confirm` command checks + path-based read/write detection
 //
 // Bash parsing:
 // - AST-based via shfmt when available (no false positives on quoted strings)
 // - Falls back to string-based parsing when shfmt is not installed
 //
 // Confirmation behavior:
-// - Matching `denyRead`, `denyWrite`, or blocked `allowWrite` rules triggers a confirmation dialog.
+// - Matching `confirmRead`, `confirmWrite`, or blocked `allowWrite` rules triggers a confirmation dialog.
 // - Bash violations offer three choices:
 //   - Allow once (y/Enter)
 //   - Allow for session (a) — skips future prompts for the same exact command in the same cwd scope
@@ -32,10 +32,10 @@
 // - Checks both lexical and canonical (realpath) paths to prevent symlink
 //   bypasses.
 // - `allowWrite` semantics:
-//   - undefined -> unrestricted writes (except `denyWrite`)
+//   - undefined -> unrestricted writes (except `confirmWrite`)
 //   - []        -> no paths auto-allowed; every write needs confirmation
 //   - patterns  -> matching paths are auto-allowed; others need confirmation
-// - `denyWrite` always wins over `allowWrite`.
+// - `confirmWrite` always wins over `allowWrite`.
 //
 // Bash behavior:
 // - When shfmt is available, parses commands into an AST for accurate analysis.
@@ -50,9 +50,9 @@
 //   - prefixes: `time`, `nice`, `timeout`, `env`, etc.
 // - Both paths track simple `cd dir && ...` changes so relative file targets
 //   are checked against the effective shell cwd.
-// - Detects common file reads against `paths.denyRead`.
+// - Detects common file reads against `paths.confirmRead`.
 // - Detects common file writes against both `paths.allowWrite` and
-//   `paths.denyWrite`.
+//   `paths.confirmWrite`.
 //
 // Session allow-list:
 // - When user chooses "Allow for session" on a bash command, the exact command string
@@ -73,7 +73,7 @@
 // {
 //   "timeout": 300000,
 //   "paths": {
-//     "denyRead": [
+//     "confirmRead": [
 //       "**/.env",
 //       "**/.env.*",
 //       "~/.ssh/**",
@@ -83,7 +83,7 @@
 //       "./**",
 //       "/tmp/**"
 //     ],
-//     "denyWrite": [
+//     "confirmWrite": [
 //       "**/.env",
 //       "**/.env.*",
 //       "**/.git/**",
@@ -108,9 +108,9 @@
 // {
 //   "timeout": 300000,
 //   "paths": {
-//     "denyRead": ["**/.env", "~/.ssh/**"],
+//     "confirmRead": ["**/.env", "~/.ssh/**"],
 //     "allowWrite": [],
-//     "denyWrite": ["**/*"]
+//     "confirmWrite": ["**/*"]
 //   },
 //   "bash": {
 //     "deny": ["rm", "sudo", "dd", "mkfs", "curl", "wget"]
@@ -118,7 +118,7 @@
 // }
 //
 // Notes:
-// - `allowWrite` omitted => unrestricted writes except paths in `denyWrite`
+// - `allowWrite` omitted => unrestricted writes except paths in `confirmWrite`
 // - `allowWrite: []`   => no writes are auto-allowed; every write requires confirmation
 // - project config overrides global config field-by-field
 //
@@ -147,6 +147,7 @@ import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
 import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
+import { SessionPreflightRules } from "./session-preflight-rules.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 
@@ -310,6 +311,7 @@ export default function (pi: ExtensionAPI) {
 
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
+  const sessionPreflightRules = new SessionPreflightRules();
   let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails"));
   let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails"));
 
@@ -389,17 +391,17 @@ export default function (pi: ExtensionAPI) {
     lines.push(t.fg("dim", `  Disabled:    ${guardrailsDisabled() ? "yes" : "no"}`));
     lines.push(t.fg("dim", `  Gate 2:      ${preflightDisabled() ? "disabled" : "enabled"}`));
 
-    if (config.paths?.denyRead?.length) {
-      lines.push(t.fg("dim", `  Deny Read:   ${config.paths.denyRead.join(", ")}`));
+    if (config.paths?.confirmRead?.length) {
+      lines.push(t.fg("dim", `  Confirm Read:   ${config.paths.confirmRead.join(", ")}`));
     }
     if (config.paths?.allowWrite !== undefined) {
       lines.push(t.fg("dim", `  Allow Write: ${allowWriteLabel(config)}`));
     }
-    if (config.paths?.denyWrite?.length) {
-      lines.push(t.fg("dim", `  Deny Write:  ${config.paths.denyWrite.join(", ")}`));
+    if (config.paths?.confirmWrite?.length) {
+      lines.push(t.fg("dim", `  Confirm Write:  ${config.paths.confirmWrite.join(", ")}`));
     }
-    if (config.bash?.deny?.length) {
-      lines.push(t.fg("dim", `  Bash Deny:   ${config.bash.deny.join(", ")}`));
+    if (config.bash?.confirm?.length) {
+      lines.push(t.fg("dim", `  Bash Confirm: ${config.bash.confirm.join(", ")}`));
     }
     if (config.bash?.preflightRules?.length) {
       lines.push(t.fg("dim", `  Gate 2 rules: ${formatPreflightRulesForDisplay(config.bash.preflightRules)}`));
@@ -603,7 +605,7 @@ export default function (pi: ExtensionAPI) {
         recentContext: "", // Do not forward chat/session text into the preflight subprocess.
         gate1Reason: gateResult.reason,
         gate1Hints: gateResult.hints,
-        preflightRules: currentConfig.bash?.preflightRules ?? [],
+        preflightRules: [...(currentConfig.bash?.preflightRules ?? []), ...sessionPreflightRules.rules],
         sessionAllowedCommands: sessionAllow.commandsForScope(sessionScope),
       });
 
@@ -745,12 +747,12 @@ export default function (pi: ExtensionAPI) {
         `Session allows: ${sessionAllow.size}`,
         "",
         "─── Paths ───",
-        `Deny Read:   ${cfg.paths?.denyRead?.length ? cfg.paths.denyRead.join(", ") : "(none)"}`,
+        `Confirm Read:   ${cfg.paths?.confirmRead?.length ? cfg.paths.confirmRead.join(", ") : "(none)"}`,
         `Allow Write: ${allowWriteLabel(cfg)}`,
-        `Deny Write:  ${cfg.paths?.denyWrite?.length ? cfg.paths.denyWrite.join(", ") : "(none)"}`,
+        `Confirm Write:  ${cfg.paths?.confirmWrite?.length ? cfg.paths.confirmWrite.join(", ") : "(none)"}`,
         "",
         "─── Bash ───",
-        `Deny:        ${cfg.bash?.deny?.length ? cfg.bash.deny.join(", ") : "(none)"}`,
+        `Confirm:     ${cfg.bash?.confirm?.length ? cfg.bash.confirm.join(", ") : "(none)"}`,
         `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
         `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
         `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
@@ -760,24 +762,28 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("guardrails-preflight", {
-    description: "Toggle Gate-2 or allow an exact command: /guardrails-preflight on|off|status|allow <command>",
+    description: "Control Gate-2: on|off|status|rule <text>|rules",
     handler: async (args, ctx) => {
       const raw = args.trim();
       const action = raw.toLowerCase();
-      if (action === "allow" || action.startsWith("allow ")) {
-        const command = raw.slice("allow".length).trim();
-        if (!command) {
-          ctx.ui.notify("Usage: /guardrails-preflight allow <exact command>", "warning");
+      if (action === "rule" || action.startsWith("rule ")) {
+        const result = sessionPreflightRules.add(raw.slice("rule".length));
+        if (!result.added) {
+          ctx.ui.notify(`Cannot add session preflight rule: ${result.error}`, "warning");
           return;
         }
-        const scope = getEffectiveCwd(ctx.cwd);
-        const added = sessionAllow.allowCommand(scope, command);
-        if (added) {
-          recordDecision(ctx, "bash-preflight-allowed-session", { command });
-          ctx.ui.notify(`🛡️ Added exact session allow for ${scope}: ${command}`, "info");
-        } else {
-          ctx.ui.notify(`🛡️ Exact session allow already exists for ${scope}: ${command}`, "info");
-        }
+        recordDecision(ctx, "guardrails-preflight-rule-added", { rule: sessionPreflightRules.rules.at(-1) });
+        ctx.ui.notify(`🛡️ Added Gate 2 session rule: ${sessionPreflightRules.rules.at(-1)}`, "info");
+        return;
+      }
+      if (action === "rules") {
+        const configured = currentConfig.bash?.preflightRules ?? [];
+        const lines = [
+          "🛡️ Gate 2 rules",
+          `Configured: ${formatPreflightRulesForDisplay(configured)}`,
+          `Session: ${formatPreflightRulesForDisplay(sessionPreflightRules.rules)}`,
+        ];
+        ctx.ui.notify(lines.join("\n"), "info");
         return;
       }
       if (action === "on" || action === "off") {
@@ -786,7 +792,7 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`🛡️ Gate 2 preflight ${preflightEnabled ? "enabled" : "disabled"} for this session`, "info");
         return;
       }
-      ctx.ui.notify(`🛡️ Gate 2 preflight: ${preflightDisabled() ? "disabled" : "enabled"}\nUsage: /guardrails-preflight [on|off|status]`, action && action !== "status" ? "warning" : "info");
+      ctx.ui.notify(`🛡️ Gate 2 preflight: ${preflightDisabled() ? "disabled" : "enabled"}\nUsage: /guardrails-preflight [on|off|status|rule <text>|rules]`, action && action !== "status" ? "warning" : "info");
     },
   });
 }

@@ -4,7 +4,7 @@ import { evaluateBashCommandGates } from "./command-gates.js";
 const baseConfig = {
   timeout: 300000,
   paths: {
-    denyRead: ["**/.env"],
+    confirmRead: ["**/.env"],
   },
   bash: {},
 };

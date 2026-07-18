@@ -17,7 +17,7 @@
   "guardrails": {
     "timeout": 300000,
     "paths": {
-      "denyRead": [
+      "confirmRead": [
         "**/.env",
         "**/.env.*",
         "~/.ssh/**",
@@ -44,7 +44,7 @@
         "~/.agents/**",
         "~/.pi/**"
       ],
-      "denyWrite": [
+      "confirmWrite": [
         "**/.env",
         "**/.env.*",
         "**/.git/**",
@@ -92,7 +92,7 @@
         "diff"
       ],
       "preflightModel": "@small",
-      "deny": [
+      "confirm": [
         "rm",
         "sudo",
         "chmod",

@@ -222,11 +222,11 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
     if (typeof raw.paths === "object" && raw.paths !== null && !Array.isArray(raw.paths)) {
       config.paths = {};
 
-      if (raw.paths.denyRead !== undefined) {
-        if (isStringArray(raw.paths.denyRead)) {
-          config.paths.denyRead = raw.paths.denyRead;
+      if (raw.paths.confirmRead !== undefined) {
+        if (isStringArray(raw.paths.confirmRead)) {
+          config.paths.confirmRead = raw.paths.confirmRead;
         } else {
-          errors.push({ field: "paths.denyRead", message: "must be an array of strings" });
+          errors.push({ field: "paths.confirmRead", message: "must be an array of strings" });
         }
       }
 
@@ -238,11 +238,11 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
         }
       }
 
-      if (raw.paths.denyWrite !== undefined) {
-        if (isStringArray(raw.paths.denyWrite)) {
-          config.paths.denyWrite = raw.paths.denyWrite;
+      if (raw.paths.confirmWrite !== undefined) {
+        if (isStringArray(raw.paths.confirmWrite)) {
+          config.paths.confirmWrite = raw.paths.confirmWrite;
         } else {
-          errors.push({ field: "paths.denyWrite", message: "must be an array of strings" });
+          errors.push({ field: "paths.confirmWrite", message: "must be an array of strings" });
         }
       }
     } else {
@@ -255,11 +255,11 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
     if (typeof raw.bash === "object" && raw.bash !== null && !Array.isArray(raw.bash)) {
       config.bash = {};
 
-      if (raw.bash.deny !== undefined) {
-        if (isStringArray(raw.bash.deny)) {
-          config.bash.deny = raw.bash.deny;
+      if (raw.bash.confirm !== undefined) {
+        if (isStringArray(raw.bash.confirm)) {
+          config.bash.confirm = raw.bash.confirm;
         } else {
-          errors.push({ field: "bash.deny", message: "must be an array of strings" });
+          errors.push({ field: "bash.confirm", message: "must be an array of strings" });
         }
       }
 
@@ -324,16 +324,16 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
   if (override.paths) {
     result.paths = {
       ...base.paths,
-      denyRead: mergeArrays(base.paths?.denyRead, override.paths.denyRead),
+      confirmRead: mergeArrays(base.paths?.confirmRead, override.paths.confirmRead),
       allowWrite: mergeArrays(base.paths?.allowWrite, override.paths.allowWrite),
-      denyWrite: mergeArrays(base.paths?.denyWrite, override.paths.denyWrite),
+      confirmWrite: mergeArrays(base.paths?.confirmWrite, override.paths.confirmWrite),
     };
   }
 
   if (override.bash) {
     result.bash = {
       ...base.bash,
-      deny: mergeArrays(base.bash?.deny, override.bash.deny),
+      confirm: mergeArrays(base.bash?.confirm, override.bash.confirm),
       allow: mergeArrays(base.bash?.allow, override.bash.allow),
       preflightModel: override.bash.preflightModel ?? base.bash?.preflightModel,
       preflightRules: mergeArrays(base.bash?.preflightRules, override.bash.preflightRules),

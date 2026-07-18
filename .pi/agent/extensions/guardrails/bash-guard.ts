@@ -23,7 +23,7 @@
  */
 
 import type { GuardrailsConfig, BashCheckResult, BashViolation, ExtractedCommand } from "./types.js";
-import { matchesDenyWrite, matchesDenyRead, checkAllowWrite } from "./path-guard.js";
+import { matchesConfirmWrite, matchesConfirmRead, checkAllowWrite } from "./path-guard.js";
 import { resolve } from "node:path";
 import {
   parseShellAST,
@@ -147,7 +147,7 @@ function detectFileReadTargets(args: string[]): string[] {
 }
 
 /**
- * Check a single write target against both denyWrite and allowWrite.
+ * Check a single write target against both confirmWrite and allowWrite.
  */
 function checkWriteTarget(
   target: string,
@@ -158,13 +158,13 @@ function checkWriteTarget(
   segment: string,
   violations: BashViolation[],
 ): void {
-  const denyMatch = matchesDenyWrite(target, shellCwd, config, { patternCwd });
+  const denyMatch = matchesConfirmWrite(target, shellCwd, config, { patternCwd });
   if (denyMatch) {
     violations.push({
       type: "file_write_detected",
       command: commandName,
       segment,
-      details: `Write to '${target}' matches denyWrite pattern: ${denyMatch}`,
+      details: `Write to '${target}' matches confirmWrite pattern: ${denyMatch}`,
     });
   }
 
@@ -295,13 +295,13 @@ function processASTCommand(
   if (hasDenyRead && FILE_READ_COMMANDS.has(cmdName)) {
     const readTargets = detectFileReadTargets(cmdArgs);
     for (const target of readTargets) {
-      const matched = matchesDenyRead(target, shellCwd, config, { patternCwd });
+      const matched = matchesConfirmRead(target, shellCwd, config, { patternCwd });
       if (matched) {
         violations.push({
           type: "file_read_detected",
           command: cmdName,
           segment,
-          details: `'${cmdName}' reading '${target}' matches denyRead pattern: ${matched}`,
+          details: `'${cmdName}' reading '${target}' matches confirmRead pattern: ${matched}`,
         });
       }
     }
@@ -899,13 +899,13 @@ function checkBashViaFallback(
     if (hasDenyRead && FILE_READ_COMMANDS.has(cmd.name)) {
       const readTargets = detectFileReadTargets(cmd.args);
       for (const target of readTargets) {
-        const matched = matchesDenyRead(target, shellCwd, config, { patternCwd });
+        const matched = matchesConfirmRead(target, shellCwd, config, { patternCwd });
         if (matched) {
           violations.push({
             type: "file_read_detected",
             command: cmd.name,
             segment: cmd.fullSegment,
-            details: `'${cmd.name}' reading '${target}' matches denyRead pattern: ${matched}`,
+            details: `'${cmd.name}' reading '${target}' matches confirmRead pattern: ${matched}`,
           });
         }
       }
@@ -929,13 +929,13 @@ export function checkBash(
 ): BashCheckResult {
   const violations: BashViolation[] = [];
   const patternCwd = options.patternCwd ?? cwd;
-  const denyList = config.bash?.deny ?? [];
+  const denyList = config.bash?.confirm ?? [];
   const denySet = new Set(denyList.map((c) => c.toLowerCase()));
 
   const hasDenyRules = denySet.size > 0;
-  const hasDenyWrite = (config.paths?.denyWrite?.length ?? 0) > 0;
+  const hasDenyWrite = (config.paths?.confirmWrite?.length ?? 0) > 0;
   const hasAllowWrite = config.paths?.allowWrite !== undefined;
-  const hasDenyRead = (config.paths?.denyRead?.length ?? 0) > 0;
+  const hasDenyRead = (config.paths?.confirmRead?.length ?? 0) > 0;
 
   if (!hasDenyRules && !hasDenyWrite && !hasAllowWrite && !hasDenyRead) {
     return { allowed: true, violations: [] };

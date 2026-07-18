@@ -17,7 +17,7 @@
   "guardrails": {
     "timeout": 300000,
     "paths": {
-      "denyRead": [
+      "confirmRead": [
         "**/.env",
         "**/.env.*",
         "~/.ssh/**",
@@ -44,7 +44,7 @@
         "~/.agents/**",
         "~/.pi/**"
       ],
-      "denyWrite": [
+      "confirmWrite": [
         "**/.env",
         "**/.env.*",
         "**/.git/**",
@@ -95,7 +95,7 @@
       "preflightRules": [
         "Executing local tests is fine, even if test code runs arbitrary project code, as long as it does not exfiltrate secrets or mutate unrelated system state."
       ],
-      "deny": [
+      "confirm": [
         "rm",
         "sudo",
         "chmod",

@@ -5,7 +5,7 @@ const baseConfig = {
   timeout: 300000,
   paths: {},
   bash: {
-    deny: ["echo"],
+    confirm: ["echo"],
   },
 };
 
@@ -14,7 +14,7 @@ describe("checkBash parsing", () => {
     const config = {
       timeout: 300000,
       paths: {},
-      bash: { deny: ["rm"] },
+      bash: { confirm: ["rm"] },
     };
 
     for (const command of [

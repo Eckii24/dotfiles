@@ -5,22 +5,22 @@
 /** Configuration for path-based guardrails */
 export interface PathsConfig {
   /** Glob patterns for paths that require confirmation before reading */
-  denyRead?: string[];
+  confirmRead?: string[];
   /**
    * Glob patterns for paths that are allowed to be written to.
-   * - undefined / not set → unrestricted (only denyWrite applies)
+   * - undefined / not set → unrestricted (only confirmWrite applies)
    * - [] (empty array) → no paths are auto-allowed; writes require confirmation
    * - [...patterns] → matching paths are auto-allowed; non-matching writes require confirmation
    */
   allowWrite?: string[];
-  /** Glob patterns for paths that are denied for writing (takes precedence over allowWrite) */
-  denyWrite?: string[];
+  /** Glob patterns for paths that require confirmation before writing (takes precedence over allowWrite) */
+  confirmWrite?: string[];
 }
 
 /** Configuration for bash command guardrails */
 export interface BashConfig {
   /** Command names that require confirmation before execution */
-  deny?: string[];
+  confirm?: string[];
   /** Command names that can bypass preflight when AST proves a single simple read-only call */
   allow?: string[];
   /** provider/model id used for the Gate-2 preflight judge */

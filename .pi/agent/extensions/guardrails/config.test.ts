@@ -10,6 +10,28 @@ function makeTempDir(): string {
 }
 
 describe("loadConfig", () => {
+  it("accepts canonical confirm policy fields from project settings", () => {
+    const cwd = makeTempDir();
+    const piDir = join(cwd, ".pi");
+    mkdirSync(piDir, { recursive: true });
+    writeFileSync(join(piDir, "settings.json"), JSON.stringify({
+      guardrails: {
+        paths: {
+          confirmRead: ["**/.env"],
+          confirmWrite: ["**/.git/**"],
+        },
+        bash: { confirm: ["rm"] },
+      },
+    }));
+
+    const config = loadConfig(cwd, { force: true });
+
+    expect(config.paths?.confirmRead).toContain("**/.env");
+    expect(config.paths?.confirmWrite).toContain("**/.git/**");
+    expect(config.bash?.confirm).toContain("rm");
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
   it("accepts bash.allow, bash.preflightModel and bash.preflightRules from project settings", () => {
     const cwd = makeTempDir();
     const piDir = join(cwd, ".pi");
