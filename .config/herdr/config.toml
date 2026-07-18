@@ -13,8 +13,8 @@ settings = "prefix+,"
 focus_agent = "prefix+alt+1..9"
 
 # Workspace
-new_workspace = "prefix+n"
-rename_workspace = "prefix+shift+n"
+new_workspace = ["prefix+n", "prefix+a"]
+rename_workspace = ["prefix+shift+n", "prefix+shift+a"]
 switch_workspace = "prefix+ctrl+1..9"
 
 # Tabs + panes
