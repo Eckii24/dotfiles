@@ -5,95 +5,62 @@ description: Implement a bounded code change from a request, spec, or implementa
 
 # Implementation Workflow
 
-Use this skill for actual code delivery work. Keep orchestration narrow. Optimize for signal density, not ceremony.
+Use for code delivery. Optimize for evidence and signal density, not ceremony.
 
 ## Mode choice
 
-Pick the lightest mode that can still succeed:
-
-| Mode | Use when | Default artifacts |
+| Mode | Use when | Default shape |
 |---|---|---|
-| Quick Task | Small/local change, obvious scope, focused fix | none |
-| Bounded Delivery | Clear implementation across ~1-3 areas, maybe optional review | none by default |
-| Tracked Project | Multi-session, explicit handoff/resume need, or user explicitly wants `.ai/` artifacts | `.ai/current-work.md` + linked artifacts |
+| Quick Task | Small/local, obvious scope | Direct work; no artifacts/subagents |
+| Bounded Delivery | Clear change across ~1-3 areas | Direct, or `0-1 scout -> 1 worker -> optional review` |
+| Tracked Project | Multi-session, expensive restart/handoff, or explicitly requested | Phase contracts + `.ai/current-work.md` pointer |
 
-Rules:
-- Default to **Quick Task** or **Bounded Delivery**.
-- Use **Tracked Project** only when there is a concrete restart/handoff benefit.
-- If `.ai/current-work.md` exists but is stale/completed/unrelated, do not inherit it.
+Default Quick/Bounded. Do not inherit a stale/completed/unrelated anchor.
 
-## Inputs
+## Compact inputs
 
-Before delegating implementation, collect only the minimum useful context:
-- requirement summary / acceptance criteria
-- relevant files or symbols if already known
-- spec / implementation-plan paths when they materially help
-- constraints, non-goals, and tests to preserve
+Before work, collect only: objective, acceptance criteria, exact paths/symbols, constraints/non-goals, and test commands. Extract this once into a handoff packet. Do not make every child reread full plan/spec/current-work files.
 
-If codebase location is unclear, run a narrow scout first.
+Use a scout only to answer a real uncertainty. Good output: exact paths, symbols, line ranges, tests, and one start point. Bad output: file dumps or generic architecture prose.
 
-## Scout policy
+## Delivery shape
 
-Use a scout only when it reduces ambiguity.
+Give one worker a coherent vertical slice with owned acceptance tests. A plan bullet, file, type error, or local repair is not automatically another delegation.
 
-Good scout outputs:
-- exact file paths
-- key functions/types/symbols
-- which file to start with
-- relevant tests or neighboring patterns
+The worker should implement, run relevant evals, and fix in-scope implementation/type/test failures before returning. It returns: status, changed paths, eval evidence, one decision/blocker, and one next action.
 
-Bad scout outputs:
-- whole-file dumps
-- rephrased obvious context
-- architecture essays for a local fix
+Parallelize only read-only or isolated work. Never share a mutable checkout between concurrent workers unless the caller explicitly provides safe isolation.
 
-## Worker policy
+## Gates, budgets, review
 
-The worker should:
-- implement only the delegated scope
-- run relevant eval/test commands
-- return changed paths, artifacts, and results
-- report blockers/uncertainties tersely
-- not perform formal review
+For each phase state: objective, acceptance evidence, child shape, and escalation condition.
 
-## Verification policy
-
-After worker output:
-1. check changed files against requirements
-2. inspect eval/test output
-3. apply only obvious low-risk cleanup if clearly in scope
-4. if correctness remains unclear, ask targeted questions or run review; do not start open-ended loops
-
-## Review policy
-
-- No automatic formal review in plain implementation mode
-- For explicit review flows, run one independent formal review pass only
-- Prefer existing review skill/agent contracts over embedding review logic here
-- Do not auto-fix review findings unless the user explicitly asks
+- Default phase budget: `0-1 scout -> 1 worker -> optional 1 reviewer`.
+- More than three child runs in a phase needs an explicit evidence-based reason.
+- Global orchestration budget: 12 delegation calls or 60 minutes wall time per run, whichever comes first. Count scouts, workers, reviewers, follow-ups, and state updates.
+- At the global limit, collect any useful in-flight result, create a compact phase handoff, then stop before another delegation. Explicit user continuation starts a new budget.
+- After two repair handoffs for the same slice, stop. Synthesize root cause and revise the plan/spec or surface a blocker.
+- A live/evidence gate gets one diagnosis, one explicit decision, then one rerun. Do not create an artifact-edit chain around the gate.
+- Do not advance until previous phase acceptance evidence exists.
+- Formal review runs only when the user requests it or the chosen entrypoint includes it. For elevated risk, recommend review; do not auto-run or auto-fix it.
 
 ## Tracked-project integration
 
-Only in tracked mode:
-- read/update `.ai/current-work.md`
-- keep Todo Tracker at major-phase granularity only
-- keep detailed execution structure in the implementation plan, not current-work
-- ask about archive/closeout only when the task is actually tracked
+`current-work.md` is a restart pointer, not a transcript. Keep it under 500 tokens when possible and point to detail.
 
-## Output expectations
+Update it only at material phase boundary, blocker, decision, handoff, or closeout. Do not update/read it after routine child completions. Keep Todo Tracker at major-phase granularity; detailed work stays in the plan.
 
-Summaries should include:
-- mode used
-- changed files
-- artifact paths if any
-- eval/test results
-- review recommendation or review outcome
-- assumptions / blockers / next step
+At a phase handoff, record only: completed phase and acceptance evidence, active artifacts, one decision/blocker, exact next phase/action, and budget used. On resume, use a fresh parent session when practical; read the anchor plus only the artifact section needed next, never prior tool history.
+
+## Output
+
+Report: mode, phase/status, changed paths, eval/test results, one decision/blocker, exact next action, current-work path if used, and review result/recommendation.
 
 ## Anti-patterns
 
-Avoid:
-- universal spec/plan/tracked workflow for every small change
-- auto-creating `.ai/*` files for one-shot tasks
-- using multiple subagents when one worker would do
-- mixing implementation and formal review in one worker
-- pasting large logs/files into summaries
+- Universal tracked/orchestrated workflow
+- One fresh agent per plan bullet, file, or repair
+- Formal-review loops by default
+- Whole-file/artifact dumps in parent context
+- Repeated state-anchor reads/updates without a phase transition
+- Treating cached giant context as free

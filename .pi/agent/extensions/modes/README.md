@@ -45,4 +45,4 @@ The Markdown body is the active mode prompt. Use `/modes` to inspect installed m
 
 ## Security and execution model
 
-Mode activation validates requested model and tools before changing session state. `orchestrate` deliberately has only `subagent`, `read`, `grep`, `find`, and `ls`; it cannot directly mutate files or execute shell commands. Guardrails remain separate and are never disabled by a mode.
+Mode activation validates requested model and tools before changing session state. `orchestrate` deliberately has only `subagent`, `herdr_subagent`, `herdr_subagent_control`, `read`, `grep`, `find`, and `ls`; it cannot directly mutate files or execute shell commands. Its prompt imposes a phase/delegation budget; this is workflow policy, not a security control. Guardrails remain separate and are never disabled by a mode.

@@ -8,21 +8,15 @@ Read and follow:
 
 ## Entry-point rules
 
-1. Choose the lightest viable mode:
-   - Quick Task
-   - Bounded Delivery
-   - Tracked Project only when restart/handoff value is real or explicitly requested
-2. If tracked work is selected or a relevant `.ai/current-work.md` exists, read and follow `~/.agents/skills/project-memory/SKILL.md`.
-3. If `.ai/current-work.md` exists and is relevant, read it. If stale/completed/unrelated, ignore it.
-4. Use a narrow `scout` only when repo context is genuinely unclear.
-5. Delegate one bounded implementation task to `worker`.
-6. Define the review focus before delegation: requirements/spec fidelity, a stated risk, a named concern, or full review.
-7. Build a compact review packet from the focus, requirements, changed files, key symbols, and eval/test results.
-8. Run at most one independent formal review pass with `code-reviewer`; pass the focus explicitly.
-9. Do **not** auto-fix review findings.
-10. Only update/archive `.ai/` artifacts in tracked mode, or when the user explicitly wants a review artifact.
+1. Choose Quick Task, Bounded Delivery, or Tracked Project only when restart/handoff value is real or explicitly requested.
+2. In tracked mode, follow `project-memory`; read only active-phase artifact sections. Ignore stale/completed/unrelated anchors.
+3. Build one compact execution packet. Use direct work or at most one narrow scout -> one coherent worker. Do not delegate individual plan bullets, files, or local repairs.
+4. The worker fixes in-scope implementation/type/test failures. A material gate gets one diagnosis, one decision, and one rerun; then stop/escalate.
+5. Validate changed files and eval/test evidence yourself.
+6. Define review focus: requirements/spec fidelity, stated risk, named concern, or full review.
+7. Build a compact review packet from focus, changed paths/symbols, and eval evidence. Run at most one independent `code-reviewer` pass.
+8. Do not auto-fix review findings. Update `.ai/` only at material phase boundaries, blocker, handoff, or explicit review artifact request.
 
-## Final summary requirements
+## Final summary
 
-Include: mode used, current-work path if used, changed files, review path if created, review mode used, Blocking/Important findings, minor follow-ups, eval/test outcome, archive state if tracked, and assumptions/follow-ups.
-State explicitly that implementation and review are complete and that no review findings were auto-fixed.
+Include: mode, phase/status, changed files, eval/test outcome, review focus/path, Blocking/Important findings, one blocker/decision if any, exact next step, and archive state if tracked. State that no review findings were auto-fixed.

@@ -6,30 +6,29 @@ Default to the lightest workflow that can succeed.
 
 ## Setup
 
-1. Decide tracked vs untracked:
-   - Untracked by default.
-   - Track only when the work is clearly multi-session, there is real restart/handoff value, or the user explicitly wants `.ai/` artifacts.
-2. If tracked work is selected or a relevant `.ai/current-work.md` exists, read and follow `~/.agents/skills/project-memory/SKILL.md`.
-3. If `.ai/current-work.md` exists and is relevant to this exact task, read it. If stale/completed/unrelated, ignore it.
-4. Delegate to `plan-writer` and rely on `~/.agents/skills/to-plan/SKILL.md` for the planning contract.
-5. Inspect the repository, existing conventions, and the source spec before deciding architecture. Ask only blocking questions.
+1. Track only for real multi-session/restart value or explicit request; otherwise stay untracked.
+2. In tracked mode, follow `project-memory`; read only the relevant artifact sections.
+3. Delegate once to `plan-writer` with concise source, repository paths, constraints, and output path.
+4. Inspect repository conventions/source spec before deciding architecture. Ask only blocking questions.
+
+## Plan contract
+
+The plan must organize **coherent vertical phases**, not one worker per file or micro-task. Each phase states:
+- objective and acceptance evidence;
+- owned code/test areas and dependencies;
+- whether a scout/reviewer is justified;
+- test/eval commands;
+- gate failure behavior and escalation condition.
+
+Use live/evidence gates only where they retire a real uncertainty. A failed gate must have diagnosis -> explicit decision -> one rerun, not a chain of artifact-specific repair missions. Flag safe parallelism only for read-only or isolated work; never imply same-checkout parallel writes are safe.
 
 ## Workflow
 
-1. Resolve the source: an approved/bounded spec or direct request.
-2. Delegate to `plan-writer` with:
-   - concise source summary
-   - source spec path if known
-   - repository/context paths and relevant ADRs
-   - output path if known
-   - current-work path only in tracked mode
-3. Read back the plan result.
-4. If only small wording/scope fixes are needed, edit directly instead of re-running the full loop.
-5. Tracked mode only:
-   - update `.ai/current-work.md` with plan path, current state, next restart step
-   - ask about archive only if this is genuinely tracked work
+1. Resolve source: approved bounded spec or direct request.
+2. Read back plan result.
+3. Fix small wording/scope defects directly; do not restart planning loop.
+4. In tracked mode, update anchor only with plan path, phase, acceptance target, and next restart step.
 
-## Final summary requirements
+## Final summary
 
-Include: tracked mode used or not, plan path, key architecture decision, open questions, archive state if tracked, and recommended next step.
-Recommend `/implement` or `/implement-review` when the user wants execution next.
+Include: tracked/untracked, plan path, phase structure, key decision, open questions, and recommended next step.

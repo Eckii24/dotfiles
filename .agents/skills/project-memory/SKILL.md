@@ -1,26 +1,17 @@
 ---
 name: project-memory
-description: Manage tracked feature work with `.ai/current-work.md`, AGENTS.md guidance, handoffs, and archive rules.
+description: Manage tracked feature work with `.ai/current-work.md`, handoffs, and archive rules.
 compatibility:
   tools: bash, read, write, edit
 ---
 
 # Project Memory
 
-Use this skill for resumable feature work, handoffs, and archive decisions. Memory has 2 layers:
+Use only for resumable feature work, handoffs, or explicit tracked artifacts.
 
-1. `.ai/current-work.md` = active feature anchor / restart state.
-2. `AGENTS.md` = tiny durable operating rules, not evidence storage.
+## Purpose and scope
 
-Avoid generic parallel memory files (`.ai/project.md`, `.ai/conventions.md`, `.ai/pitfalls.md`, `.ai/README.md`, broad `.ai/decisions/`) unless user explicitly asks. Use ADR skill for real ADRs.
-
-## When to track
-
-Track when work spans sessions, creates wayfinder/spec/plan/review artifacts, has costly context, or user asks for handoff/resume. Skip for quick questions/one-off edits.
-
-If `.ai/current-work.md` already exists for another feature, ask before replacing it. Keep exactly one active top-level feature anchor and same slug across active artifacts.
-
-Preferred naming:
+`.ai/current-work.md` is an active **restart pointer**, not a transcript, plan, or evidence warehouse. Keep exactly one active top-level anchor. Linked artifacts hold detail:
 
 ```text
 .ai/current-work.md
@@ -31,122 +22,68 @@ Preferred naming:
 .ai/archive/
 ```
 
+Track only when work spans sessions, has expensive restart/handoff cost, creates durable artifacts, or user asks. Never replace an anchor for another feature without user confirmation.
+
 ## Start / resume
 
 1. Find root: `git rev-parse --show-toplevel 2>/dev/null || pwd`.
-2. Read in order, only as needed:
-   - `.ai/current-work.md`
-   - active `.ai/<slug>-wayfinder.md`, `.ai/<slug>-spec.md`, `.ai/<slug>-plan.md`, `.ai/<slug>-review.md`
-   - `AGENTS.md`
-3. Validate memory claims against live code before relying on them.
-4. Report briefly: files checked, active feature, 2-5 relevant takeaways, stale/conflicting info.
+2. Read `current-work.md` once, then only the linked artifact section needed for the active phase.
+3. Validate memory claims against live code/eval before relying on them.
+4. Report: active feature, active phase, 2-5 takeaways, and any stale/conflicting state.
 
-## `current-work.md` contract
+Do not reread or update the anchor for routine worker completion.
 
-Keep compact; working record, not transcript. Always include a minimal Todo Tracker when active. If an implementation plan exists, put detailed steps there, not in `current-work.md`.
+## Anchor contract
 
-Template:
+Keep under **500 tokens** when possible. Shorter is better when restart state remains complete.
 
 ```md
 # [Feature title]
 
 - **Slug**: <slug>
-- **Status**: In progress | Done | Idle
-- **Started**: YYYY-MM-DD
+- **Status**: In progress | Blocked | Done | Idle
 - **Updated**: YYYY-MM-DD
 
 ## Objective
 [1-3 sentences]
 
-## Todo Tracker
-- [ ] [Major phase only]
+## Active artifacts
+- `<path>` — purpose
+
+## Major phases
+- [ ] [phase + acceptance evidence]
 - [ ] User confirmed feature complete
 - [ ] Active artifacts archived
 
-## Decisions & rationale
-- [Decision] — [why]
-- [Rejected option] — [why rejected]
+## Key decisions
+- [Decision] — rationale — Evidence: `<path>`
 
 ## Current state
-[Done / in progress / next]
+[Active phase, verified result, or blocker]
 
 ## Next restart step
-[Exact next action]
+[One exact action]
 
-## Open questions / blockers
-- [Question] — [why it matters]
-
-## Pitfalls & surprises
-- [Short note] — Evidence: [exact path]
-
-## Failed attempts / rejected options
-- [Attempt] — [why rejected] — Evidence: [exact path]
-
-## Review findings & fixes
-- [Finding] — [fix/status] — Evidence: [exact path]
-
+## Open blockers
+- [Blocker] — decision needed
 ```
 
 Rules:
-- Todo = major phases only; no detailed checklist when `.ai/<slug>-plan.md` exists.
-- Keep evidence sections bounded to ~3-5 terse, high-signal items.
-- Preserve original review findings; append fix/verification notes instead of deleting evidence.
-- Keep `Next restart step` exact and current.
+- Major phases only. Detailed task lists belong in plan.
+- Keep at most 3-5 high-signal decisions/blockers.
+- Use exact paths; do not copy logs, code, full review findings, or failed-attempt history.
+- Preserve review evidence in review artifact; anchor only links/status.
 
-## During active work
+## Update policy
 
-Update `current-work.md` when state materially changes:
-- major phase completion
-- decisions / rejected options
-- blockers / assumptions
-- review findings and fixes
-- artifact links and eval/test results
+Update only at a material phase boundary, verified decision, blocker, handoff, or explicit closeout. Batch child results into one verified state packet. The packet supplies: phase, artifacts, acceptance/eval evidence when available, decision/blocker, current state, exact next action, and orchestration budget used when delegated work occurred.
 
-Keep reusable evidence in the active artifact. Promote only compact, durable operating rules to `AGENTS.md` after explicit review; do not invent a separate learning pipeline.
+If evidence is unavailable because work blocked before its gate, record that fact. Otherwise, if the packet is incomplete, return a blocker. Do not infer facts.
 
 ## Archive / closeout
 
-Archive completed or replaced tracked work only after explicit user confirmation.
-
-Before moving files, update live `.ai/current-work.md` so final Todo Tracker marks:
-- `User confirmed feature complete`
-- `Active artifacts archived`
-
-Then archive final snapshots with dated prefixes:
-
-```text
-.ai/archive/YYYY-MM-DD-<slug>-current-work.md
-.ai/archive/YYYY-MM-DD-<slug>-wayfinder.md
-.ai/archive/YYYY-MM-DD-<slug>-spec.md
-.ai/archive/YYYY-MM-DD-<slug>-plan.md
-.ai/archive/YYYY-MM-DD-<slug>-review.md
-```
-
-Archive final `current-work.md` too, so feature can be reconstructed.
+Archive only after explicit user confirmation. Mark confirmation and archive state, then archive dated snapshots under `.ai/archive/`.
 
 ## Session-end check
 
-Before finishing meaningful tracked work, verify:
-- `current-work.md` is enough for cold restart.
-- Todo Tracker is minimal and accurate.
-- pitfalls/rejected options/review fixes are captured with evidence.
-- no archive happened without user confirmation.
-
-## Response snippets
-
-```md
-Memory checked: `.ai/current-work.md`, `.ai/<slug>-plan.md`
-Feature anchor active: <slug> (in progress)
-Relevant: next restart step is ...; review artifact has ...
-```
-
-```md
-Feature anchor updated:
-- `.ai/current-work.md` — refreshed minimal Todo Tracker, decisions/evidence, artifact links, next restart step
-```
-
-```md
-Tracked work archived:
-- `.ai/archive/YYYY-MM-DD-<slug>-current-work.md`
-- `.ai/archive/YYYY-MM-DD-<slug>-review.md`
-```
+Verify anchor supports a cold restart without carrying a transcript: objective, active phase, artifact paths, verified current state, blocker, and exact next step.
