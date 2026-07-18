@@ -10,6 +10,24 @@ const baseConfig = {
 };
 
 describe("checkBash parsing", () => {
+  it("finds denied commands nested in find, command, and env wrappers", () => {
+    const config = {
+      timeout: 300000,
+      paths: {},
+      bash: { deny: ["rm"] },
+    };
+
+    for (const command of [
+      "find . -exec rm -rf {} +",
+      "command rm -rf /tmp/demo",
+      "env MODE=test rm -rf /tmp/demo",
+    ]) {
+      const result = checkBash(command, process.cwd(), config);
+      expect(result.allowed).toBe(false);
+      expect(result.violations.some((violation) => violation.command === "rm")).toBe(true);
+    }
+  });
+
   it("checks commands after standalone background separators", () => {
     const result = checkBash("pwd & echo hi", process.cwd(), baseConfig, { forceFallback: true });
 

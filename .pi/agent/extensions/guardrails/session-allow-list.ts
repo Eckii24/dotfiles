@@ -17,8 +17,12 @@ export class SessionAllowList {
     return this.allowedCommands.has(this.key(scope, command));
   }
 
-  allowCommand(scope: string, command: string): void {
-    this.allowedCommands.add(this.key(scope, command));
+  /** Adds an exact command for a scope. Returns false if it was already allowed. */
+  allowCommand(scope: string, command: string): boolean {
+    const key = this.key(scope, command);
+    if (this.allowedCommands.has(key)) return false;
+    this.allowedCommands.add(key);
+    return true;
   }
 
   commandsForScope(scope: string): string[] {

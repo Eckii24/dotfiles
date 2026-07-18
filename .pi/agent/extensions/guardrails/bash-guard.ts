@@ -99,6 +99,8 @@ const WRAPPER_SPECS: Record<string, WrapperSpec> = {
   "sudo":  { type: "next_arg", flagsWithValue: new Set(["-u", "--user", "-g", "--group", "-C", "--close-from", "-D", "--chdir", "-h", "--host", "-p", "--prompt", "-r", "--role", "-t", "--type", "-T", "--command-timeout"]) },
   "doas":  { type: "next_arg", flagsWithValue: new Set(["-u"]) },
   "su":    { type: "flag_c",   flagsWithValue: new Set(["-s", "--shell", "-g", "--group", "-G", "--supp-group"]) },
+  "command": { type: "next_arg", flagsWithValue: new Set() },
+  "builtin": { type: "next_arg", flagsWithValue: new Set() },
 };
 
 // ─── File operation detection (shared between AST and fallback) ───
@@ -208,6 +210,14 @@ function unwrapPrefixes(args: string[]): number {
       if (args[idx].startsWith("-")) break;
       idx++;
     }
+
+    // `env NAME=value command` executes `command`; assignments are not the
+    // command name and must not hide it from policy checks.
+    if (args[idx - 1] === "env") {
+      while (idx < args.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(args[idx]!)) {
+        idx++;
+      }
+    }
   }
 
   return idx;
@@ -247,6 +257,23 @@ function processASTCommand(
       segment,
       details: `Command '${cmdName}' is in the deny list`,
     });
+  }
+
+  // `find -exec command ...` executes an embedded command. Its capability must
+  // be checked before a top-level `find` can qualify for Gate 1.
+  if (cmdName === "find") {
+    for (let index = 0; index < cmdArgs.length; index++) {
+      if (!["-exec", "-execdir", "-ok", "-okdir"].includes(cmdArgs[index]!)) continue;
+      const nestedName = cmdArgs[index + 1];
+      if (nestedName && denySet.has(nestedName.toLowerCase())) {
+        violations.push({
+          type: "denied_command",
+          command: nestedName,
+          segment,
+          details: `Command '${nestedName}' executed by find is in the deny list`,
+        });
+      }
+    }
   }
 
   // ─── Check write redirections (from AST) ───

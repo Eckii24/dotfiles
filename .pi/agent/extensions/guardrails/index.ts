@@ -310,13 +310,15 @@ export default function (pi: ExtensionAPI) {
 
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
+  let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails"));
+  let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails"));
 
   function guardrailsDisabled(): boolean {
-    return Boolean(pi.getFlag("no-guardrails"));
+    return !guardrailsEnabled;
   }
 
   function preflightDisabled(): boolean {
-    return guardrailsDisabled() || Boolean(pi.getFlag("no-preflight-guardrails"));
+    return guardrailsDisabled() || !preflightEnabled;
   }
 
   function recordDecision(
@@ -718,8 +720,19 @@ export default function (pi: ExtensionAPI) {
 
   // ─── /guardrails command ───
   pi.registerCommand("guardrails", {
-    description: "Show current guardrails configuration",
-    handler: async (_args, ctx) => {
+    description: "Show configuration or toggle this session: /guardrails on|off|status",
+    handler: async (args, ctx) => {
+      const action = args.trim().toLowerCase();
+      if (action === "on" || action === "off") {
+        guardrailsEnabled = action === "on";
+        recordDecision(ctx, `guardrails-session-${action}`);
+        ctx.ui.notify(`🛡️ Guardrails ${guardrailsEnabled ? "enabled" : "disabled"} for this session`, "info");
+        return;
+      }
+      if (action && action !== "status") {
+        ctx.ui.notify("Usage: /guardrails [on|off|status]", "warning");
+        return;
+      }
       const cfg = refreshConfig(ctx.cwd, true);
       const astAvailable = isShfmtAvailable();
       const lines = [
@@ -743,6 +756,37 @@ export default function (pi: ExtensionAPI) {
         `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
       ];
       ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("guardrails-preflight", {
+    description: "Toggle Gate-2 or allow an exact command: /guardrails-preflight on|off|status|allow <command>",
+    handler: async (args, ctx) => {
+      const raw = args.trim();
+      const action = raw.toLowerCase();
+      if (action === "allow" || action.startsWith("allow ")) {
+        const command = raw.slice("allow".length).trim();
+        if (!command) {
+          ctx.ui.notify("Usage: /guardrails-preflight allow <exact command>", "warning");
+          return;
+        }
+        const scope = getEffectiveCwd(ctx.cwd);
+        const added = sessionAllow.allowCommand(scope, command);
+        if (added) {
+          recordDecision(ctx, "bash-preflight-allowed-session", { command });
+          ctx.ui.notify(`🛡️ Added exact session allow for ${scope}: ${command}`, "info");
+        } else {
+          ctx.ui.notify(`🛡️ Exact session allow already exists for ${scope}: ${command}`, "info");
+        }
+        return;
+      }
+      if (action === "on" || action === "off") {
+        preflightEnabled = action === "on";
+        recordDecision(ctx, `guardrails-preflight-session-${action}`);
+        ctx.ui.notify(`🛡️ Gate 2 preflight ${preflightEnabled ? "enabled" : "disabled"} for this session`, "info");
+        return;
+      }
+      ctx.ui.notify(`🛡️ Gate 2 preflight: ${preflightDisabled() ? "disabled" : "enabled"}\nUsage: /guardrails-preflight [on|off|status]`, action && action !== "status" ? "warning" : "info");
     },
   });
 }

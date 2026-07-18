@@ -62,6 +62,18 @@ describe("evaluateBashCommandGates", () => {
     expect(result.decision).toBe("allow");
   });
 
+  it("does not Gate-1 allow embedded execution or write-capable forms of otherwise safe commands", () => {
+    for (const command of [
+      "find . -exec rm -rf {} +",
+      "sort -o output.txt input.txt",
+      "grep -R token .",
+    ]) {
+      const result = evaluateBashCommandGates(command, process.cwd(), baseConfig);
+      expect(result.gate).toBe(2);
+      expect(result.requiresPreflight).toBe(true);
+    }
+  });
+
   it("uses configured gate-1 allow commands only when executed standalone", () => {
     const result = evaluateBashCommandGates("node --version", process.cwd(), {
       ...baseConfig,

@@ -185,11 +185,26 @@ function isSafeWgetGet(args: string[]): boolean {
 function isDeterministicSafeSimpleCommand(commandName: string, args: string[], config: GuardrailsConfig): boolean {
   const allowSet = getConfiguredAllow(config);
   const lowerName = commandName.toLowerCase();
+  if (hasUnsafeAllowedCommandArguments(lowerName, args)) return false;
   if (allowSet.has(lowerName)) return true;
   if (lowerName === "git") return isReadOnlyGitCommand(args);
   if (isTestCommand(lowerName, args)) return true;
   if (lowerName === "curl") return isSafeCurlGet(args);
   if (lowerName === "wget") return isSafeWgetGet(args);
+  return false;
+}
+
+function hasUnsafeAllowedCommandArguments(commandName: string, args: string[]): boolean {
+  const lowered = args.map((arg) => arg.toLowerCase());
+  if (commandName === "find") {
+    return lowered.some((arg) => ["-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"].includes(arg));
+  }
+  if (commandName === "sort") {
+    return lowered.some((arg) => arg === "-o" || arg === "--output" || arg.startsWith("--output="));
+  }
+  if (["grep", "egrep", "fgrep", "rg", "ag", "ack"].includes(commandName)) {
+    return lowered.some((arg) => arg === "-r" || arg === "-R" || arg === "--recursive");
+  }
   return false;
 }
 

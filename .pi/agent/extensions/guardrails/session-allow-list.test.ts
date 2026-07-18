@@ -30,6 +30,14 @@ describe("SessionAllowList", () => {
     ]);
   });
 
+  it("does not add duplicate exact commands", () => {
+    const allow = new SessionAllowList();
+
+    expect(allow.allowCommand("/repo-a", "npm test")).toBe(true);
+    expect(allow.allowCommand("/repo-a", "npm test")).toBe(false);
+    expect(allow.size).toBe(1);
+  });
+
   it("clears session approvals", () => {
     const allow = new SessionAllowList();
     allow.allowCommand("/repo-a", "pwd");
