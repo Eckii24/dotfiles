@@ -6,6 +6,7 @@ alias ynvim='yadm enter nvim ~'
 alias 1nvim='OM nvim'
 alias diff='delta -n -s'
 alias rm='trash-put'
+alias mr='mr -d "$HOME"'
 
 alias wiki='(cd $WIKI_HOME; nvim $WIKI_HOME/index.md)'
 alias daily='(cd $WIKI_HOME; nvim +Obsidian\ today)'

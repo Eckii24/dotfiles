@@ -1,0 +1,38 @@
+
+[.hermes]
+checkout = git clone 'git@github.com:Eckii24/hermes-bot.git' '.hermes'
+
+[Finance]
+checkout = git clone 'git@github.com:Eckii24/Finance.git' 'Finance'
+
+[Wiki]
+checkout = git clone 'git@github.com:Eckii24/Wiki.git' 'Wiki'
+
+[nutrition-tracker]
+checkout = git clone 'git@github.com:Eckii24/nutrition-tracker.git' 'nutrition-tracker'
+
+[recall]
+checkout = git clone 'git@github.com:Eckii24/recall.git' 'recall'
+
+[learning]
+checkout = git clone 'git@github.com:Eckii24/learning.git' 'learning'
+
+[nutrition-journal]
+checkout = git clone 'git@github.com:Eckii24/nutrition-journal.git' 'nutrition-journal'
+
+[docker-container]
+checkout = git clone 'git@gitlab.com:eckii24/docker-container.git' 'docker-container'
+
+[${HOME}/.local/share/yadm/repo.git]
+checkout = yadm clone 'git@github.com:Eckii24/dotfiles.git' --no-bootstrap
+clean = echo "clean is intentionally disabled for the yadm repository"
+commit = yadm commit -a "$@" && yadm push --all
+diff = yadm diff "$@"
+fetch = yadm fetch "$@"
+grep = yadm grep "$@"
+log = yadm log "$@"
+push = yadm push "$@"
+record = yadm commit -a "$@"
+run = yadm enter "$@"
+status = yadm status --short --branch "$@"
+update = yadm pull --ff-only "$@"
