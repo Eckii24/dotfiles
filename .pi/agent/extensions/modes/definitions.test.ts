@@ -118,10 +118,10 @@ Do the smallest useful thing.`,
 	});
 });
 
-it("orchestrate mode exposes standard and Herdr orchestration tools", () => {
+it("orchestrate mode exposes orchestration tools", () => {
 	const mode = loadModes(join(import.meta.dir, "..", "..", "modes")).find(value => value.command === "orchestrate");
-	expect(mode?.tools).toEqual(["subagent", "herdr_subagent", "herdr_subagent_control", "read", "grep", "find", "ls"]);
-	expect(mode?.systemPrompt).toContain("never silently fall back");
+	expect(mode?.tools).toEqual(["subagent", "subagent_control", "read", "grep", "find", "ls"]);
+	expect(mode?.systemPrompt).toContain("no background/RPC fallback");
 });
 
 describe("mode skill selection", () => {

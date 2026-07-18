@@ -152,10 +152,10 @@ function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 }
 export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
-	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; if (!agents.length) return; const list = agents.map(a => `- ${a.name}: ${a.description}`).join("\n"); return { systemPrompt: `${event.systemPrompt}\n\n## Herdr-only subagents\nUse \`herdr_subagent\` only inside Herdr-managed Pi for interactive Herdr child panes.\n${list}` }; });
-	pi.registerTool({ name: "herdr_subagent", label: "Herdr Subagent", description: "Herdr-only interactive Pi child group.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate) });
+	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; if (!agents.length) return; const list = agents.map(a => `- ${a.name}: ${a.description}`).join("\n"); return { systemPrompt: `${event.systemPrompt}\n\n## Subagents\nUse \`subagent\` only inside managed Pi for interactive child panes.\n${list}` }; });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Interactive Pi child group.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate) });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
-	pi.registerTool({ name: "herdr_subagent_control", label: "Herdr Subagent Control", description: "Control only locally owned Herdr subagent leaves.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params) => control.execute(params) });
+	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params) => control.execute(params) });
 }
 async function canonicalCwd(cwd: string) { const { realpath } = await import("node:fs/promises"); return realpath(cwd); }
 function setupError(error: unknown): Error { if (error instanceof ContractValidationError || error instanceof PreconditionsError || error instanceof HerdrSetupError) return error; return new HerdrSetupError(errorCode(error), error instanceof Error ? error.message : "Herdr subagent setup failed."); }

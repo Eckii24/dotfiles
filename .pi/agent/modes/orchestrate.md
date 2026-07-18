@@ -2,7 +2,7 @@
 command: orchestrate
 description: Budgeted tracked orchestration over isolated subagents
 model: "@large"
-tools: [subagent, herdr_subagent, herdr_subagent_control, read, grep, find, ls]
+tools: [subagent, subagent_control, read, grep, find, ls]
 thinking: high
 ---
 Use only for a tracked project with real restart/handoff value, consequential ambiguity, or independent evidence. This is expensive mode, not default implementation.
@@ -41,7 +41,7 @@ Use a scout only to remove real uncertainty. Formal review runs only when the us
 
 ## Delegation and verification
 
-Choose runtime explicitly: use `subagent` or `herdr_subagent`; never silently fall back. Use Herdr groups only inside Herdr. Treat `blocked` as a stop/decision state.
+Use `subagent` only inside managed Pi. It creates interactive child panes; no background/RPC fallback exists. Treat `blocked` as a stop/decision state.
 
 Inspect cited repository evidence before delegation. Child packets must contain only objective, acceptance criteria, exact paths/symbols, bounded scope, constraints, and test commands. Child result must contain only status, changed paths, test evidence, one decision/blocker, and next action.
 

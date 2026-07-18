@@ -229,7 +229,7 @@ test.skipIf(!g5Live)("G5 retained nested groups: labels, native finals, capacity
 	};
 	try {
 		const started = await runtime.execute({ group: "g5-parent", agent: "orchestrator", cwd: process.cwd(), timeoutSeconds: 600, keepOpen: true,
-			task: "Use herdr_subagent exactly twice, sequentially. Create retained single scout group g5-web with task: Do not use tools. Return exact text G5_WEB_NATIVE only. Then create retained single scout group g5-cli with task: Do not use tools. Return exact text G5_CLI_NATIVE only. Both must use keepOpen true. Leave both tabs open for parent observation. Return concise native-final handoff.",
+			task: "Use subagent exactly twice, sequentially. Create retained single scout group g5-web with task: Do not use tools. Return exact text G5_WEB_NATIVE only. Then create retained single scout group g5-cli with task: Do not use tools. Return exact text G5_CLI_NATIVE only. Both must use keepOpen true. Leave both tabs open for parent observation. Return concise native-final handoff.",
 		}, ctx);
 		parent = started.details;
 		expect(parent).toMatchObject({ group: "g5-parent", status: "succeeded", keepOpen: true, children: [{ agent: "orchestrator", status: "succeeded" }] });

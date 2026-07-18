@@ -1,10 +1,10 @@
 # Herdr Subagent
 
-Visible, interactive Pi child panes for Herdr. This is separate from [`../subagent/`](../subagent/): `subagent` is RPC/background; this extension exposes `herdr_subagent` and `herdr_subagent_control` for owned Herdr panes.
+Visible, interactive Pi child panes for Herdr. This extension exposes `subagent` and `subagent_control` for owned panes.
 
 ```
 calling Pi (Herdr pane)
-  └─ herdr_subagent ── protocol-16 Unix socket ── Herdr tab `group · pi-herdr:<short-id>`
+  └─ subagent ── protocol-16 Unix socket ── Herdr tab `group · pi-herdr:<short-id>`
        └─ 1..4 owned Pi panes ── native Pi v3 JSONL ── correlated child result
 ```
 
@@ -21,7 +21,7 @@ Verified baseline: Pi `0.80.6`; Herdr `0.7.3`; Herdr protocol `16`; result proto
 
 ## Launch schema
 
-`herdr_subagent` accepts a strict object: extra fields fail.
+`subagent` accepts a strict object: extra fields fail.
 
 ```ts
 type Item = { name?: string; agent: string; task: string; cwd?: string };
@@ -71,7 +71,7 @@ No `completion.json` or other completion sidecar exists. It would duplicate and 
 
 Default `keepOpen: false`: non-blocked completion cleans owned panes, tab (only when no foreign pane exists), write leases, and capacity reservation. Set `keepOpen: true` to retain a successful leaf for a later native Pi turn.
 
-`herdr_subagent_control` strict schema:
+`subagent_control` strict schema:
 
 ```ts
 type Control = {

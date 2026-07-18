@@ -84,11 +84,10 @@ test("orchestrator profile parses with exact nested tools and large model", () =
 			const agent = agents.find(value => value.name === "orchestrator");
 			expect(agent).toMatchObject({
 				name: "orchestrator",
-				description: "Read-only recursive decomposition through controlled Herdr subagents only.",
-				tools: ["herdr_subagent", "herdr_subagent_control"],
+				tools: ["subagent", "subagent_control"],
 				model: "openai-codex/large-model",
 			});
-			for (const name of ["worker", "scout"]) expect(agents.find(value => value.name === name)?.tools).not.toContain("herdr_subagent");
+			for (const name of ["worker", "scout"]) expect(agents.find(value => value.name === name)?.tools).not.toContain("subagent");
 		});
 	} finally {
 		rmSync(root, { recursive: true, force: true });

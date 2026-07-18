@@ -24,7 +24,7 @@ function fixtureRoot() {
 function input(cwd: string, extra: Record<string, unknown> = {}) {
 	return {
 		piExecutable: process.execPath, cwd, rootRunId: "root-123", leafRunId: "leaf-456789", nestingDepth: 0, group: "safe group",
-		profile: { name: "orchestrator", model: "openai-codex/gpt-test", tools: ["herdr_subagent", "herdr_subagent_control"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
+		profile: { name: "orchestrator", model: "openai-codex/gpt-test", tools: ["subagent", "subagent_control"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
 		...extra,
 	};
 }
@@ -35,7 +35,7 @@ test("builds persisted interactive argv with exact model and tools, never task o
 		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { SECRET: "must-not-inherit" } });
 		expect(launch.executable).toBe(process.execPath);
 		expect(launch.cwd).toBe(value.cwd);
-		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--tools", "herdr_subagent,herdr_subagent_control", "--append-system-prompt", launch.promptFilePath]);
+		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--tools", "subagent,subagent_control", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv).not.toContain("--mode");
 		expect(launch.argv).not.toContain("rpc");
 		expect(launch.argv).not.toContain("--print");
