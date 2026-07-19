@@ -3,4 +3,4 @@
 set -eu
 
 echo "Install pi-coding-agent"
-bun install -g @mariozechner/pi-coding-agent
+bun add -g --ignore-scripts @earendil-works/pi-coding-agent
