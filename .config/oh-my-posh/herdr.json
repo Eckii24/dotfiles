@@ -114,12 +114,6 @@
       "newline": true,
       "segments": [
         {
-          "type": "text",
-          "style": "plain",
-          "foreground": "p:overlay",
-          "template": "\u2570\u2500 "
-        },
-        {
           "type": "python",
           "style": "plain",
           "foreground": "p:yellow",
