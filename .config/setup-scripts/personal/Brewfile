@@ -1,18 +1,42 @@
+# Suite of command-line tools for converting to and working with CSV
 brew "csvkit"
+# Work with ID3 metadata in .mp3 files
 brew "eye-d3"
+# Mac App Store command-line interface
 brew "mas"
+# Deep clean and optimize your Mac
 brew "mole"
-brew "qpdf"
+# Feature rich terminal file transfer and explorer
 brew "termscp"
+# Feature-rich command-line audio/video downloader
 brew "yt-dlp"
+# Tool to flash OS images to SD cards & USB drives
 cask "balenaetcher"
+# Web browser focusing on privacy
 cask "brave-browser"
+# App to build and share containerised applications and microservices
 cask "docker-desktop"
 cask "font-hack-nerd-font"
+# Terminal emulator that uses platform-native UI and GPU acceleration
 cask "ghostty"
+# Speech to text application
+cask "handy"
+# Laravel and PHP development environment manager
+cask "herd"
+# ZSA keyboard firmware flasher
 cask "keymapp"
+# Intercept, modify, replay, save HTTP/S traffic
 cask "mitmproxy"
+# Knowledge base that works on top of a local folder of plain text Markdown files
 cask "obsidian"
+# Control your tools with a few keystrokes
 cask "raycast"
+# Build, run, and govern agents across the software development lifecycle
+cask "docker/tap/sbx", trusted: true
+# Messaging app with a focus on speed and security
+cask "telegram"
+# Manage the data on children's Ravensburger tip toi audio pen
+cask "tiptoi-manager"
+# Open-source code editor
 cask "visual-studio-code@insiders"
 mas "WireGuard", id: 1451685025
