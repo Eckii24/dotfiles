@@ -71,6 +71,8 @@ brew "unzip"
 brew "uv"
 # Yet Another Dotfiles Manager
 brew "yadm"
+# Process YAML, JSON, XML, CSV and properties documents from the CLI
+brew "yq"
 # Compression and file packaging/archive utility
 brew "zip"
 # Shell extension to navigate your filesystem faster
