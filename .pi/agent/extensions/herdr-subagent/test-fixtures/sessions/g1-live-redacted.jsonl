@@ -1,5 +1,5 @@
 {"type":"session","version":3,"id":"<redacted live Pi session ID>","timestamp":"<redacted>","cwd":"<redacted>"}
-{"type":"message","id":"074640cd","parentId":"<redacted predecessor entry id>","timestamp":"<redacted>","message":{"role":"user","content":"G1_FIXTURE_TURN_ONE Reply with short acknowledgement one. Do not use tools."}}
+{"type":"message","id":"074640cd","parentId":"<redacted predecessor entry id>","timestamp":"<redacted>","message":{"role":"user","content":"Reply with short acknowledgement one. Do not use tools. [herdr:task-sentinel:v1:G1_FIXTURE_TURN_ONE]"}}
 {"type":"message","id":"c0f5024b","parentId":"074640cd","timestamp":"<redacted>","message":{"role":"assistant","content":[{"type":"text","text":"Acknowledged."}],"stopReason":"stop"}}
-{"type":"message","id":"130d939b","parentId":"c0f5024b","timestamp":"<redacted>","message":{"role":"user","content":"G1_FIXTURE_TURN_TWO Reply with short acknowledgement two. Do not use tools."}}
+{"type":"message","id":"130d939b","parentId":"c0f5024b","timestamp":"<redacted>","message":{"role":"user","content":"Reply with short acknowledgement two. Do not use tools. [herdr:task-sentinel:v1:G1_FIXTURE_TURN_TWO]"}}
 {"type":"message","id":"bcbe9dfe","parentId":"130d939b","timestamp":"<redacted>","message":{"role":"assistant","content":[{"type":"text","text":"Acknowledged two."}],"stopReason":"stop"}}

@@ -1,4 +1,4 @@
 {"type":"session","version":3,"id":"session-normal","timestamp":"x","cwd":"/tmp"}
 {"type":"message","id":"before","parentId":null,"timestamp":"x","message":{"role":"user","content":"before"}}
-{"type":"message","id":"anchor","parentId":"before","timestamp":"x","message":{"role":"user","content":"TURN_NORMAL do work"}}
+{"type":"message","id":"anchor","parentId":"before","timestamp":"x","message":{"role":"user","content":"do work [herdr:task-sentinel:v1:TURN_NORMAL]"}}
 {"type":"message","id":"final","parentId":"anchor","timestamp":"x","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":"done"}],"provider":"openai","model":"test","usage":{"totalTokens":3},"stopReason":"stop"}}

@@ -190,6 +190,12 @@ export function sanitizeGroup(value: unknown): string {
 	return sanitized;
 }
 
+function taskText(value: unknown, field: string): string {
+	const normalized = text(value, field);
+	if (/[\r\n]/.test(normalized)) invalid("invalid_execution_mode", `${field} must be newline-free`);
+	return normalized;
+}
+
 function optionalText(value: unknown, field: string): string | undefined {
 	return value === undefined ? undefined : text(value, field);
 }
@@ -218,7 +224,7 @@ function normalizeItems(value: unknown, field: "tasks" | "chain"): NormalizedIte
 		const normalizedName = name.normalize("NFKC").trim().toLocaleLowerCase("en-US");
 		if (names.has(normalizedName)) invalid("invalid_execution_mode", `duplicate normalized item name ${name}`);
 		names.add(normalizedName);
-		return { name, agent: text(item.agent, `${field}[${inputIndex}].agent`), task: text(item.task, `${field}[${inputIndex}].task`), cwd: optionalText(item.cwd, `${field}[${inputIndex}].cwd`), inputIndex };
+		return { name, agent: text(item.agent, `${field}[${inputIndex}].agent`), task: taskText(item.task, `${field}[${inputIndex}].task`), cwd: optionalText(item.cwd, `${field}[${inputIndex}].cwd`), inputIndex };
 	});
 }
 
@@ -236,7 +242,7 @@ export function normalizeSubagentParams(raw: unknown): NormalizedSubagentParams 
 	if (hasTasks) return { ...base, mode: "parallel", items: normalizeItems(value.tasks, "tasks") };
 	if (hasChain) return { ...base, mode: "chain", items: normalizeItems(value.chain, "chain") };
 	if (value.agent === undefined || value.task === undefined) invalid("invalid_execution_mode", "single mode requires agent and task");
-	return { ...base, mode: "single", agent: text(value.agent, "agent"), task: text(value.task, "task"), cwd: optionalText(value.cwd, "cwd") };
+	return { ...base, mode: "single", agent: text(value.agent, "agent"), task: taskText(value.task, "task"), cwd: optionalText(value.cwd, "cwd") };
 }
 
 export function normalizeControlParams(raw: unknown): NormalizedControlParams {

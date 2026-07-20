@@ -14,6 +14,7 @@ import {
 } from "./pi-session.js";
 
 const fixtures = join(import.meta.dir, "test-fixtures/sessions");
+const marker = (turnId: string) => ` [herdr:task-sentinel:v1:${turnId}]`;
 
 async function trusted(name: string) {
 	const base = await mkdtemp(join(tmpdir(), "pi-session-"));
@@ -87,11 +88,12 @@ test("fails closed when a session path changes before or during trusted reads", 
 
 test("harvests exact unique anchor through tool descendants with text-only final details", async () => {
 	const value = await trusted("minimal-tools.jsonl");
-	const anchor = await findTurnAnchor(value.session, "TURN_TOOLS"); expect(anchor.pending).not.toBe(true);
+	const turnMarker = marker("TURN_TOOLS");
+	const anchor = await findTurnAnchor(value.session, turnMarker); expect(anchor.pending).not.toBe(true);
 	if (anchor.pending) throw new Error("missing anchor");
-	const result = await harvestTurn(value.session, "TURN_TOOLS", anchor, { state: "done" });
+	const result = await harvestTurn(value.session, turnMarker, anchor, { state: "done" });
 	expect(result).toMatchObject({ pending: false, status: "succeeded", output: "tool done", sessionId: "session-tools", anchorEntryId: "anchor", finalEntryId: "final", stopReason: "stop" });
-	expect(await harvestTurn(value.session, "TURN_TOOLS", anchor, { state: "working" })).toEqual({ pending: true });
+	expect(await harvestTurn(value.session, turnMarker, anchor, { state: "working" })).toEqual({ pending: true });
 	await rm(value.base, { recursive: true, force: true });
 });
 
@@ -99,34 +101,48 @@ test("ignores guardrails decisions interleaved with a delegated tool turn", asyn
 	const value = await trusted("minimal-tools.jsonl");
 	const content = await Bun.file(value.path).text();
 	await writeFile(value.path, content.replace('{"type":"message","id":"result"', '{"type":"custom","customType":"guardrails-decision","id":"guardrail","parentId":"call"}\n{"type":"message","id":"result"'));
-	const anchor = await findTurnAnchor(value.session, "TURN_TOOLS"); if (anchor.pending) throw new Error("missing anchor");
-	expect(await harvestTurn(value.session, "TURN_TOOLS", anchor, { state: "done" })).toMatchObject({ status: "succeeded", output: "tool done" });
+	const turnMarker = marker("TURN_TOOLS");
+	const anchor = await findTurnAnchor(value.session, turnMarker); if (anchor.pending) throw new Error("missing anchor");
+	expect(await harvestTurn(value.session, turnMarker, anchor, { state: "done" })).toMatchObject({ status: "succeeded", output: "tool done" });
 	await rm(value.base, { recursive: true, force: true });
 });
 
 test("rejects user/custom ambiguity and branch switch; maps terminal stop reasons", async () => {
-	for (const [file, marker] of [["minimal-ambiguous.jsonl", "TURN_AMBIG"], ["minimal-branch.jsonl", "TURN_BRANCH"]] as const) {
-		const value = await trusted(file); const anchor = await findTurnAnchor(value.session, marker); if (anchor.pending) throw new Error("missing anchor");
-		await expect(harvestTurn(value.session, marker, anchor, { state: "idle" })).rejects.toThrow("ambiguous_turn"); await rm(value.base, { recursive: true, force: true });
+	for (const [file, turnId] of [["minimal-ambiguous.jsonl", "TURN_AMBIG"], ["minimal-branch.jsonl", "TURN_BRANCH"]] as const) {
+		const turnMarker = marker(turnId); const value = await trusted(file); const anchor = await findTurnAnchor(value.session, turnMarker); if (anchor.pending) throw new Error("missing anchor");
+		await expect(harvestTurn(value.session, turnMarker, anchor, { state: "idle" })).rejects.toThrow("ambiguous_turn"); await rm(value.base, { recursive: true, force: true });
 	}
-	const stops = await trusted("minimal-stops.jsonl"); const anchor = await findTurnAnchor(stops.session, "TURN_STOP"); if (anchor.pending) throw new Error("missing anchor");
-	expect(await harvestTurn(stops.session, "TURN_STOP", anchor, { state: "done" })).toMatchObject({ status: "failed", stopReason: "length", error: { code: "result_unavailable" } });
+	const stops = await trusted("minimal-stops.jsonl"); const turnMarker = marker("TURN_STOP"); const anchor = await findTurnAnchor(stops.session, turnMarker); if (anchor.pending) throw new Error("missing anchor");
+	expect(await harvestTurn(stops.session, turnMarker, anchor, { state: "done" })).toMatchObject({ status: "failed", stopReason: "length", error: { code: "result_unavailable" } });
 	const stopsText = await Bun.file(stops.path).text();
 	for (const [reason, code] of [["error", "child_model_error"], ["aborted", "child_aborted"]] as const) {
 		await writeFile(stops.path, stopsText.replace('"stopReason":"length"', `"stopReason":"${reason}"`));
-		expect(await harvestTurn(stops.session, "TURN_STOP", anchor, { state: "done" })).toMatchObject({ status: reason === "aborted" ? "aborted" : "failed", stopReason: reason, error: { code } });
+		expect(await harvestTurn(stops.session, turnMarker, anchor, { state: "done" })).toMatchObject({ status: reason === "aborted" ? "aborted" : "failed", stopReason: reason, error: { code } });
 	}
 	await writeFile(stops.path, stopsText.replace('"partial"', '""').replace('"stopReason":"length"', '"stopReason":"stop"'));
-	await expect(harvestTurn(stops.session, "TURN_STOP", anchor, { state: "done" })).rejects.toThrow("empty_final_output");
+	await expect(harvestTurn(stops.session, turnMarker, anchor, { state: "done" })).rejects.toThrow("empty_final_output");
 	await rm(stops.base, { recursive: true, force: true });
 });
 
 test("G1 retained fixture replays both native turns without screen fallback", async () => {
 	const value = await trusted("g1-live-redacted.jsonl");
-	for (const marker of ["G1_FIXTURE_TURN_ONE", "G1_FIXTURE_TURN_TWO"]) {
-		const anchor = await findTurnAnchor(value.session, marker); if (anchor.pending) throw new Error("missing G1 anchor");
-		expect(await harvestTurn(value.session, marker, anchor, { state: "done" })).toMatchObject({ status: "succeeded", stopReason: "stop" });
+	for (const turnId of ["G1_FIXTURE_TURN_ONE", "G1_FIXTURE_TURN_TWO"]) {
+		const turnMarker = marker(turnId); const anchor = await findTurnAnchor(value.session, turnMarker); if (anchor.pending) throw new Error("missing G1 anchor");
+		expect(await harvestTurn(value.session, turnMarker, anchor, { state: "done" })).toMatchObject({ status: "succeeded", stopReason: "stop" });
 	}
+	await rm(value.base, { recursive: true, force: true });
+});
+
+test("anchors only one terminal marker and revalidates it during harvest", async () => {
+	const value = await trusted("minimal-normal.jsonl"); const content = await Bun.file(value.path).text(); const turnMarker = marker("TURN_NORMAL");
+	for (const replacement of [`do work${turnMarker} trailing`, `do work${turnMarker}${turnMarker}`]) {
+		await writeFile(value.path, content.replace(`do work${turnMarker}`, replacement));
+		expect(await findTurnAnchor(value.session, turnMarker)).toEqual({ pending: true });
+	}
+	await writeFile(value.path, content);
+	const anchor = await findTurnAnchor(value.session, turnMarker); if (anchor.pending) throw new Error("missing anchor");
+	await writeFile(value.path, content.replace(`do work${turnMarker}`, `do work${turnMarker} trailing`));
+	await expect(harvestTurn(value.session, turnMarker, anchor, { state: "done" })).rejects.toThrow("task_anchor_missing");
 	await rm(value.base, { recursive: true, force: true });
 });
 
@@ -134,16 +150,17 @@ test("partial trailing JSONL is pending; complete malformed JSONL, bad v3, dupli
 	const value = await trusted("minimal-normal.jsonl");
 	const content = await Bun.file(value.path).text();
 	await writeFile(value.path, `${content.slice(0, content.indexOf('{"type":"message","id":"final"'))}{"type":"message"`);
-	expect((await findTurnAnchor(value.session, "TURN_NORMAL")).pending).not.toBe(true);
-	const anchor = await findTurnAnchor(value.session, "TURN_NORMAL"); if (anchor.pending) throw new Error("missing anchor");
-	expect(await harvestTurn(value.session, "TURN_NORMAL", anchor, { state: "idle" })).toEqual({ pending: true });
+	const turnMarker = marker("TURN_NORMAL");
+	expect((await findTurnAnchor(value.session, turnMarker)).pending).not.toBe(true);
+	const anchor = await findTurnAnchor(value.session, turnMarker); if (anchor.pending) throw new Error("missing anchor");
+	expect(await harvestTurn(value.session, turnMarker, anchor, { state: "idle" })).toEqual({ pending: true });
 	await writeFile(value.path, `${content}{bad}\n`);
-	await expect(findTurnAnchor(value.session, "TURN_NORMAL")).rejects.toThrow("session_parse_failed");
+	await expect(findTurnAnchor(value.session, turnMarker)).rejects.toThrow("session_parse_failed");
 	await writeFile(value.path, content.replace('"version":3', '"version":2'));
 	await expect(materializeAndTrustSession(value.ref, { path: value.ref.path, recordedAt: 0 })).rejects.toThrow("session_parse_failed");
-	await writeFile(value.path, content.replace('"stop"}}\n', '"stop"}}\n{"type":"message","id":"dupe","parentId":"before","message":{"role":"user","content":"TURN_NORMAL"}}\n'));
-	await expect(findTurnAnchor(value.session, "TURN_NORMAL")).rejects.toThrow("ambiguous_turn");
-	await expect(findTurnAnchor(value.session, "TURN_NORMAL", { maxBytes: 8 })).rejects.toThrow("session_parse_failed");
+	await writeFile(value.path, content.replace('"stop"}}\n', `"stop"}}\n{"type":"message","id":"dupe","parentId":"before","message":{"role":"user","content":"duplicate${turnMarker}"}}\n`));
+	await expect(findTurnAnchor(value.session, turnMarker)).rejects.toThrow("ambiguous_turn");
+	await expect(findTurnAnchor(value.session, turnMarker, { maxBytes: 8 })).rejects.toThrow("session_parse_failed");
 	await rm(value.base, { recursive: true, force: true });
 });
 

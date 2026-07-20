@@ -10,7 +10,7 @@ function fake(states: AgentSnapshot[], options: { anchorAfter?: number; final?: 
 		interruptOwnedPane: async () => { interrupts++; }, closeOwnedPane: async () => { closes++; },
 	};
 	const session = { sessionId: "s", path: "/s", root: "/", source: "herdr:pi" as const, kind: "path" as const, bytes: 1 };
-	const anchor = { id: "a", parentId: null, marker: "turn" };
+	const anchor = { id: "a", parentId: null, marker: " [herdr:task-sentinel:v1:turn]" };
 	const harvest: SessionHarvestPort = {
 		prepare: async () => { prepares++; return { path: "/s", recordedAt: 0 }; },
 		materialize: async () => ++materializes > (options.materializeAfter ?? 0) ? session : { pending: true },
@@ -19,13 +19,15 @@ function fake(states: AgentSnapshot[], options: { anchorAfter?: number; final?: 
 	};
 	return { port, harvest, clock, sleeper, calls: () => ({ sends, enters, interrupts, closes, prepares, materializes }) };
 }
-const turn = (f: ReturnType<typeof fake>, extra = {}) => runLifecycleTurn(f.port, f.harvest, { agentId: "a", task: "literal", turnId: "turn", clock: f.clock, sleeper: f.sleeper, timeoutMs: 20, pollIntervalMs: 2, ...extra });
+const marker = " [herdr:task-sentinel:v1:turn]";
+const turn = (f: ReturnType<typeof fake>, extra = {}) => runLifecycleTurn(f.port, f.harvest, { agentId: "a", task: `literal${marker}`, marker, turnId: "turn", clock: f.clock, sleeper: f.sleeper, timeoutMs: 20, pollIntervalMs: 2, ...extra });
 
 test("boot unknown to idle is readiness, then sends one newline-free literal and exactly one Enter", async () => {
 	const f = fake([{ state: "unknown", paneId: "p" }, { state: "idle", paneId: "p" }, { state: "idle", paneId: "p" }]);
 	const result = await turn(f);
 	expect(result).toMatchObject({ status: "succeeded", delivered: true, enterSent: true }); expect(f.calls()).toMatchObject({ sends: 1, enters: 1 });
-	await expect(runLifecycleTurn(f.port, f.harvest, { agentId: "a", task: "bad\ntext", turnId: "turn", clock: f.clock, sleeper: f.sleeper, timeoutMs: 1 })).rejects.toThrow("newline-free");
+	await expect(runLifecycleTurn(f.port, f.harvest, { agentId: "a", task: "bad\ntext", marker, turnId: "turn", clock: f.clock, sleeper: f.sleeper, timeoutMs: 1 })).rejects.toThrow("newline-free");
+	await expect(runLifecycleTurn(f.port, f.harvest, { agentId: "a", task: "literal", marker, turnId: "turn", clock: f.clock, sleeper: f.sleeper, timeoutMs: 1 })).rejects.toThrow("terminal suffix");
 });
 
 test("onReady runs once after baseline preparation immediately before delivery", async () => {

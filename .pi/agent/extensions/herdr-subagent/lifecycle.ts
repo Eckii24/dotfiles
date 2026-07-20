@@ -21,8 +21,8 @@ export type HerdrLifecyclePort = {
 export type SessionHarvestPort = {
 	prepare(agent: AgentSnapshot, signal?: AbortSignal): Promise<SessionBaseline | Pending>;
 	materialize(baseline: SessionBaseline, signal?: AbortSignal): Promise<TrustedMaterializedSession | Pending>;
-	findAnchor(session: TrustedMaterializedSession, turnId: string, signal?: AbortSignal): Promise<TurnAnchor | Pending>;
-	harvest(session: TrustedMaterializedSession, turnId: string, anchor: TurnAnchor, lifecycle: { state: AgentState }, signal?: AbortSignal): Promise<HarvestResult | Pending>;
+	findAnchor(session: TrustedMaterializedSession, marker: string, signal?: AbortSignal): Promise<TurnAnchor | Pending>;
+	harvest(session: TrustedMaterializedSession, marker: string, anchor: TurnAnchor, lifecycle: { state: AgentState }, signal?: AbortSignal): Promise<HarvestResult | Pending>;
 };
 
 export type LifecycleResult = {
@@ -39,6 +39,7 @@ export type LifecycleResult = {
 export type LifecycleOptions = {
 	agentId: string;
 	task: string;
+	marker: string;
 	turnId: string;
 	clock: Clock;
 	sleeper: Sleeper;
@@ -62,6 +63,7 @@ const pending = (value: unknown): value is Pending => typeof value === "object" 
  */
 export async function runLifecycleTurn(port: HerdrLifecyclePort, sessions: SessionHarvestPort, input: LifecycleOptions): Promise<LifecycleResult> {
 	if (!input.task || /[\r\n]/.test(input.task)) throw new LifecycleError("Task literal must be non-empty and newline-free.");
+	if (!input.marker || /[\r\n]/.test(input.marker) || !input.task.endsWith(input.marker) || markerCount(input.task, input.marker) !== 1) throw new LifecycleError("Task marker must occur once as the terminal suffix.");
 	if (!input.turnId) throw new LifecycleError("turnId is required.");
 	const poll = input.pollIntervalMs ?? 250;
 	const deadline = input.clock.now() + input.timeoutMs;
@@ -118,10 +120,10 @@ export async function runLifecycleTurn(port: HerdrLifecyclePort, sessions: Sessi
 
 		if (input.clock.now() >= deadline) return { status: "timed_out", state, delivered, enterSent, reason: "Turn did not yield a correlated native final." };
 		if (!session && baseline) { const value = await abortable(sessions.materialize(baseline, input.signal), input.signal); if (value === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent); if (!pending(value)) session = value; }
-		if (session && !anchor) { const value = await abortable(sessions.findAnchor(session, input.turnId, input.signal), input.signal); if (value === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent); if (!pending(value)) anchor = value; }
+		if (session && !anchor) { const value = await abortable(sessions.findAnchor(session, input.marker, input.signal), input.signal); if (value === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent); if (!pending(value)) anchor = value; }
 		// Missing working events and delayed JSONL flushes are recovered by this polling loop, never resend.
 		if (session && anchor && (state === "idle" || state === "done")) {
-			const result = await abortable(sessions.harvest(session, input.turnId, anchor, { state }, input.signal), input.signal);
+			const result = await abortable(sessions.harvest(session, input.marker, anchor, { state }, input.signal), input.signal);
 			if (result === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent);
 			if (!pending(result)) return { status: result.status, state, delivered, enterSent, result, session };
 		}
@@ -135,6 +137,8 @@ async function wait(port: HerdrLifecyclePort, input: LifecycleOptions, poll: num
 	// Keep timeout progression injectable even when an event source resolves immediately.
 	await input.sleeper.sleep(poll);
 }
+
+function markerCount(text: string, marker: string) { let count = 0; for (let at = text.indexOf(marker); at >= 0; at = text.indexOf(marker, at + marker.length)) count++; return count; }
 
 const ABORTED = Symbol("aborted");
 async function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T | typeof ABORTED> {

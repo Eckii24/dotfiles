@@ -38,7 +38,7 @@ type Launch = {
 };
 ```
 
-Provide exactly one mode: `agent` + `task` (single), `tasks`, or `chain`. `cwd` must resolve to an existing canonical directory. Tasks are delivered as one internal JSON envelope, not arbitrary terminal input. Chain replaces `{previous}` with previous final output.
+Provide exactly one mode: `agent` + `task` (single), `tasks`, or `chain`. `cwd` must resolve to an existing canonical directory. Tasks must be non-empty and CR/LF-free. Each child receives the readable task text followed once by an opaque per-turn terminal sentinel; chain replaces `{previous}` with previous final output before this delivery.
 
 ```json
 {
@@ -63,7 +63,7 @@ One run owns one newly created tab. Label is `<group> · pi-herdr:<short root id
 
 ## Native result path
 
-Result evidence comes only from the child session reference `source: "herdr:pi", kind: "path"`. The path is checked as a current-user, non-symlink regular file below the configured Pi session root, bounded to 4 MiB and 256 KiB/line, then parsed as Pi session JSONL v3. The recorded task marker anchors a descendant final assistant entry. A Herdr `idle` or `done` state alone is never a result.
+Result evidence comes only from the child session reference `source: "herdr:pi", kind: "path"`. The path is checked as a current-user, non-symlink regular file below the configured Pi session root, bounded to 4 MiB and 256 KiB/line, then parsed as Pi session JSONL v3. A native user entry anchors only when it contains its opaque per-turn sentinel exactly once as the terminal suffix; its descendant final assistant entry supplies result evidence. A Herdr `idle` or `done` state alone is never a result.
 
 No `completion.json` or other completion sidecar exists. It would duplicate and weaken Pi's persisted, correlated session record. This extension does not scrape pane screen output or terminal transcripts.
 

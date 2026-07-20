@@ -1,4 +1,4 @@
 {"type":"session","version":3,"id":"session-ambiguous","timestamp":"x","cwd":"/tmp"}
-{"type":"message","id":"anchor","parentId":null,"timestamp":"x","message":{"role":"user","content":"TURN_AMBIG task"}}
+{"type":"message","id":"anchor","parentId":null,"timestamp":"x","message":{"role":"user","content":"task [herdr:task-sentinel:v1:TURN_AMBIG]"}}
 {"type":"custom","id":"custom","parentId":"anchor","timestamp":"x","customType":"human"}
 {"type":"message","id":"final","parentId":"custom","timestamp":"x","message":{"role":"assistant","content":[{"type":"text","text":"wrong"}],"stopReason":"stop"}}

@@ -5,6 +5,7 @@ import { DEFAULT_TIMEOUT_SECONDS, normalizeControlParams, type NormalizedControl
 import { runLifecycleTurn, type HerdrLifecyclePort, type LifecycleResult, type SessionHarvestPort } from "./lifecycle.js";
 import { RunRegistry, type RunLeafHandle, type RunRootHandle } from "./run-registry.js";
 import { validatePiSessionRef, materializeAndTrustSession, findTurnAnchor, harvestTurn, type TrustedMaterializedSession } from "./pi-session.js";
+import { createTaskDelivery } from "./task-delivery.js";
 
 export type ControlClient = { getAgent(id: string): Promise<any>; processInfo(id: string): Promise<any>; sendAgentInput(id: string, text: string): Promise<any>; submitOwnedPane(id: string): Promise<any>; interruptOwnedPane(id: string): Promise<any>; closePane(id: string): Promise<any>; closeTab(id: string): Promise<any>; snapshot(): Promise<any>; dispose?(): void };
 export type ControlDeps = {
@@ -35,12 +36,11 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
     if (!root.keepOpen) throw failure("unknown_or_foreign_run", "Default-close runs cannot accept a follow-up.");
     if (!deps.lifecyclePort || !deps.sessionPort) throw failure("agent_start_failed", "Control lifecycle ports are unavailable.");
     const leaf = leaves[0]!; const trusted = await live(client, leaf, true, deps.sessionRoot);
-    const turnId = randomUUID(); const message = literal(input.message);
-    const marker = JSON.stringify({ type: "herdr_subagent_task", rootRunId: root.rootRunId, leafRunId: leaf.leafRunId, turnId, task: message });
+    const turnId = randomUUID(); const delivery = createTaskDelivery(literal(input.message), turnId);
     // Claim before lifecycle delivery. A second controller sees working and cannot send.
-    if (!deps.registry.claimFollowUp(root.rootRunId, leaf.leafRunId, turnId, marker)) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request.");
+    if (!deps.registry.claimFollowUp(root.rootRunId, leaf.leafRunId, turnId, delivery.marker)) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request.");
     const life = await (deps.runLifecycle ?? runLifecycleTurn)(deps.lifecyclePort(client, leaf.paneId), deps.sessionPort(deps.sessionRoot), {
-     agentId: leaf.paneId, task: marker, turnId, timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, clock: { now }, sleeper: { sleep: async ms => await new Promise(resolve => setTimeout(resolve, ms)) }, retainedDone: trusted,
+     agentId: leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId, timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, clock: { now }, sleeper: { sleep: async ms => await new Promise(resolve => setTimeout(resolve, ms)) }, retainedDone: trusted,
     });
     updateFollowUp(deps.registry, root.rootRunId, leaf.leafRunId, life);
     const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!;
@@ -93,8 +93,8 @@ async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHa
  if (!leaf.activeTurnId || !leaf.activeMarker || (leaf.status !== "working" && leaf.status !== "blocked")) throw failure("result_unavailable", "No active turn retained for collection.");
  const ref = await validatePiSessionRef(agent.agent ?? agent, deps.sessionRoot); if (!leaf.session || ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
- const anchor = await findTurnAnchor(trusted, leaf.activeTurnId); if ((anchor as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
- const harvested = await harvestTurn(trusted, leaf.activeTurnId, anchor as any, { state: state(agent) }); if ((harvested as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
+ const anchor = await findTurnAnchor(trusted, leaf.activeMarker); if ((anchor as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
+ const harvested = await harvestTurn(trusted, leaf.activeMarker, anchor as any, { state: state(agent) }); if ((harvested as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
  const h: any = harvested; deps.registry.updateLeaf(root.rootRunId, leaf.leafRunId, { status: h.status, activeTurnId: undefined, activeMarker: undefined, session: { source: "herdr:pi", path: trusted.path, sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId } });
  deps.registry.updateRoot(root.rootRunId, { status: h.status });
  const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!; const output = { ...result("collect", updatedRoot, [updated]), finalOutput: h.output, stopReason: h.stopReason };

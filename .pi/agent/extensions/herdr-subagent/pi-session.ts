@@ -88,7 +88,7 @@ export async function materializeAndTrustSession(ref: PiSessionRef, baseline: Se
 export async function findTurnAnchor(ref: TrustedMaterializedSession, marker: string, dependencies: SessionDependencies = {}): Promise<TurnAnchor | Pending> {
 	const parsed = await parseFile(ref, dependencies);
 	if (isPending(parsed)) return { pending: true };
-	const anchors = parsed.entries.filter(entry => entry.type === "message" && entry.message?.role === "user" && markerCount(messageText(entry.message.content), marker) === 1);
+	const anchors = parsed.entries.filter(entry => entry.type === "message" && entry.message?.role === "user" && terminalSingleton(messageText(entry.message.content), marker));
 	if (anchors.length === 0) return { pending: true };
 	if (anchors.length !== 1) fail("ambiguous_turn", "Turn marker appears in multiple user entries.");
 	const anchor = anchors[0]!;
@@ -96,13 +96,13 @@ export async function findTurnAnchor(ref: TrustedMaterializedSession, marker: st
 }
 
 /** Harvests only after idle/done candidate settlement; lifecycle state itself never succeeds. */
-export async function harvestTurn(ref: TrustedMaterializedSession, turnId: string, anchor: TurnAnchor, lifecycle: { state?: string }, dependencies: SessionDependencies = {}): Promise<HarvestResult | Pending> {
+export async function harvestTurn(ref: TrustedMaterializedSession, marker: string, anchor: TurnAnchor, lifecycle: { state?: string }, dependencies: SessionDependencies = {}): Promise<HarvestResult | Pending> {
 	if (lifecycle.state !== "idle" && lifecycle.state !== "done") return { pending: true };
 	const parsed = await parseFile(ref, dependencies);
 	if (isPending(parsed)) return { pending: true };
 	const byId = new Map(parsed.entries.map(entry => [entry.id, entry]));
 	const storedAnchor = byId.get(anchor.id);
-	if (!storedAnchor || storedAnchor.type !== "message" || storedAnchor.message?.role !== "user" || markerCount(messageText(storedAnchor.message.content), turnId) !== 1) fail("task_anchor_missing", "Recorded turn anchor is absent or changed.");
+	if (!storedAnchor || storedAnchor.type !== "message" || storedAnchor.message?.role !== "user" || anchor.marker !== marker || !terminalSingleton(messageText(storedAnchor.message.content), marker)) fail("task_anchor_missing", "Recorded turn anchor is absent or changed.");
 	const anchorIndex = parsed.entries.indexOf(storedAnchor);
 	const afterAnchor = parsed.entries.slice(anchorIndex + 1);
 	const interruption = afterAnchor.findIndex(entry => (entry.type === "custom" && entry.customType !== "guardrails-decision") || entry.type === "custom_message" || entry.message?.role === "user");
@@ -220,7 +220,8 @@ function object(value: unknown): Record<string, any> | undefined { return typeof
 function optionalText(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
 function messageText(content: unknown): string { return typeof content === "string" ? content : textBlocks(content); }
 function textBlocks(content: unknown): string { return Array.isArray(content) ? content.filter(block => object(block)?.type === "text" && typeof object(block)?.text === "string").map(block => object(block)!.text as string).join("") : ""; }
-function markerCount(text: string, marker: string): number { if (!marker) return 0; let count = 0; for (let at = text.indexOf(marker); at >= 0; at = text.indexOf(marker, at + marker.length)) count++; return count; }
+function terminalSingleton(text: string, marker: string): boolean { return !!marker && text.endsWith(marker) && markerCount(text, marker) === 1; }
+function markerCount(text: string, marker: string): number { let count = 0; for (let at = text.indexOf(marker); at >= 0; at = text.indexOf(marker, at + marker.length)) count++; return count; }
 function stopReason(message: Record<string, unknown> | undefined): "stop" | "length" | "toolUse" | "error" | "aborted" | undefined { const value = message?.stopReason; return value === "stop" || value === "length" || value === "toolUse" || value === "error" || value === "aborted" ? value : undefined; }
 function descendant(entry: SessionEntry, ancestorId: string, byId: Map<string, SessionEntry>): boolean { for (let id = entry.parentId; id; id = byId.get(id)?.parentId ?? null) if (id === ancestorId) return true; return false; }
 function inside(root: string, path: string): boolean { const delta = relative(root, path); return delta !== "" && !delta.startsWith("..") && !isAbsolute(delta); }

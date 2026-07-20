@@ -14,7 +14,7 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 	const client = { dispose: () => events.push("dispose") } as any;
 	const launch = { executable: "/bin/pi", name: "scout", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => { events.push("ready-cleanup"); }, cleanupAfterFailure: async () => { events.push("failure-cleanup"); } };
 	const topology = { group: { tabId: "tab", tabLabel: "tab", ownedPaneIds: new Set(["pane"]), acceptedLeafIds: new Set() }, reservation: { paneCount: 4 }, leases: new Map(), warnings: [] } as any;
-	let received: any;
+	let received: any; const receivedInputs: any[] = [];
 	const runtime = createHerdrSubagentRuntime({
 		preflight, ids, registry: options.registry,
 		discover: (() => ({ agents: [profile(options.source, options.tools)], projectAgentsDir: options.source === "project" ? "/project/agents" : null })) as any,
@@ -26,13 +26,13 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 		cleanupTopology: async () => { events.push("topology-cleanup"); return []; },
 		acceptLeaf: () => {},
 		runLifecycle: (async (_port: any, _sessions: any, input: any) => {
-			received = input;
+			received = input; receivedInputs.push(input);
 			if (options.lifecycle) return options.lifecycle(input);
 			await input.onReady(); events.push("send");
 			return { status: options.status ?? "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: options.status ?? "succeeded", output: "ok", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" }, session: { source: "herdr:pi", kind: "path", path: "/trusted/session.jsonl", root: "/", sessionId: "session", bytes: 1 } };
 		}) as any,
 	});
-	return { runtime, events, get received() { return received; } };
+	return { runtime, events, get received() { return received; }, get receivedInputs() { return receivedInputs; } };
 }
 
 const params = (more = {}) => ({ group: "x", agent: "scout", task: "task", cwd: process.cwd(), ...more });
@@ -82,11 +82,11 @@ test("maximum nesting rejects before discovery or launch side effects", async ()
 	expect(calls).toEqual(["preflight"]);
 });
 
-test("single success delivers newline-free envelope, cleans prompt after ready, closes once, and returns trusted path", async () => {
+test("single success delivers direct prompt with terminal sentinel, cleans prompt after ready, closes once, and returns trusted path", async () => {
 	const f = vertical(); const updates: any[] = [];
 	const result = await f.runtime.execute(params(), context, undefined, value => updates.push(value));
+	expect(f.received).toMatchObject({ task: "task [herdr:task-sentinel:v1:turn]", marker: " [herdr:task-sentinel:v1:turn]", turnId: "turn" });
 	expect(f.received.task).not.toContain("\n");
-	expect(JSON.parse(f.received.task)).toMatchObject({ type: "herdr_subagent_task", rootRunId: "root", leafRunId: "leaf", turnId: "turn", task: "task" });
 	expect(f.events).toEqual(["ready-cleanup", "send", "topology-cleanup", "dispose"]);
 	expect(updates).toEqual([result]);
 	expect(result.details.children[0].piSession.path).toBe("/trusted/session.jsonl");
@@ -100,7 +100,7 @@ test("keepOpen retains terminal topology and blocked retains pane", async () => 
 	expect(keep.runtime.registry.get("root")?.status).toBe("succeeded"); expect(keep.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: undefined, activeMarker: undefined });
 	const blocked = vertical({ status: "blocked" }); const result = await blocked.runtime.execute(params(), context);
 	expect(result.details.status).toBe("blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
-	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn" });
+	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });
 });
 
 test("launched lifecycle failure and abort return structured terminal results and clean up", async () => {
@@ -122,16 +122,18 @@ test("project confirmation decline names requested profiles without launch", asy
 	expect(prompt).toContain("Agents: scout"); expect(prompt).not.toContain("[object Object]"); expect(f.events).toEqual([]);
 });
 
-test("parallel launches one tab's leaves concurrently in input order", async () => {
+test("parallel launches one tab's leaves concurrently in input order with independent sentinels", async () => {
 	const f = vertical();
 	const result = await f.runtime.execute({ group: "parallel", tasks: [{ name: "first", agent: "scout", task: "one" }, { name: "second", agent: "scout", task: "two" }] }, context);
 	expect(result.details).toMatchObject({ mode: "parallel", status: "succeeded", children: [{ name: "first", paneId: "pane-1", status: "succeeded" }, { name: "second", paneId: "pane-2", status: "succeeded" }] });
+	expect(f.receivedInputs.map(input => input.task.replace(input.marker, ""))).toEqual(["one", "two"]);
+	expect(new Set(f.receivedInputs.map(input => input.marker)).size).toBe(2);
 });
 
 test("parallel blocked returns before deferred sibling and disposes client only after background settles", async () => {
 	let releaseSibling!: () => void; const started: string[] = [];
 	const f = vertical({ lifecycle: async input => {
-		const task = JSON.parse(input.task).task; started.push(task); await input.onReady();
+		const task = input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, ""); started.push(task); await input.onReady();
 		if (task === "block") return { status: "blocked", delivered: true, enterSent: true, state: "blocked", reason: "need input" };
 		return await new Promise(resolve => { releaseSibling = () => resolve({ status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "later", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }); });
 	} });
@@ -144,7 +146,7 @@ test("parallel blocked returns before deferred sibling and disposes client only 
 
 test("chain registers every queued leaf before launch, then starts later pane after success", async () => {
 	const seen: string[] = []; let count = 0; let queued: string[] | undefined; const registry = new RunRegistry();
-	const f = vertical({ registry, lifecycle: async input => { seen.push(JSON.parse(input.task).task); queued ??= registry.get("root")?.leaves.map(leaf => leaf.status); await input.onReady(); count++; return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: count === 1 ? "prior" : "ok", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }; } });
+	const f = vertical({ registry, lifecycle: async input => { seen.push(input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, "")); queued ??= registry.get("root")?.leaves.map(leaf => leaf.status); await input.onReady(); count++; return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: count === 1 ? "prior" : "ok", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }; } });
 	const result = await f.runtime.execute({ group: "chain", chain: [{ agent: "scout", task: "first" }, { agent: "scout", task: "{previous}:{previous}" }] }, context);
 	expect(queued).toEqual(["booting", "queued"]); expect(seen).toEqual(["first", "prior:prior"]); expect(result.details.children.map((x: any) => x.status)).toEqual(["succeeded", "succeeded"]);
 });
