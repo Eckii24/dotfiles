@@ -12,6 +12,7 @@ import {
 	PI_HERDR_PARENT_ROOT_RUN_ID,
 	PI_HERDR_ROOT_RUN_ID,
 	PI_HERDR_SUBAGENT_CHILD,
+	PI_SUBAGENT,
 	createPiLaunchDescriptor,
 } from "./pi-launch.js";
 
@@ -45,17 +46,26 @@ test("builds persisted interactive argv with exact model and tools, never task o
 		expect(JSON.stringify(launch)).not.toContain("PRIVATE PROFILE BODY");
 		const envNames = [
 			PI_HERDR_AGENT_PROFILE, PI_HERDR_GROUP, PI_HERDR_LEAF_RUN_ID, PI_HERDR_NESTING_DEPTH,
-			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD,
+			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT,
 		].sort();
 		expect(launch.log).toEqual({ executable: process.execPath, argv: launch.argv, cwd: value.cwd, envNames, name: launch.name });
 		expect(launch.log.envNames).not.toContain("PRIVATE PROFILE BODY");
 		expect(launch.env).toEqual({
 		[PI_HERDR_ROOT_RUN_ID]: "root-123", [PI_HERDR_LEAF_RUN_ID]: "leaf-456789", [PI_HERDR_NESTING_DEPTH]: "1",
-		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "orchestrator", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1",
+		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "orchestrator", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1",
 	});
 		expect(launch.env).not.toHaveProperty("SECRET");
 		expect(readFileSync(launch.promptFilePath, "utf8")).toBe("PRIVATE PROFILE BODY\nDo not leak.");
 		await launch.cleanupAfterReady();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("marks Herdr children as standard subagents so global dirty-repo-guard skips them", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime });
+		expect(launch.env).toMatchObject({ [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1" });
+		await launch.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

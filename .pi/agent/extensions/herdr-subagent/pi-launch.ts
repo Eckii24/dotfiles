@@ -13,6 +13,8 @@ export const PI_HERDR_NESTING_DEPTH = "PI_HERDR_NESTING_DEPTH";
 export const PI_HERDR_GROUP = "PI_HERDR_GROUP";
 export const PI_HERDR_AGENT_PROFILE = "PI_HERDR_AGENT_PROFILE";
 export const PI_HERDR_SUBAGENT_CHILD = "PI_HERDR_SUBAGENT_CHILD";
+/** Standard marker consumed by child-aware global extensions such as dirty-repo-guard. */
+export const PI_SUBAGENT = "PI_SUBAGENT";
 
 export type PiLaunchInput = {
 	piExecutable: string;
@@ -84,6 +86,7 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		[PI_HERDR_GROUP]: requiredLabel(input.group, "group"),
 		[PI_HERDR_AGENT_PROFILE]: requiredLabel(input.profile.name, "profile name"),
 		[PI_HERDR_SUBAGENT_CHILD]: "1",
+		[PI_SUBAGENT]: "1",
 	};
 	// Every Pi child becomes a potential nested caller; its parent is this launched root,
 	// not this root's parent (which would skip one ownership level).
