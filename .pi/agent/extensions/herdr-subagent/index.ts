@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { CapacityCoordinator, isDeclaredWriter } from "./capacity.js";
-import { discoverAgentProfiles, projectProfilesRequiringConfirmation } from "./agent-profiles.js";
+import { discoverAgentProfiles, projectProfilesRequiringConfirmation, type AgentProfile } from "./agent-profiles.js";
 import { HerdrSubagentParamsSchema, HerdrSubagentControlParamsSchema, ContractValidationError, createRunIds, makeError, normalizeSubagentParams, type ErrorCode, type HerdrLeafResult, type HerdrSubagentResult, type NormalizedItem } from "./contracts.js";
 import { HerdrClient } from "./herdr-client.js";
 import { runLifecycleTurn, type AgentSnapshot, type HerdrLifecyclePort, type LifecycleResult, type SessionHarvestPort } from "./lifecycle.js";
@@ -150,10 +150,21 @@ function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 	else if (life.session) leaf.piSession = { source: "herdr:pi", kind: "path", path: life.session.path, sessionId: life.session.sessionId };
 	if (!leaf.error && life.status !== "succeeded" && life.status !== "blocked") leaf.error = makeError(lifecycleCode(life.status), life.reason ?? `Child ${life.status}.`);
 }
+export function formatSubagentPrompt(agents: readonly AgentProfile[]): string {
+	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? "declared writer: edit/write" : "no declared edit/write tools"}]: ${agent.description}`).join("\n")}` : "";
+	return `## Subagents
+Use \`subagent\` only inside managed Pi for interactive child panes.
+Before parallel launch:
+- Profiles declaring \`edit\` or \`write\` are writers. Parallel writers must use distinct existing canonical \`cwd\` values; omitted \`cwd\` values all resolve to caller cwd.
+- A running or retained writer can hold its canonical cwd lease. Close it or choose another cwd before launching another writer there.
+- For same-cwd parallel work, choose profiles without declared write tools. For same-cwd writer work, use \`chain\`.
+- Set \`allowSharedWorkspaceWrites: true\` only when user explicitly accepts concurrent-write conflict risk.${list}`;
+}
+
 export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
-	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; if (!agents.length) return; const list = agents.map(a => `- ${a.name}: ${a.description}`).join("\n"); return { systemPrompt: `${event.systemPrompt}\n\n## Subagents\nUse \`subagent\` only inside managed Pi for interactive child panes.\n${list}` }; });
-	pi.registerTool({ name: "subagent", label: "Subagent", description: "Interactive Pi child group.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate) });
+	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; return { systemPrompt: `${event.systemPrompt}\n\n${formatSubagentPrompt(agents)}` }; });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles declaring edit/write are writers: give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles without declared write tools. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate) });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
 	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params) => control.execute(params) });
 }
@@ -164,4 +175,4 @@ function lifecycleCode(status: string): ErrorCode { return status === "timed_out
 function object(value: any): any { return value && typeof value === "object" ? value : {}; }
 function state(value: any): AgentSnapshot["state"] { const raw = object(value).agent_status ?? object(value).state ?? object(value).status; return raw === "idle" || raw === "working" || raw === "blocked" || raw === "done" ? raw : "unknown"; }
 export function lifecyclePort(client: Client, paneId: string): HerdrLifecyclePort { return { getAgent: async (_id, signal) => { let raw: any; try { raw = await client.getAgent(paneId, { signal }); } catch (error) { if (error instanceof Error && /(?:pane|agent)_not_found/.test(error.message)) return undefined; throw error; } const agent = object(raw); const value = object(agent.agent ?? agent); return { paneId: String(value.pane_id ?? value.paneId ?? paneId), state: state(value), exists: value.exists !== false, agentInfo: value, blockedReason: typeof value.message === "string" ? value.message : undefined }; }, sendLiteral: async (_id, text, signal) => client.sendAgentInput(paneId, text, { signal }), sendEnter: async (_id, signal) => client.submitOwnedPane(paneId, { signal }), waitForEvent: async () => {}, interruptOwnedPane: async id => client.interruptOwnedPane(id), closeOwnedPane: async id => client.closePane(id), validateRetainedDone: async (_id, session, signal) => { const raw = object(await client.getAgent(paneId, { signal })); const agent = object(raw.agent ?? raw); if (!agent || agent.exists === false || String(agent.pane_id ?? agent.paneId ?? "") !== paneId || (state(agent) !== "idle" && state(agent) !== "done")) return false; try { const ref = await validatePiSessionRef(agent, session.root); if (ref.path !== session.path) return false; const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); return !(trusted as any).pending && trusted.sessionId === session.sessionId; } catch { return false; } } }; }
-export function sessionPort(root: string): SessionHarvestPort { const paths = new Map<SessionBaseline, any>(); return { prepare: async agent => { const ref = await validatePiSessionRef(agent.agentInfo, root); const baseline = await recordAbsentSessionBaseline(ref); paths.set(baseline, ref); return baseline; }, materialize: async baseline => materializeAndTrustSession(paths.get(baseline), baseline), findAnchor: async (session, turnId) => findTurnAnchor(session, turnId), harvest: async (session, turnId, anchor, lifecycle) => harvestTurn(session, turnId, anchor, lifecycle) }; }
+export function sessionPort(root: string): SessionHarvestPort { const paths = new Map<SessionBaseline, any>(); return { prepare: async agent => { if (!("agent_session" in object(agent.agentInfo))) return { pending: true }; const ref = await validatePiSessionRef(agent.agentInfo, root); const baseline = await recordAbsentSessionBaseline(ref); paths.set(baseline, ref); return baseline; }, materialize: async baseline => materializeAndTrustSession(paths.get(baseline), baseline), findAnchor: async (session, turnId) => findTurnAnchor(session, turnId), harvest: async (session, turnId, anchor, lifecycle) => harvestTurn(session, turnId, anchor, lifecycle) }; }

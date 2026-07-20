@@ -31,6 +31,12 @@ test("normalizes a strict single request and applies defaults", () => {
 	expect(HerdrSubagentControlParamsSchema.additionalProperties).toBe(false);
 });
 
+test("schema descriptions warn about parallel writer cwd conflicts", () => {
+	expect(HerdrSubagentParamsSchema.properties.tasks.description).toContain("distinct canonical cwd");
+	expect(HerdrSubagentParamsSchema.properties.chain.description).toContain("writers sharing one cwd");
+	expect(HerdrSubagentParamsSchema.properties.allowSharedWorkspaceWrites.description).toContain("explicit user acceptance");
+});
+
 test("requires exactly one mode and complete single pairing", () => {
 	for (const value of [
 		{ group: "g" },

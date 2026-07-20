@@ -105,3 +105,10 @@ test("cleanup re-snapshots before tab close and preserves a newly inserted forei
 	const warnings = await cleanupTopology({ client: f.client, capacity: f.capacity, result });
 	expect(warnings).toContain("WARNING: foreign pane present; tab left open."); expect(f.calls.filter(call => call[0] === "closeTab")).toHaveLength(0);
 });
+
+test("cleanup accepts Herdr auto-removing the tab after its final pane closes", async () => {
+	const f = fake(); const result = await createTopology(input(f)); let snapshots = 0;
+	f.client.snapshot = async () => ++snapshots === 1 ? { tabs: [{ tab_id: "tab-1" }], panes: [{ pane_id: "child-1", tab_id: "tab-1" }] } : { tabs: [], panes: [] };
+	const warnings = await cleanupTopology({ client: f.client, capacity: f.capacity, result });
+	expect(warnings).toEqual([]); expect(f.calls.filter(call => call[0] === "closeTab")).toHaveLength(0);
+});

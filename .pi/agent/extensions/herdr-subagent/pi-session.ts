@@ -1,5 +1,5 @@
 import { lstat, open, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 import type { ErrorCode } from "./contracts.js";
 
@@ -49,7 +49,7 @@ export class PiSessionError extends Error {
 	}
 }
 
-/** Accepts only Herdr's Pi path reference, lexically constrained by canonical session root. */
+/** Accepts only Herdr's Pi path reference with canonical parent constrained by canonical session root. */
 export async function validatePiSessionRef(agentInfo: unknown, configuredRoot: string, dependencies: SessionDependencies = {}): Promise<PiSessionRef> {
 	const agent = object(agentInfo);
 	const reported = object(agent?.agent_session) ?? object(agentInfo);
@@ -57,8 +57,11 @@ export async function validatePiSessionRef(agentInfo: unknown, configuredRoot: s
 		fail("session_reference_missing", "Herdr did not report a Pi path session reference.");
 	}
 	if (!isAbsolute(reported.value) || !isAbsolute(configuredRoot)) fail("session_path_untrusted", "Pi session path and root must be absolute.");
-	const canonicalRoot = await fs(dependencies).realpath(configuredRoot).catch(() => fail("session_path_untrusted", "Pi session root is unavailable."));
-	const path = resolve(reported.value);
+	const io = fs(dependencies);
+	const canonicalRoot = await io.realpath(configuredRoot).catch(() => fail("session_path_untrusted", "Pi session root is unavailable."));
+	const reportedPath = resolve(reported.value);
+	const canonicalParent = await io.realpath(dirname(reportedPath)).catch(() => fail("session_path_untrusted", "Pi session parent directory is unavailable."));
+	const path = resolve(canonicalParent, basename(reportedPath));
 	if (!inside(canonicalRoot, path)) fail("session_path_untrusted", "Reported Pi session path is outside configured session root.");
 	return { source: "herdr:pi", kind: "path", path, root: canonicalRoot };
 }
@@ -161,10 +164,15 @@ async function readTrustedSession(ref: PiSessionRef, dependencies: SessionDepend
 		const info = await handle.stat();
 		const openedIdentity = identity(info);
 		if (!info.isFile() || (uid !== undefined && info.uid !== uid) || !sameIdentity(linkIdentity, openedIdentity) || (expected && !sameIdentity(expected, openedIdentity))) fail("session_path_untrusted", "Opened Pi session file is untrusted or was replaced.");
-		const openedPath = await io.realpath(`/proc/self/fd/${handle.fd}`).catch(() => fail("session_path_untrusted", "Opened Pi session path cannot be canonicalized."));
-		if (!inside(ref.root, openedPath)) fail("session_path_untrusted", "Opened Pi session file escaped configured root.");
+		// Descriptor pseudo-paths are not portable: macOS may expose /dev/fd/<n>
+		// instead of the opened pathname. Revalidate the canonical pathname and
+		// require it to still identify this descriptor before reading from it.
+		const currentPath = await io.realpath(ref.path).catch(() => fail("session_path_untrusted", "Pi session path cannot be canonicalized after opening."));
+		if (currentPath !== ref.path || !inside(ref.root, currentPath)) fail("session_path_untrusted", "Opened Pi session file escaped configured root.");
+		const currentLink = await io.lstat(ref.path).catch(() => fail("session_path_untrusted", "Pi session path disappeared during trust validation."));
+		if (currentLink.isSymbolicLink() || !currentLink.isFile() || (uid !== undefined && currentLink.uid !== uid) || !sameIdentity(identity(currentLink), openedIdentity)) fail("session_path_untrusted", "Opened Pi session path changed during trust validation.");
 		const bytes = await readBounded(handle, dependencies.maxBytes ?? MAX_SESSION_BYTES, info.size);
-		return { path: openedPath, identity: openedIdentity, bytes: bytes.byteLength, parsed: parseBytes(bytes, dependencies) };
+		return { path: currentPath, identity: openedIdentity, bytes: bytes.byteLength, parsed: parseBytes(bytes, dependencies) };
 	} finally { await handle.close(); }
 }
 

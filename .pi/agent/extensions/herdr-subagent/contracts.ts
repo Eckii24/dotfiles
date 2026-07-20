@@ -31,9 +31,9 @@ const ErrorCodeSchema = StringEnum(ERROR_CODES);
 
 export const HerdrSubagentItemSchema = Type.Object({
 	name: Type.Optional(Type.String()),
-	agent: Type.String(),
+	agent: Type.String({ description: "Agent profile name. Profiles declaring edit or write are writers." }),
 	task: Type.String(),
-	cwd: Type.Optional(Type.String()),
+	cwd: Type.Optional(Type.String({ description: "Existing working directory. Parallel writers require distinct canonical cwd values." })),
 }, Strict);
 
 /** Strict wire schema; cross-field mode rules are enforced by normalizeSubagentParams. */
@@ -42,13 +42,13 @@ export const HerdrSubagentParamsSchema = Type.Object({
 	agent: Type.Optional(Type.String()),
 	task: Type.Optional(Type.String()),
 	cwd: Type.Optional(Type.String()),
-	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4 })),
-	chain: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4 })),
+	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every declared writer a distinct canonical cwd." })),
+	chain: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Sequential panes; use for multiple writers sharing one cwd." })),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(Type.Boolean()),
 	timeoutSeconds: Type.Optional(Type.Integer({ minimum: MIN_TIMEOUT_SECONDS, maximum: MAX_TIMEOUT_SECONDS })),
 	keepOpen: Type.Optional(Type.Boolean()),
-	allowSharedWorkspaceWrites: Type.Optional(Type.Boolean()),
+	allowSharedWorkspaceWrites: Type.Optional(Type.Boolean({ description: "Dangerous override for concurrent writers sharing a canonical cwd. Use only with explicit user acceptance of conflict risk." })),
 }, Strict);
 
 /** Strict wire schema; action-specific rules are enforced by normalizeControlParams. */

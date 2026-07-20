@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createHerdrSubagentRuntime, HerdrSetupError, lifecyclePort } from "./index.js";
+import herdrExtension, { createHerdrSubagentRuntime, formatSubagentPrompt, HerdrSetupError, lifecyclePort, sessionPort } from "./index.js";
 import { ContractValidationError } from "./contracts.js";
 import { PreconditionsError } from "./preconditions.js";
 import { RunRegistry } from "./run-registry.js";
@@ -36,6 +36,25 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 }
 
 const params = (more = {}) => ({ group: "x", agent: "scout", task: "task", cwd: process.cwd(), ...more });
+
+test("prompt and tool description prevent accidental same-cwd parallel writers", () => {
+	const guidance = formatSubagentPrompt([
+		{ ...profile("user", ["read", "edit"]), name: "worker", description: "Makes changes." },
+		{ ...profile("user", ["read", "bash"]), name: "scout", description: "Maps code." },
+	] as any);
+	expect(guidance).toContain("worker [declared writer: edit/write]");
+	expect(guidance).toContain("scout [no declared edit/write tools]");
+	expect(guidance).toContain("omitted `cwd` values all resolve to caller cwd");
+	expect(guidance).toContain("use `chain`");
+	expect(formatSubagentPrompt([])).toContain("Parallel writers must use distinct existing canonical `cwd` values");
+
+	const tools: any[] = [];
+	herdrExtension({ on: () => {}, registerTool: (tool: any) => { tools.push(tool); } } as any);
+	const description = tools.find(tool => tool.name === "subagent")?.description;
+	expect(description).toContain("profiles declaring edit/write are writers");
+	expect(description).toContain("Same omitted cwd means same caller cwd");
+	expect(description).toContain("use chain for same-cwd writers");
+});
 
 test("validation and unsupported mode throw before Herdr preflight side effects", async () => {
 	let calls = 0;
@@ -147,6 +166,14 @@ test("parallel explicit shared-write override returns a warning", async () => {
 test("adapter prefers Herdr agent_status over legacy state/status", async () => {
 	const port = lifecyclePort({ getAgent: async () => ({ agent_status: "idle", state: "working", pane_id: "pane" }) } as any, "pane");
 	expect((await port.getAgent("pane"))?.state).toBe("idle");
+});
+
+test("session adapter polls transiently missing Herdr reference but rejects a reported invalid reference", async () => {
+	const sessions = sessionPort("/sessions");
+	const agent = { state: "idle", paneId: "pane", agentInfo: { agent: "pi", agent_status: "idle" } } as any;
+	expect(await sessions.prepare(agent)).toEqual({ pending: true });
+	agent.agentInfo.agent_session = { source: "other", kind: "path", value: "/sessions/child.jsonl" };
+	await expect(sessions.prepare(agent)).rejects.toThrow("session_reference_missing");
 });
 
 test("topology, profile, and preflight setup failures are typed and registry closes only cleaned runs", async () => {

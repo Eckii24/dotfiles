@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, open, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,13 +56,32 @@ test("rejects symlink, non-regular, wrong owner, and preexisting baseline", asyn
 	await rm(base, { recursive: true, force: true });
 });
 
-test("fails closed when a materialized session path is replaced before trusted rereads", async () => {
+test("trusts the opened in-root path without relying on non-portable descriptor pseudo-paths", async () => {
+	const base = await mkdtemp(join(tmpdir(), "pi-session-")); const root = join(base, "sessions"); const path = join(root, "session.jsonl"); await mkdir(root);
+	await cp(join(fixtures, "minimal-normal.jsonl"), path);
+	const ref = await validatePiSessionRef({ source: "herdr:pi", kind: "path", value: path }, root);
+	const session = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }, {
+		realpath: async value => value.startsWith("/proc/self/fd/") || value.startsWith("/dev/fd/") ? "/dev/fd/unresolved" : realpath(value),
+	});
+	expect(session.pending).not.toBe(true);
+	if (!session.pending) expect(session.path).toBe(ref.path);
+	await rm(base, { recursive: true, force: true });
+});
+
+test("fails closed when a session path changes before or during trusted reads", async () => {
 	const value = await trusted("minimal-normal.jsonl");
 	const replacement = join(value.base, "replacement.jsonl");
 	await writeFile(replacement, '{"type":"session","version":3,"id":"replacement"}\n{malformed}\n');
 	await rename(replacement, value.path);
 	await expect(findTurnAnchor(value.session, "TURN_NORMAL")).rejects.toThrow("session_path_untrusted");
 	await expect(harvestTurn(value.session, "TURN_NORMAL", { id: "anchor", parentId: "before", marker: "TURN_NORMAL" }, { state: "done" })).rejects.toThrow("session_path_untrusted");
+
+	const duringPath = join(value.root, "during.jsonl"); const duringReplacement = join(value.base, "during-replacement.jsonl");
+	await cp(join(fixtures, "minimal-normal.jsonl"), duringPath); await cp(join(fixtures, "minimal-normal.jsonl"), duringReplacement);
+	const duringRef = await validatePiSessionRef({ source: "herdr:pi", kind: "path", value: duringPath }, value.root);
+	await expect(materializeAndTrustSession(duringRef, { path: duringRef.path, recordedAt: 0 }, {
+		open: async (target, flags) => { const handle = await open(target, flags); await rename(duringReplacement, target); return handle; },
+	})).rejects.toThrow("session_path_untrusted");
 	await rm(value.base, { recursive: true, force: true });
 });
 

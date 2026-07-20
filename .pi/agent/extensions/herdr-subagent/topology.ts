@@ -129,7 +129,9 @@ export async function cleanupTopology(input: { client: TopologyClient; capacity:
 	// Re-snapshot at close boundary: a foreign pane may arrive while owned panes close.
 	if (!foreign && group.ownedPaneIds.size === 0 && client.closeTab && !closedTabs.has(group)) try {
 		if (!client.snapshot) throw new Error("snapshot unavailable");
-		if (snapshotPaneIds(await client.snapshot(), group.tabId).some(id => !group.ownedPaneIds.has(id))) warnings.push("WARNING: foreign pane present; tab left open.");
+		const snapshot = await client.snapshot();
+		if (snapshotPaneIds(snapshot, group.tabId).some(id => !group.ownedPaneIds.has(id))) warnings.push("WARNING: foreign pane present; tab left open.");
+		else if (snapshotHasTab(snapshot, group.tabId) === false) closedTabs.add(group);
 		else { await client.closeTab(group.tabId); closedTabs.add(group); }
 	} catch { warnings.push("WARNING: failed to close owned tab."); }
 	for (const lease of result.leases.values()) try { await capacity.releaseWriteLease(lease); } catch { warnings.push("WARNING: failed to release write lease."); }
@@ -153,9 +155,18 @@ function resultId(value: unknown, kind: "tab" | "pane"): string {
 	throw new TopologyError(`Herdr ${kind} result missing stable ID.`);
 }
 function snapshotPaneIds(value: unknown, tabId: string): string[] {
-	const snapshot = value && typeof value === "object" && "snapshot" in value ? (value as { snapshot: unknown }).snapshot : value;
-	if (!snapshot || typeof snapshot !== "object") return [];
+	const snapshot = snapshotBody(value);
+	if (!snapshot) return [];
 	const panes = (snapshot as { panes?: unknown }).panes;
 	if (!Array.isArray(panes)) return [];
 	return panes.flatMap(pane => { if (!pane || typeof pane !== "object") return []; const x = pane as Record<string, unknown>; const id = x.pane_id ?? x.paneId ?? x.id; return (x.tab_id === tabId || x.tabId === tabId) && typeof id === "string" ? [id] : []; });
+}
+function snapshotHasTab(value: unknown, tabId: string): boolean | undefined {
+	const tabs = snapshotBody(value)?.tabs;
+	if (!Array.isArray(tabs)) return undefined;
+	return tabs.some(tab => { if (!tab || typeof tab !== "object") return false; const x = tab as Record<string, unknown>; return (x.tab_id ?? x.tabId ?? x.id) === tabId; });
+}
+function snapshotBody(value: unknown): Record<string, unknown> | undefined {
+	const snapshot = value && typeof value === "object" && "snapshot" in value ? (value as { snapshot: unknown }).snapshot : value;
+	return snapshot && typeof snapshot === "object" ? snapshot as Record<string, unknown> : undefined;
 }
