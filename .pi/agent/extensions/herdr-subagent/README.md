@@ -260,17 +260,18 @@ Keine Worktrees: Extension erstellt, wählt oder verwaltet keine.
 
 ```mermaid
 flowchart TB
-  R[Root-Run] --> TAB[neuer Tab\n<group> · pi-herdr:<hash6>]
-  TAB --> B[temporäre Bootstrap-Pane]
-  TAB --> L1[Profil · leaf-id]
-  TAB --> L2[Profil · leaf-id]
-  TAB --> L3[Profil · leaf-id]
-  TAB --> L4[Profil · leaf-id]
-  B -. erster Child stabil .-> X[Bootstrap-Pane schließen]
+  R["Root-Run"] --> TAB["neuer Tab<br/>&lt;group&gt; · pi-herdr:&lt;hash6&gt;"]
+  TAB --> B["temporäre Bootstrap-Pane"]
+  TAB --> L1["Profil · leaf-id"]
+  TAB --> L2["Profil · leaf-id"]
+  TAB --> L3["Profil · leaf-id"]
+  TAB --> L4["Profil · leaf-id"]
+  B -.->|erster Child stabil| X["Bootstrap-Pane schließen"]
 ```
 
 - Tab-Label enthält nur eine kurze Hash-Suffix als Discovery-Hilfe, niemals als alleinigen Ownership-Beweis.
 - Pane-Namen enthalten Gruppe, Profil und erste acht Zeichen der Leaf-ID; Terminal-Control-Zeichen werden entfernt.
+- Während ein `subagent`-Tool läuft, zeigt dessen Orchestrator-Zeile Gruppe, Modus/Panenanzahl, Item-Name, Profil und eine gekürzte Task. Expansion zeigt die vollständige Task bzw. finale Leaf-Outputs. Modell, Tool-Liste und technische Pane-/Tab-IDs bleiben verborgen: Sie erklären den Run nicht besser als Profil und Gruppe.
 - Layouts: 1 Pane; 2 horizontal; 3 horizontal plus rechter vertikaler Split; 4 zwei vertikale Spalten. Layout-Fehler lassen sichere Standardanordnung bestehen und erzeugen Warnung.
 - Bootstrap-Pane wird erst nach stabiler erster Child-Pane geschlossen.
 

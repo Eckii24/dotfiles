@@ -12,6 +12,7 @@ import { checkPreconditions, MAX_NESTING_DEPTH, PreconditionsError, type Precond
 import { RunRegistry } from "./run-registry.js";
 import { acceptLeaf, addTopologyLeaf, cleanupTopology, createTopology, type TopologyResult } from "./topology.js";
 import { formatResult } from "./result-format.js";
+import { renderSubagentCall, renderSubagentResult } from "./subagent-render.js";
 import { createHerdrSubagentControlRuntime } from "./control.js";
 import { createTaskDelivery } from "./task-delivery.js";
 
@@ -165,7 +166,7 @@ Before parallel launch:
 export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
 	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; return { systemPrompt: `${event.systemPrompt}\n\n${formatSubagentPrompt(agents)}` }; });
-	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles declaring edit/write are writers: give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles without declared write tools. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate) });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles declaring edit/write are writers: give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles without declared write tools. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
 	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params) => control.execute(params) });
 }
