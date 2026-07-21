@@ -26,6 +26,8 @@ split_horizontal = "prefix+s"
 confirm_close = false
 pane_gaps = false
 prompt_new_tab_name = false
+hide_tab_bar_when_single_tab = true
+
 
 [ui.toast]
 delivery = "terminal"
