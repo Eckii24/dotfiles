@@ -1,8 +1,11 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { displayPreview, type HerdrLeafResult, type HerdrSubagentResult } from "./contracts.js";
 
+/** Safe local control handles only; never pass pane/session/launch internals here. */
+export type RetainedControlHandles = { rootRunId: string; status: string; leaves: readonly { leafRunId: string; name?: string; status: string }[] };
+
 /** Keeps UI text small; complete native correlation stays in structured details. */
-export function formatResult(result: HerdrSubagentResult): AgentToolResult<HerdrSubagentResult> {
+export function formatResult(result: HerdrSubagentResult, retained?: RetainedControlHandles): AgentToolResult<HerdrSubagentResult> {
 	const outputs = result.children.filter(child => child.finalOutput).map(child => `${child.name}: ${displayPreview(child.finalOutput!, 400)}`);
 	const failures = result.children
 		.filter(child => child.error)
@@ -11,7 +14,8 @@ export function formatResult(result: HerdrSubagentResult): AgentToolResult<Herdr
 	const text = [...outputs, ...failures].length
 		? [...outputs, ...failures].join("\n")
 		: `${result.group}: ${result.status}${blocked?.blockedReason ? ` — ${blocked.blockedReason}` : ""}`;
-	return { content: [{ type: "text", text }], details: result };
+	const controls = retained?.leaves.length ? `\nControl retained run: root=${retained.rootRunId} status=${retained.status}\n${retained.leaves.map(leaf => `- ${leaf.name ?? "leaf"}: leaf=${leaf.leafRunId} status=${leaf.status}`).join("\n")}\nUse subagent_control follow_up with rootRunId and leafRunId; close when done.` : "";
+	return { content: [{ type: "text", text: `${text}${controls}` }], details: result };
 }
 
 export function leafText(leaf: HerdrLeafResult): string {

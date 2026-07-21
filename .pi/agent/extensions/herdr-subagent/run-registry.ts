@@ -18,6 +18,8 @@ export type RunRootHandle = {
 };
 export type RegisterRun = Omit<RunRootHandle, "leaves"> & { leaves: readonly RunLeafHandle[] };
 export type ControlResolution = { ok: true; root: RunRootHandle; leaf?: RunLeafHandle } | { ok: false; error: HerdrError };
+/** Private launch names used only for authoritative follow-up validation. */
+export type FollowUpExpectations = { agentName: string; sessionName: string };
 export type RecoveryResult = { status: "recovered"; root: RunRootHandle } | { status: "lost"; root: RunRootHandle } | { status: "unowned"; error: HerdrError };
 
 const ROOT_ENV = "PI_HERDR_ROOT_RUN_ID";
@@ -28,6 +30,7 @@ const PARENT_ENV = "PI_HERDR_PARENT_ROOT_RUN_ID";
 export class RunRegistry {
 	private readonly roots = new Map<string, RunRootHandle>();
 	private readonly releases = new Map<string, () => Promise<void>>();
+	private readonly followUpExpectations = new Map<string, Map<string, FollowUpExpectations>>();
 
 	register(input: RegisterRun): RunRootHandle {
 		const root = copyRoot(input);
@@ -39,6 +42,14 @@ export class RunRegistry {
 	get(rootRunId: string): RunRootHandle | undefined { return copyMaybe(this.roots.get(rootRunId)); }
 	/** Process-local release hook; never persisted or exposed through result handles. */
 	setRelease(rootRunId: string, release: () => Promise<void>) { if (this.roots.has(rootRunId)) this.releases.set(rootRunId, release); }
+	/** Private launch expectations; public root/leaf copies never include these values. */
+	setFollowUpExpectations(rootRunId: string, leafRunId: string, values: FollowUpExpectations) {
+		if (!this.roots.get(rootRunId)?.leaves.some(leaf => leaf.leafRunId === leafRunId)) return;
+		this.followUpExpectations.get(rootRunId)?.set(leafRunId, { ...values }) ?? this.followUpExpectations.set(rootRunId, new Map([[leafRunId, { ...values }]]));
+	}
+	getFollowUpExpectations(rootRunId: string, leafRunId: string): FollowUpExpectations | undefined {
+		const values = this.followUpExpectations.get(rootRunId)?.get(leafRunId); return values && { ...values };
+	}
 	async release(rootRunId: string) { const release = this.releases.get(rootRunId); this.releases.delete(rootRunId); await release?.(); }
 	getLeaf(rootRunId: string, leafRunId: string): RunLeafHandle | undefined {
 		return copyLeaf(this.roots.get(rootRunId)?.leaves.find(leaf => leaf.leafRunId === leafRunId));
@@ -73,10 +84,10 @@ export class RunRegistry {
 	/** Removes only local authority after successful close; no durable tombstone is retained. */
 	close(rootRunId: string, leafRunId?: string): boolean {
 		const root = this.roots.get(rootRunId); if (!root) return false;
-		if (leafRunId === undefined) { this.releases.delete(rootRunId); return this.roots.delete(rootRunId); }
+		if (leafRunId === undefined) { this.releases.delete(rootRunId); this.followUpExpectations.delete(rootRunId); return this.roots.delete(rootRunId); }
 		const index = root.leaves.findIndex(leaf => leaf.leafRunId === leafRunId);
 		if (index < 0) return false;
-		root.leaves.splice(index, 1); return true;
+		root.leaves.splice(index, 1); this.followUpExpectations.get(rootRunId)?.delete(leafRunId); return true;
 	}
 
 	/**

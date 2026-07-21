@@ -320,7 +320,7 @@ Vor Tab-Schließung erfolgt Snapshot-Prüfung und eine zweite Prüfung an der Sc
 
 ## Ergebnisvertrag
 
-Tool-Text ist absichtlich kurz: maximal 400 Unicode-Scalars je erfolgreichem Output/Fehler. Vollständige Daten liegen in `details`; `finalOutput` bleibt dort unverändert.
+Tool-Text ist absichtlich kurz: maximal 400 Unicode-Scalars je erfolgreichem Output/Fehler. Bei noch kontrollierbaren retained Leafs enthält er zusätzlich sichere Handles: `root=<rootRunId>`, Root-Status sowie Name, `leaf=<leafRunId>` und Status jedes erfolgreichen `keepOpen`- oder blockierten Leafs. Diese IDs können direkt in `subagent_control` verwendet werden. Pane-/Tab-IDs, Session-Pfade/-IDs, Marker, Launch-Namen und Umgebung bleiben aus Tool-Text ausgeschlossen. Vollständige Daten liegen in `details`; `finalOutput` bleibt dort unverändert.
 
 ```ts
 type RootResult = {
@@ -403,9 +403,9 @@ Beispiele:
 {"action":"close","rootRunId":"<root>"}
 ```
 
-`follow_up` verlangt zusätzlich: ursprünglicher Run mit `keepOpen: true`, Leaf `succeeded`, Pane ist `idle`/`done`, foreground-Prozess ist Pi sowie Pfad und Session-ID entsprechen weiter der gespeicherten vertrauenswürdigen Pi-Session. Ein atomarer Registry-Claim verhindert zwei parallele Follow-ups auf demselben Leaf.
+`follow_up` verlangt zusätzlich: ursprünglicher lokal registrierter Run mit `keepOpen: true`, Leaf `succeeded`, aktiver adressierbarer Herdr-Agent mit exakt registrierter Pane-ID und Zustand `idle`/`done`. Herdr-gelieferte Root-/Leaf-Metadaten sowie Agent-/Session-Namen müssen, falls vorhanden, exakt zum Launch passen. `agent_session.source` muss `herdr:pi` sein; vertrauenswürdiger Pfad und Session-ID müssen unverändert bleiben. Fehlende oder abweichende Evidenz liefert nichts aus. Ein atomarer Registry-Claim verhindert zwei parallele Follow-ups; nach nativem Final darf derselbe Leaf erneut folgen.
 
-Bei `blocked`: Frage/Permission sichtbar in der eigenen Child-Pane lösen, anschließend `collect`. `steer` kann Text senden, ist aber kein Beweis, dass eine interaktive Blockierung korrekt aufgelöst wurde.
+Bei mehreren eligible Leafs `leafRunId` explizit setzen; eine angezeigte Handle-Auswahl stets übernehmen. Bei `blocked`: Frage/Permission sichtbar in der eigenen Child-Pane lösen, anschließend `collect`; bis Erfolg ist kein Follow-up möglich. Danach retained Panes mit `close` freigeben. `steer` kann Text senden, ist aber kein Beweis, dass eine interaktive Blockierung korrekt aufgelöst wurde.
 
 `abort` wartet höchstens eine Sekunde (auch bei höherem Parameterwert) und meldet immer `abortCandidateSent: true`, `gracefulAbortProven: false`. Es darf nie als nachgewiesen sanfter Pi-Abbruch interpretiert werden.
 
@@ -431,7 +431,7 @@ flowchart LR
 | Herdr-Protokoll | enger Protocol-16-Client; feste Methodenauswahl; serialisierte Requests; Frame/Payload-Limits; Fehler ohne Frame-Body |
 | Kein Tastatur-Backdoor | öffentlich keine Keys; intern nur festes Enter für Zustellung und festes Ctrl-C für Abbruch |
 | Kein frei wählbares Ziel | öffentliche Tools nehmen keine Socket-, Tab- oder Pane-ID entgegen |
-| Ownership | lokale Root/Leaf-Registry; IDs; Parent darf eigene Nachfahren steuern, nie Vorfahren/Geschwister/fremde Runs |
+| Ownership | lokale Root/Leaf-Registry plus aktueller adressierbarer Herdr-Agent mit exakter registrierter Pane-ID; Parent darf eigene Nachfahren steuern, nie Vorfahren/Geschwister/fremde Runs |
 | Session-Trust | nur `source: herdr:pi`, `kind: path`, absoluter Pfad unter kanonischem Session-Root |
 | TOCTOU-Schutz | Datei zunächst muss fehlen; non-symlink/current-user regular file; `lstat`/offener FD/Inode/Realpath vor Lesen erneut verglichen |
 | Parser-Grenzen | höchstens 4 MiB Session, 256 KiB pro JSONL-Zeile, v3-Header und wohlgeformte Entries |
@@ -533,5 +533,5 @@ bun test
 Opt-in Live-Test gegen reale Herdr/Pi-Umgebung:
 
 ```bash
-PI_HERDR_G4_LIVE=1 bun test index.live.test.ts
+HERDR_G4_LIVE=1 bun test index.live.test.ts
 ```

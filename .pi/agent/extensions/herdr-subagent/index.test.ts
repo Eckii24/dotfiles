@@ -54,6 +54,9 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	expect(description).toContain("profiles declaring edit/write are writers");
 	expect(description).toContain("Same omitted cwd means same caller cwd");
 	expect(description).toContain("use chain for same-cwd writers");
+	expect(formatSubagentPrompt([])).toContain("Retained follow-up");
+	const control = tools.find(tool => tool.name === "subagent_control")?.description;
+	expect(control).toContain("keepOpen root"); expect(control).toContain("idle/done"); expect(control).toContain("multiple eligible"); expect(control).toContain("native final"); expect(control).toContain("blocked"); expect(control).toContain("close");
 });
 
 test("validation and unsupported mode throw before Herdr preflight side effects", async () => {
@@ -87,6 +90,7 @@ test("single success delivers direct prompt with terminal sentinel, cleans promp
 	const result = await f.runtime.execute(params(), context, undefined, value => updates.push(value));
 	expect(f.received).toMatchObject({ task: "task [herdr:task-sentinel:v1:turn]", marker: " [herdr:task-sentinel:v1:turn]", turnId: "turn" });
 	expect(f.received.task).not.toContain("\n");
+	expect(result.content[0].text).not.toContain("Control retained run:");
 	expect(f.events).toEqual(["ready-cleanup", "send", "topology-cleanup", "dispose"]);
 	expect(updates).toEqual([result]);
 	expect(result.details.children[0].piSession.path).toBe("/trusted/session.jsonl");
@@ -95,11 +99,13 @@ test("single success delivers direct prompt with terminal sentinel, cleans promp
 });
 
 test("keepOpen retains terminal topology and blocked retains pane", async () => {
-	const keep = vertical(); await keep.runtime.execute(params({ keepOpen: true }), context);
+	const keep = vertical(); const kept = await keep.runtime.execute(params({ keepOpen: true }), context);
 	expect(keep.events).toEqual(["ready-cleanup", "send", "dispose"]);
+	expect(kept.content[0].text).toContain("Control retained run: root=root status=succeeded"); expect(kept.content[0].text).toContain("scout: leaf=leaf status=succeeded");
+	expect(kept.content[0].text).not.toContain("pane-1"); expect(kept.content[0].text).not.toContain("/trusted/session.jsonl"); expect(kept.content[0].text).not.toContain("[herdr:");
 	expect(keep.runtime.registry.get("root")?.status).toBe("succeeded"); expect(keep.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: undefined, activeMarker: undefined });
 	const blocked = vertical({ status: "blocked" }); const result = await blocked.runtime.execute(params(), context);
-	expect(result.details.status).toBe("blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
+	expect(result.details.status).toBe("blocked"); expect(result.content[0].text).toContain("Control retained run: root=root status=blocked"); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
 	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });
 });
 

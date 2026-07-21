@@ -19,8 +19,10 @@ test("registers, updates, and returns root/leaf handles without exposing mutable
 	const registry = new RunRegistry(); registry.register(root());
 	expect(registry.updateRoot(rootId, { status: "blocked" })?.status).toBe("blocked");
 	expect(registry.updateLeaf(rootId, leafId, { status: "succeeded" })?.session?.sessionId).toBe("session-1");
+	registry.setFollowUpExpectations(rootId, leafId, { agentName: "managed-name", sessionName: "pi-name" });
 	const returned = registry.get(rootId)!; returned.leaves[0]!.paneId = "tampered";
-	expect(registry.getLeaf(rootId, leafId)?.paneId).toBe("pane-1");
+	expect(registry.getLeaf(rootId, leafId)?.paneId).toBe("pane-1"); expect(registry.getFollowUpExpectations(rootId, leafId)).toEqual({ agentName: "managed-name", sessionName: "pi-name" });
+	expect(JSON.stringify([returned, registry.getLeaf(rootId, leafId), registry.resolveControl(rootId, rootId, leafId)])).not.toContain("managed-name");
 });
 
 test("top parent controls registered descendants; child cannot control parent or sibling", () => {
@@ -70,6 +72,8 @@ test("atomic follow-up claim permits one caller and terminal marker clearing pre
 test("retained handles remain controllable; successful close removes local authority", () => {
 	const registry = new RunRegistry(); registry.register(root({ status: "succeeded", keepOpen: true }));
 	expect(registry.resolveControl(rootId, rootId, leafId).ok).toBe(true);
+	registry.setFollowUpExpectations(rootId, leafId, { agentName: "managed-name", sessionName: "pi-name" });
+	expect(registry.close(rootId, leafId)).toBe(true); expect(registry.getFollowUpExpectations(rootId, leafId)).toBeUndefined();
 	expect(registry.close(rootId)).toBe(true);
 	expect(registry.resolveControl(rootId, rootId).ok).toBe(false);
 });

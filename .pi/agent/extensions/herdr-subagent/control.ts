@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { DEFAULT_TIMEOUT_SECONDS, normalizeControlParams, type NormalizedControlParams } from "./contracts.js";
 import { runLifecycleTurn, type HerdrLifecyclePort, type LifecycleResult, type SessionHarvestPort } from "./lifecycle.js";
-import { RunRegistry, type RunLeafHandle, type RunRootHandle } from "./run-registry.js";
+import { RunRegistry, type FollowUpExpectations, type RunLeafHandle, type RunRootHandle } from "./run-registry.js";
 import { validatePiSessionRef, materializeAndTrustSession, findTurnAnchor, harvestTurn, type TrustedMaterializedSession } from "./pi-session.js";
 import { createTaskDelivery } from "./task-delivery.js";
 
-export type ControlClient = { getAgent(id: string): Promise<any>; processInfo(id: string): Promise<any>; sendAgentInput(id: string, text: string): Promise<any>; submitOwnedPane(id: string): Promise<any>; interruptOwnedPane(id: string): Promise<any>; closePane(id: string): Promise<any>; closeTab(id: string): Promise<any>; snapshot(): Promise<any>; dispose?(): void };
+export type ControlClient = { getAgent(id: string): Promise<any>; sendAgentInput(id: string, text: string): Promise<any>; submitOwnedPane(id: string): Promise<any>; interruptOwnedPane(id: string): Promise<any>; closePane(id: string): Promise<any>; closeTab(id: string): Promise<any>; snapshot(): Promise<any>; dispose?(): void };
 export type ControlDeps = {
  registry: RunRegistry; createClient: (socketPath: string) => ControlClient; preflight: () => Promise<{ socketPath: string }>; sessionRoot: string; now?: () => number;
  runLifecycle?: typeof runLifecycleTurn; lifecyclePort?: (client: ControlClient, paneId: string) => HerdrLifecyclePort; sessionPort?: (root: string) => SessionHarvestPort;
@@ -28,14 +27,16 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
   const preflight = await deps.preflight(); const client = deps.createClient(preflight.socketPath);
   try {
    if (input.action === "steer") {
-    const leaf = leaves[0]!; await live(client, leaf, false, deps.sessionRoot);
+    const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot);
     await client.sendAgentInput(leaf.paneId, literal(input.message)); await client.submitOwnedPane(leaf.paneId);
     return wrap(result(input.action, root, leaves));
    }
    if (input.action === "follow_up") {
     if (!root.keepOpen) throw failure("unknown_or_foreign_run", "Default-close runs cannot accept a follow-up.");
     if (!deps.lifecyclePort || !deps.sessionPort) throw failure("agent_start_failed", "Control lifecycle ports are unavailable.");
-    const leaf = leaves[0]!; const trusted = await live(client, leaf, true, deps.sessionRoot);
+    const leaf = leaves[0]!; const expectations = deps.registry.getFollowUpExpectations(root.rootRunId, leaf.leafRunId);
+    if (!expectations) throw failure("pi_integration_missing", "Retained leaf launch identity is unavailable.");
+    const trusted = await live(client, root, leaf, true, deps.sessionRoot, expectations);
     const turnId = randomUUID(); const delivery = createTaskDelivery(literal(input.message), turnId);
     // Claim before lifecycle delivery. A second controller sees working and cannot send.
     if (!deps.registry.claimFollowUp(root.rootRunId, leaf.leafRunId, turnId, delivery.marker)) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request.");
@@ -48,7 +49,7 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
    }
    if (input.action === "collect") return wrap(await collect(client, deps, root, leaves, input));
    if (input.action === "abort") {
-    const leaf = leaves[0]!; await live(client, leaf, false, deps.sessionRoot); await client.interruptOwnedPane(leaf.paneId);
+    const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot); await client.interruptOwnedPane(leaf.paneId);
     await new Promise(resolve => setTimeout(resolve, Math.min((input.timeoutSeconds ?? 1) * 1000, 1000)));
     const warnings = await closeOwned(client, deps.registry, root, [leaf]);
     return wrap({ ...result(input.action, root, [leaf]), abortCandidateSent: true, gracefulAbortProven: false, warnings });
@@ -73,17 +74,35 @@ function result(action: string, root: RunRootHandle, leaves: RunLeafHandle[]) { 
 function controlText(value: ControlDetails) { return value.finalOutput || `${value.action}: ${value.status}`; }
 function state(raw: any): State { const v = raw?.agent?.agent_status ?? raw?.agent_status ?? raw?.agent?.state ?? raw?.state; return v === "idle" || v === "working" || v === "blocked" || v === "done" ? v : "unknown"; }
 function agentPane(raw: any) { const agent = raw?.agent ?? raw; const value = agent?.pane_id ?? agent?.paneId; return typeof value === "string" ? value : undefined; }
-function foregroundPi(raw: any) {
- const processes = raw?.process_info?.foreground_processes ?? raw?.result?.process_info?.foreground_processes;
- return Array.isArray(processes) && processes.some((process: any) => process && (process.name === "pi" || (Array.isArray(process.argv) && typeof process.argv[0] === "string" && basename(process.argv[0]) === "pi")));
+function supplied(record: any, keys: readonly string[]) {
+ for (const key of keys) if (Object.prototype.hasOwnProperty.call(record ?? {}, key)) return { present: true, value: record[key] };
+ return { present: false, value: undefined };
 }
-async function live(client: ControlClient, leaf: RunLeafHandle, retained: boolean, root: string): Promise<TrustedMaterializedSession> {
- const agent = await client.getAgent(leaf.paneId); if (!agent || agent.exists === false || agentPane(agent) !== leaf.paneId) throw failure("pane_lost", "Owned pane disappeared or changed.");
- if (retained && state(agent) !== "idle" && state(agent) !== "done") throw failure("ambiguous_turn", "Retained leaf is not idle or done.");
- const process = await client.processInfo(leaf.paneId); if (!foregroundPi(process)) throw failure("pi_integration_missing", "Owned pane is not foreground Pi.");
+function optionalMetadata(agent: any, keys: readonly string[]) {
+ const direct = supplied(agent, keys); if (direct.present) return direct;
+ for (const key of ["env", "environment", "metadata", "meta"]) { const nested = agent?.[key]; const value = supplied(nested, keys); if (value.present) return value; }
+ return direct;
+}
+function exactOptional(value: { present: boolean; value: unknown }, expected: string) {
+ return !value.present || (typeof value.value === "string" && value.value === expected);
+}
+function assertOptionalIdentity(agent: any, root: RunRootHandle, leaf: RunLeafHandle, expectations: FollowUpExpectations) {
+ const session = agent?.agent_session;
+ if (!exactOptional(optionalMetadata(agent, ["root_run_id", "rootRunId", "PI_HERDR_ROOT_RUN_ID"]), root.rootRunId)
+  || !exactOptional(optionalMetadata(agent, ["leaf_run_id", "leafRunId", "PI_HERDR_LEAF_RUN_ID"]), leaf.leafRunId)
+  || !exactOptional(supplied(agent, ["name", "agent_name", "agentName"]), expectations.agentName)
+  || !exactOptional(supplied(session, ["name", "session_name", "sessionName"]), expectations.sessionName)) throw failure("pi_integration_missing", "Herdr launch identity changed.");
+}
+async function live(client: ControlClient, ownedRoot: RunRootHandle, leaf: RunLeafHandle, retained: boolean, root: string, expectations?: FollowUpExpectations): Promise<TrustedMaterializedSession> {
+ let raw: any; try { raw = await client.getAgent(leaf.paneId); } catch { throw failure("pi_integration_missing", "Herdr agent identity is unavailable."); }
+ const agent = raw?.agent ?? raw;
+ if (!agent || typeof agent !== "object" || agent.exists === false || agentPane(raw) !== leaf.paneId) throw failure("pane_lost", "Owned pane disappeared or changed.");
+ if (retained && state(raw) !== "idle" && state(raw) !== "done") throw failure("ambiguous_turn", "Retained leaf is not idle or done.");
  if (!retained) return {} as TrustedMaterializedSession;
+ if (!expectations) throw failure("pi_integration_missing", "Retained leaf launch identity is unavailable.");
+ assertOptionalIdentity(agent, ownedRoot, leaf, expectations);
  if (!leaf.session || leaf.session.source !== "herdr:pi" || !leaf.session.sessionId) throw failure("session_reference_missing", "Retained leaf has no trusted session identity.");
- const ref = await validatePiSessionRef(agent.agent ?? agent, root); if (ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
+ const ref = await validatePiSessionRef(agent, root); if (ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
  return trusted;
 }

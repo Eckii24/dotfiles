@@ -85,18 +85,25 @@ test.skipIf(!groupLive)("G13 live parallel and chain groups close by default", a
 	}
 }, 300_000);
 
-/** Opt-in G4: retained native turn then follow_up waits for another native final before close. */
-test.skipIf(!g4Live)("G4 retained success -> follow_up final -> close", async () => {
+/** Opt-in G4: parse retained handles from content, prove two same-pane/session finals, then revoke authority. */
+test.skipIf(!g4Live)("G4 retained content handles -> two follow_up finals -> close", async () => {
 	const observer = new HerdrClient({ socketPath: socketPath! }); let details: any;
 	const runtime = createHerdrSubagentRuntime();
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }), preflight: checkPreconditions, sessionRoot, lifecyclePort: (client, paneId) => lifecyclePort(client as any, paneId), sessionPort });
 	try {
 		const first = await runtime.execute({ group: "g4-retained", agent: "scout", task: "Do not use tools. Return exact text G4_FIRST only.", cwd: process.cwd(), timeoutSeconds: 120, keepOpen: true }, { cwd: process.cwd(), hasUI: false, ui: {} } as any);
-		details = first.details; expect(details).toMatchObject({ status: "succeeded", keepOpen: true });
-		const follow = await control.execute({ action: "follow_up", rootRunId: details.rootRunId, leafRunId: details.children[0].leafRunId, message: "Do not use tools. Return exact text G4_FOLLOW only." });
-		expect(follow.details).toMatchObject({ action: "follow_up", status: "succeeded", finalOutput: "G4_FOLLOW" });
-		const closed = await control.execute({ action: "close", rootRunId: details.rootRunId }); expect(closed.details.warnings).toEqual([]);
-		const after = await observer.snapshot(); expect(tabIds(after).has(details.tabId)).toBe(false); expect(paneIds(after).has(details.children[0].paneId)).toBe(false);
+		details = first.details; const text = first.content.find((part: any) => part.type === "text")?.text ?? "";
+		const rootRunId = text.match(/Control retained run: root=([^\s]+)/)?.[1]; const leafRunId = text.match(/leaf=([^\s]+)/)?.[1]; expect(rootRunId).toBeTruthy(); expect(leafRunId).toBeTruthy();
+		expect(text).not.toContain(details.tabId); expect(text).not.toContain(details.children[0].paneId); expect(text).not.toContain(details.children[0].piSession.path); expect(text).not.toContain("[herdr:");
+		const before = runtime.registry.getLeaf(rootRunId!, leafRunId!)!; const beforeSessionId = before.session?.sessionId; const beforePaneId = before.paneId;
+		const followOne = await control.execute({ action: "follow_up", rootRunId: rootRunId!, leafRunId: leafRunId!, message: "Do not use tools. Return exact text G4_FOLLOW_ONE only." });
+		const followTwo = await control.execute({ action: "follow_up", rootRunId: rootRunId!, leafRunId: leafRunId!, message: "Do not use tools. Return exact text G4_FOLLOW_TWO only." });
+		expect(followOne.details).toMatchObject({ action: "follow_up", status: "succeeded", finalOutput: "G4_FOLLOW_ONE" }); expect(followTwo.details).toMatchObject({ action: "follow_up", status: "succeeded", finalOutput: "G4_FOLLOW_TWO" });
+		const current = runtime.registry.getLeaf(rootRunId!, leafRunId!)!; const raw = await observer.getAgent(beforePaneId); const agent = raw?.agent ?? raw; const ref = await validatePiSessionRef(agent, sessionRoot);
+		expect(current.paneId).toBe(beforePaneId); expect(agent?.pane_id ?? agent?.paneId).toBe(beforePaneId); expect(agent?.agent_session?.source).toBe("herdr:pi"); expect(ref.path).toBe(current.session?.path); expect(current.session?.sessionId).toBe(beforeSessionId);
+		const closed = await control.execute({ action: "close", rootRunId: rootRunId! }); expect(closed.details.warnings).toEqual([]);
+		await expect(control.execute({ action: "status", rootRunId: rootRunId! })).rejects.toMatchObject({ code: "unknown_or_foreign_run" });
+		const after = await observer.snapshot(); expect(tabIds(after).has(details.tabId)).toBe(false); expect(paneIds(after).has(beforePaneId)).toBe(false);
 	} finally { if (details) { await observer.closePane(details.children[0].paneId).catch(() => undefined); await observer.closeTab(details.tabId).catch(() => undefined); } observer.dispose(); }
 }, 300_000);
 
