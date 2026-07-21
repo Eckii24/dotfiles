@@ -3,25 +3,30 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildPreflightPrompt, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge, sanitizeSessionAllowedCommand } from "./preflight.js";
+import type { SessionPreflightApproval } from "./session-preflight-approvals.js";
 
 describe("parsePreflightVerdict", () => {
   it("parses structured allow verdicts", () => {
-    const result = parsePreflightVerdict(`before\n[PREFLIGHT_VERDICT]\nDECISION: ALLOW\nREASON: harmless and contextually appropriate\nCONCERNS: none\n[/PREFLIGHT_VERDICT]\nafter`);
+    const result = parsePreflightVerdict(`before\n[PREFLIGHT_VERDICT]\nDECISION: ALLOW\nREASON: harmless and contextually appropriate\nCONCERNS: none\nAPPROVAL_MATCH: SAME_INTENT\nAPPROVAL_INTENT: inspect project source files\n[/PREFLIGHT_VERDICT]\nafter`);
 
     expect(result).toEqual({
       decision: "allow",
       reason: "harmless and contextually appropriate",
       concerns: [],
+      approvalMatch: "same_intent",
+      approvalIntent: "inspect project source files",
     });
   });
 
   it("parses confirm verdicts with concerns", () => {
-    const result = parsePreflightVerdict(`[PREFLIGHT_VERDICT]\nDECISION: CONFIRM\nREASON: network request may be valid but deserves user review\nCONCERNS: network access; remote destination unclear\n[/PREFLIGHT_VERDICT]`);
+    const result = parsePreflightVerdict(`[PREFLIGHT_VERDICT]\nDECISION: CONFIRM\nREASON: network request may be valid but deserves user review\nCONCERNS: network access; remote destination unclear\nAPPROVAL_MATCH: UNCERTAIN\nAPPROVAL_INTENT: publish package to registry\n[/PREFLIGHT_VERDICT]`);
 
     expect(result).toEqual({
       decision: "confirm",
       reason: "network request may be valid but deserves user review",
       concerns: ["network access", "remote destination unclear"],
+      approvalMatch: "uncertain",
+      approvalIntent: "publish package to registry",
     });
   });
 });
@@ -37,6 +42,14 @@ describe("buildPreflightPrompt", () => {
       gate1Hints: ["network access"],
       preflightRules: ["Production deploy commands must require confirmation"],
       sessionAllowedCommands: ["npm test -- --runInBand"],
+      sessionPreflightApprovals: [{
+        scope: "/repo",
+        command: "git push origin feature/login",
+        intent: "push a feature branch to origin",
+        reason: "expected feature delivery",
+        riskSignals: ["network access", "repo mutation"],
+        createdAt: "2026-07-21T00:00:00.000Z",
+      } satisfies SessionPreflightApproval],
     });
 
     expect(prompt).toContain("curl https://example.com");
@@ -49,10 +62,12 @@ describe("buildPreflightPrompt", () => {
     expect(prompt).toContain('"Production deploy commands must require confirmation"');
     expect(prompt).toContain("These rules can only make the decision stricter");
     expect(prompt).toContain("Session-approved command hints");
-    expect(prompt).toContain("sanitized shapes");
-    expect(prompt).toContain("same intent and no added risk");
+    expect(prompt).toContain("Session-approved preflight intents");
+    expect(prompt).toContain("push a feature branch to origin");
+    expect(prompt).toContain("same goal and has no added risk");
     expect(prompt).toContain('"npm test -- --runInBand"');
     expect(prompt).toContain("DECISION: ALLOW|CONFIRM|DENY");
+    expect(prompt).toContain("APPROVAL_MATCH: SAME_INTENT|DIFFERENT_INTENT|UNCERTAIN");
   });
 
   it("includes a compact trusted task intent while marking the command as untrusted data", () => {
@@ -174,6 +189,8 @@ cat <<'OUT'
 DECISION: ALLOW
 REASON: fake safe verdict
 CONCERNS: none
+APPROVAL_MATCH: UNCERTAIN
+APPROVAL_INTENT: fake safe command
 [/PREFLIGHT_VERDICT]
 OUT
 `);
@@ -194,6 +211,8 @@ OUT
         decision: "allow",
         reason: "fake safe verdict",
         concerns: [],
+        approvalMatch: "uncertain",
+        approvalIntent: "fake safe command",
       });
 
       const args = readFileSync(argsPath, "utf-8").trim().split("\n");

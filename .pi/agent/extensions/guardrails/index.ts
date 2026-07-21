@@ -148,6 +148,7 @@ import { evaluateBashCommandGates } from "./command-gates.js";
 import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
 import { SessionPreflightRules } from "./session-preflight-rules.js";
+import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 
@@ -312,6 +313,7 @@ export default function (pi: ExtensionAPI) {
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
   const sessionPreflightRules = new SessionPreflightRules();
+  const sessionPreflightApprovals = new SessionPreflightApprovals();
   let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails"));
   let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails"));
 
@@ -370,6 +372,29 @@ export default function (pi: ExtensionAPI) {
     return restored.size;
   }
 
+  function restoreSessionPreflightApprovals(ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1]): number {
+    const entries = ctx.sessionManager.getBranch() as Array<{ type: string; customType?: string; data?: unknown }>;
+
+    for (const entry of entries) {
+      if (entry.type !== "custom" || entry.customType !== DECISION_ENTRY_TYPE) continue;
+      if (typeof entry.data !== "object" || entry.data === null) continue;
+      const approval = (entry.data as { preflightApproval?: unknown }).preflightApproval;
+      if (typeof approval !== "object" || approval === null) continue;
+
+      const data = approval as { scope?: unknown; command?: unknown; intent?: unknown; reason?: unknown; riskSignals?: unknown; createdAt?: unknown };
+      if (typeof data.scope !== "string" || typeof data.command !== "string" || typeof data.intent !== "string" || typeof data.reason !== "string" || !Array.isArray(data.riskSignals) || !data.riskSignals.every((signal) => typeof signal === "string")) continue;
+      sessionPreflightApprovals.add({
+        scope: data.scope,
+        command: data.command,
+        intent: data.intent,
+        reason: data.reason,
+        riskSignals: data.riskSignals,
+        createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
+      });
+    }
+    return sessionPreflightApprovals.size;
+  }
+
   function refreshConfig(cwd: string, force = false): GuardrailsConfig {
     config = loadConfig(cwd, { force });
     return config;
@@ -379,7 +404,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     config = refreshConfig(ctx.cwd, true);
     sessionAllow.clear();
+    sessionPreflightApprovals.clear();
     const restoredAllows = restoreSessionAllows(ctx);
+    const restoredPreflightApprovals = restoreSessionPreflightApprovals(ctx);
 
     const t = ctx.ui.theme;
     const astAvailable = isShfmtAvailable();
@@ -409,8 +436,8 @@ export default function (pi: ExtensionAPI) {
     lines.push(t.fg("dim", `  Scope:       ${scopeLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
-    if (restoredAllows > 0) {
-      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} session allow(s)`));
+    if (restoredAllows > 0 || restoredPreflightApprovals > 0) {
+      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} exact allow(s), ${restoredPreflightApprovals} preflight approval(s)`));
     }
 
     recordDecision(ctx, "session-start", {
@@ -526,13 +553,12 @@ export default function (pi: ExtensionAPI) {
       const command = event.input.command;
       const sessionScope = getEffectiveCwd(ctx.cwd);
 
-      // Check session allow-list first
+      // Hard bash checks always run before a session approval can suppress a prompt.
+      const result = checkBash(command, ctx.cwd, currentConfig, { patternCwd });
       if (sessionAllow.isAllowed(sessionScope, command)) {
-        recordDecision(ctx, "bash-allowed-session-reuse", { toolName: "bash", command });
+        recordDecision(ctx, "bash-allowed-session-reuse", { toolName: "bash", command, checkedViolations: result.violations });
         return undefined;
       }
-
-      const result = checkBash(command, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed) {
         const activeViolations = result.violations;
@@ -607,6 +633,7 @@ export default function (pi: ExtensionAPI) {
         gate1Hints: gateResult.hints,
         preflightRules: [...(currentConfig.bash?.preflightRules ?? []), ...sessionPreflightRules.rules],
         sessionAllowedCommands: sessionAllow.commandsForScope(sessionScope),
+        sessionPreflightApprovals: sessionPreflightApprovals.approvalsForScope(sessionScope),
       });
 
       let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
@@ -698,11 +725,18 @@ export default function (pi: ExtensionAPI) {
 
       if (confirmResult === "allow-session") {
         sessionAllow.allowCommand(sessionScope, command);
+        const preflightApproval = sessionPreflightApprovals.add({
+          scope: sessionScope,
+          command,
+          intent: preflightVerdict.approvalIntent,
+          reason: preflightVerdict.reason,
+          riskSignals: gateResult.hints,
+        });
         ctx.ui.notify(
-          `🛡️ Allowed for session${sessionAllow.size > 1 ? ` (${sessionAllow.size} rules)` : ""}`,
+          `🛡️ Allowed for session${preflightApproval ? `; saved intent approval (${sessionPreflightApprovals.size})` : ""}`,
           "info",
         );
-        recordDecision(ctx, "bash-preflight-allowed-session", { toolName: "bash", command, preflightVerdict, violation: verdictViolation });
+        recordDecision(ctx, "bash-preflight-allowed-session", { toolName: "bash", command, preflightVerdict, violation: verdictViolation, preflightApproval });
         return undefined;
       }
 
@@ -744,7 +778,8 @@ export default function (pi: ExtensionAPI) {
         `Config source: ${configSourceLabel(ctx.cwd)}`,
         `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
         `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
-        `Session allows: ${sessionAllow.size}`,
+        `Session exact allows: ${sessionAllow.size}`,
+        `Session preflight approvals: ${sessionPreflightApprovals.size}`,
         "",
         "─── Paths ───",
         `Confirm Read:   ${cfg.paths?.confirmRead?.length ? cfg.paths.confirmRead.join(", ") : "(none)"}`,
@@ -777,11 +812,13 @@ export default function (pi: ExtensionAPI) {
         return;
       }
       if (action === "rules") {
-        const configured = currentConfig.bash?.preflightRules ?? [];
+        const configured = refreshConfig(ctx.cwd).bash?.preflightRules ?? [];
+        const approvals = sessionPreflightApprovals.approvalsForScope(getEffectiveCwd(ctx.cwd));
         const lines = [
-          "🛡️ Gate 2 rules",
+          "🛡️ Gate 2 rules and session approvals",
           `Configured: ${formatPreflightRulesForDisplay(configured)}`,
-          `Session: ${formatPreflightRulesForDisplay(sessionPreflightRules.rules)}`,
+          `Session rules: ${formatPreflightRulesForDisplay(sessionPreflightRules.rules)}`,
+          `Session approvals: ${approvals.length > 0 ? approvals.map((approval) => `${approval.command} → ${approval.intent}`).join(" | ") : "(none)"}`,
         ];
         ctx.ui.notify(lines.join("\n"), "info");
         return;

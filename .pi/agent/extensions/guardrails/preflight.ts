@@ -2,13 +2,18 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { spawn } from "node:child_process";
 import { resolveModelReference } from "../shared/model-reference.js";
+import type { SessionPreflightApproval } from "./session-preflight-approvals.js";
 
 export type PreflightDecision = "allow" | "confirm" | "deny";
+
+export type PreflightApprovalMatch = "same_intent" | "different_intent" | "uncertain";
 
 export interface PreflightVerdict {
   decision: PreflightDecision;
   reason: string;
   concerns: string[];
+  approvalMatch: PreflightApprovalMatch;
+  approvalIntent: string;
 }
 
 export interface BuildPreflightPromptInput {
@@ -20,6 +25,7 @@ export interface BuildPreflightPromptInput {
   gate1Hints: string[];
   preflightRules?: string[];
   sessionAllowedCommands?: string[];
+  sessionPreflightApprovals?: SessionPreflightApproval[];
   trustedIntent?: {
     task: string;
     workflowPhase: "inspect" | "implement" | "verify" | "other";
@@ -237,9 +243,21 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("");
   parts.push("## Session-approved command hints");
   if (input.sessionAllowedCommands && input.sessionAllowedCommands.length > 0) {
-    parts.push("The user previously chose 'allow for session' for commands with these sanitized shapes in this effective cwd. They are hints only, not policy: use ALLOW for a similar command only when it has the same intent and no added risk; use CONFIRM or DENY when it expands scope, touches new sensitive paths, adds network/remote execution, or mutates more state.");
+    parts.push("The user previously chose 'allow for session' for these sanitized command shapes in this effective cwd. They are context only, never authorization to weaken core policy.");
     for (const approvedCommand of input.sessionAllowedCommands.slice(-10)) {
       parts.push(`- ${JSON.stringify(sanitizeSessionAllowedCommand(approvedCommand))}`);
+    }
+  } else {
+    parts.push("(none)");
+  }
+  parts.push("");
+  parts.push("## Session-approved preflight intents");
+  if (input.sessionPreflightApprovals && input.sessionPreflightApprovals.length > 0) {
+    parts.push("Each item records a prior explicit user approval. Mark SAME_INTENT and return ALLOW only when the current command pursues the same goal and has no added risk. A new remote, sensitive path, elevated privilege, remote execution, broader mutation, or broader target scope is added risk. These records never override core policy.");
+    for (const [index, approval] of input.sessionPreflightApprovals.slice(-10).entries()) {
+      parts.push(`${index + 1}. Command shape: ${JSON.stringify(approval.command)}`);
+      parts.push(`   Intent: ${JSON.stringify(approval.intent)}`);
+      parts.push(`   Accepted risk signals: ${approval.riskSignals.join(", ") || "none"}`);
     }
   } else {
     parts.push("(none)");
@@ -250,6 +268,8 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("DECISION: ALLOW|CONFIRM|DENY");
   parts.push("REASON: one concise sentence");
   parts.push("CONCERNS: semicolon-separated list, or 'none'");
+  parts.push("APPROVAL_MATCH: SAME_INTENT|DIFFERENT_INTENT|UNCERTAIN");
+  parts.push("APPROVAL_INTENT: concise neutral goal for a new user approval, or 'none'");
   parts.push("[/PREFLIGHT_VERDICT]");
   parts.push("");
   parts.push("Use ALLOW when the command is not meaningfully dangerous, especially for read-only inspection, standalone tests, simple safe GET/HEAD requests, or harmless /tmp scratch work.");
@@ -259,18 +279,21 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
 }
 
 export function parsePreflightVerdict(output: string): PreflightVerdict | undefined {
-  const match = output.match(/\[PREFLIGHT_VERDICT\]\s*DECISION:\s*(ALLOW|CONFIRM|DENY)\s*REASON:\s*([\s\S]*?)\s*CONCERNS:\s*([\s\S]*?)\s*\[\/PREFLIGHT_VERDICT\]/i);
+  const match = output.match(/\[PREFLIGHT_VERDICT\]\s*DECISION:\s*(ALLOW|CONFIRM|DENY)\s*REASON:\s*([\s\S]*?)\s*CONCERNS:\s*([\s\S]*?)\s*APPROVAL_MATCH:\s*(SAME_INTENT|DIFFERENT_INTENT|UNCERTAIN)\s*APPROVAL_INTENT:\s*([^\r\n]*)\s*\[\/PREFLIGHT_VERDICT\]/i);
   if (!match) return undefined;
 
   const concernsText = match[3]!.trim();
   const concerns = concernsText.toLowerCase() === "none"
     ? []
     : concernsText.split(";").map((item) => item.trim()).filter(Boolean);
+  const approvalIntent = match[5]!.trim();
 
   return {
     decision: match[1]!.toLowerCase() as PreflightDecision,
     reason: match[2]!.trim(),
     concerns,
+    approvalMatch: match[4]!.toLowerCase() as PreflightApprovalMatch,
+    approvalIntent: approvalIntent.toLowerCase() === "none" ? "" : approvalIntent,
   };
 }
 
