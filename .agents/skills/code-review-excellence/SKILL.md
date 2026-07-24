@@ -24,6 +24,18 @@ If context is missing, note it as a review limitation/finding.
 4. **Maintainability**: fits codebase patterns, clear names, justified complexity, no premature/parallel abstractions.
 5. **Tests**: behavior coverage for happy + meaningful edge paths; deterministic; proportional to risk.
 
+## Finding admission gate
+
+Report an issue only when all apply:
+
+- Concrete failure mode or violated requirement.
+- Realistic reachability from the reviewed scope.
+- Practical impact.
+- Existing safeguards considered.
+- A proportionate action is justified now.
+
+Candidate concerns that fail this gate are omitted or stated as a review limitation. `No material findings` is a valid outcome.
+
 ## Severity
 
 - **Blocking**: must fix before merge; correctness/security/data-loss/broken-contract risk.

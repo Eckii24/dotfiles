@@ -16,7 +16,7 @@ A plan is not a work-item breakdown.
 2. Resolve only critical gaps. Do not invent interfaces, paths, or migrations. State assumptions and open questions explicitly.
 3. Make consequential decisions visible: recommendation, rationale, trade-offs, rejected alternatives, and when the decision does not apply.
 4. Design the smallest approach that meets the spec. Prefer existing abstractions over new frameworks; apply YAGNI.
-5. Write ordered implementation tasks. Every code task names exact paths, intended change, tests, verification command, and dependency.
+5. Write ordered implementation tasks. Every code task names stable ID, non-exhaustive start path/symbol, intended change, tests, verification command with expected signal, and dependency.
 6. Include migrations, compatibility, rollout, observability, and rollback only when relevant.
 7. Cross-check that every acceptance criterion in the spec has a concrete implementation and verification step.
 
@@ -50,11 +50,12 @@ Use `.ai/<slug>-plan.md` for tracked work when you control the artifact path.
 
 ## Implementation sequence
 
-### Step 1: [title]
+### Step 1: [stable-id] [title]
 - **Objective:**
+- **Starts at:** `path:symbol` *(non-exhaustive)*
 - **Files:**
 - **Change:**
-- **Tests / verification:**
+- **Tests / verification:** `command` → expected signal
 - **Depends on:**
 
 ## Testing strategy

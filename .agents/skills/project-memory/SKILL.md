@@ -41,7 +41,7 @@ Keep under **500 tokens** when possible. Shorter is better when restart state re
 # [Feature title]
 
 - **Slug**: <slug>
-- **Status**: In progress | Blocked | Done | Idle
+- **Status**: In progress | Blocked | Awaiting user confirmation | Done | Idle
 - **Updated**: YYYY-MM-DD
 
 ## Objective
@@ -80,9 +80,11 @@ Update only at a material phase boundary, verified decision, blocker, handoff, o
 
 If evidence is unavailable because work blocked before its gate, record that fact. Otherwise, if the packet is incomplete, return a blocker. Do not infer facts.
 
-## Archive / closeout
+## Completion, review, and closeout
 
-Archive only after explicit user confirmation. Mark confirmation and archive state, then archive dated snapshots under `.ai/archive/`.
+When the agent has completed the planned scope and has verification evidence, but human acceptance remains, set status to **Awaiting user confirmation**. Record the delivered evidence, any known limitation, and the exact human decision requested. Do not leave such work as `In progress`.
+
+`Done` means the user has explicitly accepted completion or has explicitly waived review. Archive only after that confirmation. Mark confirmation and archive state, then archive dated snapshots under `.ai/archive/`.
 
 ## Session-end check
 

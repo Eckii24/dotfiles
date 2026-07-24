@@ -1,117 +1,49 @@
 ---
 name: write-a-skill
-description: Create new agent skills with proper structure, progressive disclosure, and bundled resources. Use when user wants to create, write, or build a new skill.
+description: Create, revise, or retire a reusable agent skill with accurate routing, progressive disclosure, and verified resources. Use when authoring or materially changing a SKILL.md, its description, references, assets, scripts, or reusable workflow guidance. Do not use for one-off preferences, installing third-party skills, or a non-reusable task.
 ---
 
-# Writing Skills
+# Write a Skill
 
-## Process
+## Contract
 
-1. **Gather requirements** - ask user about:
-   - What task/domain does the skill cover?
-   - What specific use cases should it handle?
-   - Does it need executable scripts or just instructions?
-   - Any reference materials to include?
+- One coherent recurring job per skill. Ground it in real repeated work, corrections, failures, or durable domain knowledge.
+- Keep activation guidance in frontmatter `description`; the body loads after activation.
+- Preserve behavior outside the evidence-backed change. Do not collect skills speculatively.
+- Read [`references/skill-quality-checklist.md`](references/skill-quality-checklist.md) before finalizing a new or material revision.
 
-2. **Draft the skill** - create:
-   - SKILL.md with concise instructions
-   - Additional reference files if content exceeds 500 lines
-   - Utility scripts if deterministic operations needed
+## Routing first
 
-3. **Review with user** - present draft and ask:
-   - Does this cover your use cases?
-   - Anything missing or unclear?
-   - Should any section be more/less detailed?
+1. Record 2–3 realistic trigger requests: input, expected output, success criteria, constraints.
+2. Record 2–3 near misses. Name the adjacent skill or direct workflow that owns each instead.
+3. Draft description first: third-person capability, concrete triggers, and material non-triggers. Keep it compact.
+4. Do not describe tool mechanics in frontmatter unless they distinguish routing.
 
-## Skill Structure
+## Progressive disclosure
 
-```
-skill-name/
-├── SKILL.md           # Main instructions (required)
-├── REFERENCE.md       # Detailed docs (if needed)
-├── EXAMPLES.md        # Usage examples (if needed)
-└── scripts/           # Utility scripts (if needed)
-    └── helper.js
-```
+Keep in `SKILL.md`:
 
-## SKILL.md Template
+- trigger-specific invariants and safety boundaries;
+- the normal decision flow;
+- mandatory resources and when to load or run them;
+- verification and failure handling.
 
-```md
----
-name: skill-name
-description: Brief description of capability. Use when [specific triggers].
----
+Move conditional detail deliberately:
 
-# Skill Name
+| Resource | Use for |
+|---|---|
+| `references/` | long workflows, vendor/version details, schemas, examples, pitfalls |
+| `assets/` | templates, starter artifacts, output shapes |
+| `scripts/` | repeatable or fragile deterministic work |
 
-## Quick start
+Do not split merely to meet a line count. Split when the common case remains complete without the deferred material. References stay one level deep and every pointer names its read/use condition.
 
-[Minimal working example]
+## Build and validate
 
-## Workflows
-
-[Step-by-step processes with checklists for complex tasks]
-
-## Advanced features
-
-[Link to separate files: See [REFERENCE.md](REFERENCE.md)]
-```
-
-## Description Requirements
-
-The description is **the only thing your agent sees** when deciding which skill to load. It's surfaced in the system prompt alongside all other installed skills. Your agent reads these descriptions and picks the relevant skill based on the user's request.
-
-**Goal**: Give your agent just enough info to know:
-
-1. What capability this skill provides
-2. When/why to trigger it (specific keywords, contexts, file types)
-
-**Format**:
-
-- Max 1024 chars
-- Write in third person
-- First sentence: what it does
-- Second sentence: "Use when [specific triggers]"
-
-**Good example**:
-
-```
-Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when user mentions PDFs, forms, or document extraction.
-```
-
-**Bad example**:
-
-```
-Helps with documents.
-```
-
-The bad example gives your agent no way to distinguish this from other document skills.
-
-## When to Add Scripts
-
-Add utility scripts when:
-
-- Operation is deterministic (validation, formatting)
-- Same code would be generated repeatedly
-- Errors need explicit handling
-
-Scripts save tokens and improve reliability vs generated code.
-
-## When to Split Files
-
-Split into separate files when:
-
-- SKILL.md exceeds 100 lines
-- Content has distinct domains (finance vs sales schemas)
-- Advanced features are rarely needed
-
-## Review Checklist
-
-After drafting, verify:
-
-- [ ] Description includes triggers ("Use when...")
-- [ ] SKILL.md under 100 lines
-- [ ] No time-sensitive info
-- [ ] Consistent terminology
-- [ ] Concrete examples included
-- [ ] References one level deep
+1. Inspect target skill, nearby skills, runtime conventions, tools, and referenced resources.
+2. Write the smallest actionable contract. Prefer short headings, bullets, and explicit boundaries over prose.
+3. Add a script only when deterministic execution, error handling, or repeat reuse beats generated commands. Scripts need safe defaults, `--help`, bounded output, clear exits, and confirmation/dry-run for destructive actions.
+4. Check every referenced path, command, example, and version-sensitive claim against the live environment.
+5. Test routing with the recorded triggers and near misses from description alone.
+6. Run one representative safe execution. Use an independent reviewer when proportionate; otherwise state the independence limit.
+7. Report changed files, checks run/skipped, routing cases, and remaining risk.
