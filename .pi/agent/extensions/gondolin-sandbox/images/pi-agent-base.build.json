@@ -1,0 +1,39 @@
+{
+  "arch": "x86_64",
+  "distro": "alpine",
+  "container": {
+    "force": true,
+    "runtime": "docker"
+  },
+  "alpine": {
+    "version": "3.23.0",
+    "kernelPackage": "linux-virt",
+    "kernelImage": "vmlinuz-virt",
+    "rootfsPackages": [
+      "linux-virt",
+      "rng-tools",
+      "bash",
+      "ca-certificates",
+      "curl",
+      "e2fsprogs",
+      "git",
+      "openssh",
+      "ripgrep",
+      "findutils",
+      "jq",
+      "zsh",
+      "nodejs",
+      "npm"
+    ],
+    "initramfsPackages": [],
+    "krunfwVersion": "v5.2.1"
+  },
+  "rootfs": {
+    "label": "gondolin-root"
+  },
+  "postBuild": {
+    "commands": [
+      "set -eu; cd /tmp; curl -fsSL --retry 3 --retry-all-errors -o rtk.tar.gz https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-x86_64-unknown-linux-musl.tar.gz; echo 'ff8a1e7766496e175291a85aeca1dc97c9ff6df33e51e5893d1fbc78fea2a609  rtk.tar.gz' | sha256sum -c -; tar -xzf rtk.tar.gz -C /usr/local/bin rtk; chmod 0755 /usr/local/bin/rtk; /usr/local/bin/rtk --version; rm -f rtk.tar.gz"
+    ]
+  }
+}

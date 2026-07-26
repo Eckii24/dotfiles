@@ -16,6 +16,7 @@
 
 import { execFileSync, execSync } from "node:child_process";
 import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { isGondolinSandboxRequested } from "./shared/sandbox-intent.ts";
 
 let rtkAvailable: boolean | null = null;
 
@@ -72,6 +73,8 @@ function shouldSkip(command: string): boolean {
 
 export default function rtkRewrite(pi: ExtensionAPI, ctx: ExtensionContext) {
 	pi.on("tool_call", async (event) => {
+		// Gondolin owns RTK guest-side so no host helper process handles sandboxed commands.
+		if (isGondolinSandboxRequested()) return;
 		if (!isToolCallEventType("bash", event)) return;
 		if (!checkRtk()) return;
 

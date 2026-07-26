@@ -12,6 +12,7 @@ import {
 	PI_HERDR_PARENT_ROOT_RUN_ID,
 	PI_HERDR_ROOT_RUN_ID,
 	PI_HERDR_SUBAGENT_CHILD,
+	PI_SANDBOX,
 	PI_SUBAGENT,
 	createPiLaunchDescriptor,
 } from "./pi-launch.js";
@@ -66,6 +67,43 @@ test("marks Herdr children as standard subagents so global dirty-repo-guard skip
 		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime });
 		expect(launch.env).toMatchObject({ [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1" });
 		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("propagates gondolin sandbox intent to direct and nested child descriptors without inheriting arbitrary env", async () => {
+	const value = fixtureRoot();
+	try {
+		const direct = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: { [PI_SANDBOX]: "gondolin", SECRET: "must-not-inherit" },
+		});
+		expect(direct.env).toHaveProperty(PI_SANDBOX, "gondolin");
+		expect(direct.env).not.toHaveProperty("SECRET");
+		expect(direct.log.envNames).toContain(PI_SANDBOX);
+		expect(JSON.stringify(direct.log)).not.toContain("gondolin");
+
+		const nested = await createPiLaunchDescriptor(input(value.cwd, { nestingDepth: 1 }), {
+			runtimeRoot: value.runtime,
+			env: direct.env,
+		});
+		expect(nested.env).toHaveProperty(PI_SANDBOX, "gondolin");
+		expect(nested.log.envNames).toContain(PI_SANDBOX);
+		expect(JSON.stringify(nested.log)).not.toContain("gondolin");
+
+		await direct.cleanupAfterFailure();
+		await nested.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("does not propagate absent or invalid sandbox markers", async () => {
+	const value = fixtureRoot();
+	try {
+		for (const env of [{}, { [PI_SANDBOX]: "other" }]) {
+			const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env });
+			expect(launch.env).not.toHaveProperty(PI_SANDBOX);
+			expect(launch.log.envNames).not.toContain(PI_SANDBOX);
+			await launch.cleanupAfterFailure();
+		}
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

@@ -151,6 +151,7 @@ import { SessionPreflightRules } from "./session-preflight-rules.js";
 import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
+import { isGondolinSandboxRequested } from "../shared/sandbox-intent.ts";
 
 const HERDR_BLOCKED_EVENT = "herdr:blocked";
 const DECISION_ENTRY_TYPE = "guardrails-decision";
@@ -453,8 +454,10 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.notify(lines.join("\n"), "info");
   });
 
-  // Main tool_call interceptor
+  // Gondolin provides the execution boundary; sandboxed sessions deliberately allow
+  // unrestricted guest workspace changes without host-side semantic confirmation.
   pi.on("tool_call", async (event, ctx) => {
+    if (isGondolinSandboxRequested()) return undefined;
     const currentConfig = refreshConfig(ctx.cwd);
     const patternCwd = getEffectiveCwd(ctx.cwd);
     const timeout = currentConfig.timeout ?? DEFAULT_TIMEOUT;

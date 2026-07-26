@@ -15,6 +15,7 @@ export const PI_HERDR_AGENT_PROFILE = "PI_HERDR_AGENT_PROFILE";
 export const PI_HERDR_SUBAGENT_CHILD = "PI_HERDR_SUBAGENT_CHILD";
 /** Standard marker consumed by child-aware global extensions such as dirty-repo-guard. */
 export const PI_SUBAGENT = "PI_SUBAGENT";
+export const PI_SANDBOX = "PI_SANDBOX";
 
 export type PiLaunchInput = {
 	piExecutable: string;
@@ -59,6 +60,7 @@ type LaunchDependencies = {
 export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencies: LaunchDependencies = {}): Promise<PiLaunchDescriptor> {
 	const executable = await resolveExecutable(input.piExecutable, dependencies);
 	const cwd = await canonicalDirectory(input.cwd, dependencies);
+	const inheritedEnv = dependencies.env ?? process.env;
 	const childDepth = input.nestingDepth + 1;
 	if (!Number.isInteger(input.nestingDepth) || input.nestingDepth < 0 || childDepth > MAX_NESTING_DEPTH) {
 		throw new PreconditionsError("nesting_depth_exceeded", `Pi child nesting may not exceed ${MAX_NESTING_DEPTH}.`);
@@ -91,8 +93,9 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	// Every Pi child becomes a potential nested caller; its parent is this launched root,
 	// not this root's parent (which would skip one ownership level).
 	env[PI_HERDR_PARENT_ROOT_RUN_ID] = requiredId(input.rootRunId, "rootRunId");
+	if (inheritedEnv.PI_SANDBOX === "gondolin") env[PI_SANDBOX] = "gondolin";
 	// Nested coordinators must share the caller's capacity runtime directory.
-	const inheritedRuntime = (dependencies.env ?? process.env).XDG_RUNTIME_DIR;
+	const inheritedRuntime = inheritedEnv.XDG_RUNTIME_DIR;
 	if (inheritedRuntime && isAbsolute(inheritedRuntime)) env.XDG_RUNTIME_DIR = inheritedRuntime;
 	return {
 		executable, argv, cwd, env, name, promptFilePath,
