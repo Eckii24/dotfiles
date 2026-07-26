@@ -34,7 +34,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@mariozechner/pi-tui";
-import { resolveModelReference } from "./shared/model-reference.js";
+import { buildEvaluatorArgs } from "./goal/evaluator-cli.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -326,15 +326,7 @@ async function runEvaluator(
 			return;
 		}
 
-		const args = [
-			"-p",
-			prompt,
-			"--model",
-			resolveModelReference(evaluatorModel),
-			"--no-session",
-			"--thinking-level",
-			"off",
-		];
+		const args = buildEvaluatorArgs(evaluatorModel, prompt);
 
 		const invocation = getPiInvocation(args);
 		const proc = spawn(invocation.command, invocation.args, {
