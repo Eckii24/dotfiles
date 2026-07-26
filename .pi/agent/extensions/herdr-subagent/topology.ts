@@ -2,8 +2,10 @@ import type { CapacityReservation, WriteLease } from "./capacity.js";
 import type { PiLaunchDescriptor } from "./pi-launch.js";
 
 export type TopologyClient = {
-	createTab(params: { workspaceId?: string; cwd?: string; label?: string }): Promise<unknown>;
-	startAgent(params: { name: string; argv: string[]; cwd?: string; env?: Record<string, string>; tabId?: string; workspaceId?: string; split?: "right" | "down"; focus?: boolean }): Promise<unknown>;
+	createTab(params: { workspaceId?: string; cwd?: string; label?: string; env?: Record<string, string>; focus?: boolean }): Promise<unknown>;
+	/** Protocol 17 starts the canonical Pi integration in an existing shell pane. */
+	startAgent(params: { name: string; kind: "pi"; paneId: string; args?: string[] }): Promise<unknown>;
+	splitPane(params: { direction: "right" | "down"; targetPaneId?: string; workspaceId?: string; cwd?: string; env?: Record<string, string>; focus?: boolean }): Promise<unknown>;
 	closePane(paneId: string): Promise<unknown>;
 	closeTab?(tabId: string): Promise<unknown>;
 	applyLayout?(params: { root: unknown; tabId?: string; tabLabel?: string; workspaceId?: string }): Promise<unknown>;
@@ -41,7 +43,7 @@ export function topologyLabel(label: string, id: string, limit = 80): string {
 	return `${clean || "Pi child"} · ${short}`.slice(0, limit);
 }
 
-/** Exact protocol-16 layout tree. Leaves are stable pane IDs, never screen positions. */
+/** Protocol-17 layout tree. Leaves are stable pane IDs, never screen positions. */
 export function defaultLayout(paneIds: readonly string[]): unknown {
 	if (paneIds.length < 1 || paneIds.length > 4 || paneIds.some(id => !id)) throw new RangeError("layout requires 1–4 pane IDs");
 	const leaf = (paneId: string) => ({ type: "pane", pane_id: paneId });
@@ -62,20 +64,24 @@ export async function createTopology(input: { client: TopologyClient; capacity: 
 	const leases = new Map<string, WriteLease>();
 	let group: OwnedGroup | undefined;
 	try {
-		const tabResult = await input.client.createTab({ workspaceId: input.workspaceId, label: reservation.label });
-		const tabId = resultId(tabResult, "tab"); const bootstrapPaneId = resultId(tabResult, "pane");
-		group = { rootRunId: input.rootRunId, workspaceId: input.workspaceId, tabId, tabLabel: reservation.label, bootstrapPaneId, ownedPaneIds: new Set(), acceptedLeafIds: new Set() };
+		const first = input.leaves[0]!;
+		// Protocol 17 tab.create yields the first shell pane. Give it the first child's
+		// cwd/env, then start Herdr's canonical Pi integration in that same pane.
+		const tabResult = await input.client.createTab({ workspaceId: input.workspaceId, label: reservation.label, cwd: first.launch.cwd, env: first.launch.env, focus: false });
+		const tabId = resultId(tabResult, "tab"); const firstPaneId = resultId(tabResult, "pane");
+		group = { rootRunId: input.rootRunId, workspaceId: input.workspaceId, tabId, tabLabel: reservation.label, ownedPaneIds: new Set(), acceptedLeafIds: new Set() };
 		groupLeafIds.set(group, leafIds);
 		for (const [index, leaf] of input.leaves.entries()) {
-			const started = await input.client.startAgent({ name: topologyLabel(leaf.launch.name, leaf.leafRunId), argv: [leaf.launch.executable, ...leaf.launch.argv], cwd: leaf.launch.cwd, env: leaf.launch.env, tabId, workspaceId: input.workspaceId, focus: false, ...(index ? { split: "right" } : {}) });
-			const paneId = resultId(started, "pane"); group.ownedPaneIds.add(paneId);
+			const paneId = index === 0 ? firstPaneId : resultId(await input.client.splitPane({ direction: "right", targetPaneId: firstPaneId, workspaceId: input.workspaceId, cwd: leaf.launch.cwd, env: leaf.launch.env, focus: false }), "pane");
+			// Split succeeds before Pi startup. Record ownership first so a startup
+			// failure rolls this newly created shell pane back safely.
+			group.ownedPaneIds.add(paneId);
+			await startPi(input.client, paneId, leaf);
 			if (leaf.lease) {
 				const boundLease = await input.capacity.bindWriteLease(leaf.lease, paneId);
 				if (leaf.lease.acquired && !boundLease.acquired) { leases.set(leaf.leafRunId, leaf.lease); throw new TopologyError("Write lease binding failed."); }
 				leases.set(leaf.leafRunId, boundLease);
 			}
-			// Bootstrap was never owned. Remove it only after first child has a stable pane ID.
-			if (index === 0 && group.bootstrapPaneId) { await input.client.closePane(group.bootstrapPaneId); group.bootstrapPaneId = undefined; }
 		}
 		const bound = await input.capacity.bindGroup(reservation, group.tabId, [...group.ownedPaneIds]);
 		if (!input.client.applyLayout) warnings.push("WARNING: Herdr layout capability unavailable; leaving default pane arrangement.");
@@ -92,9 +98,9 @@ export async function createTopology(input: { client: TopologyClient; capacity: 
 export async function addTopologyLeaf(input: { client: TopologyClient; capacity: TopologyCapacity; result: TopologyResult; leaf: TopologyLeaf }): Promise<string> {
 	const { group } = input.result;
 	if (!input.leaf.leafRunId || group.ownedPaneIds.size >= input.result.reservation.paneCount) throw new TopologyError("A managed group requires 1–4 leaves.");
-	const started = await input.client.startAgent({ name: topologyLabel(input.leaf.launch.name, input.leaf.leafRunId), argv: [input.leaf.launch.executable, ...input.leaf.launch.argv], cwd: input.leaf.launch.cwd, env: input.leaf.launch.env, tabId: group.tabId, workspaceId: group.workspaceId, split: "right", focus: false });
-	const paneId = resultId(started, "pane");
+	const paneId = resultId(await input.client.splitPane({ direction: "right", targetPaneId: [...group.ownedPaneIds][0], workspaceId: group.workspaceId, cwd: input.leaf.launch.cwd, env: input.leaf.launch.env, focus: false }), "pane");
 	try {
+		await startPi(input.client, paneId, input.leaf);
 		if (input.leaf.lease) {
 			const lease = await input.capacity.bindWriteLease(input.leaf.lease, paneId);
 			if (input.leaf.lease.acquired && !lease.acquired) throw new TopologyError("Write lease binding failed.");
@@ -146,6 +152,26 @@ async function rollback(client: TopologyClient, capacity: TopologyCapacity, rese
 	for (const lease of leases.values()) try { await capacity.releaseWriteLease(lease); } catch { /* original error wins */ }
 	for (const leaf of leaves) try { await leaf.launch.cleanupAfterFailure(); } catch { /* original error wins */ }
 	await capacity.releaseGroup(reservation).catch(() => undefined);
+}
+export function agentStartName(leafRunId: string) {
+	return `pi${leafRunId.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
+}
+async function startPi(client: TopologyClient, paneId: string, leaf: TopologyLeaf) {
+	// Protocol 17 starts an agent inside the tab-created shell. Herdr can report
+	// agent_pane_busy while that shell is still becoming interactive; retry only
+	// that transient server error, never a different launch failure.
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			// Protocol 17 requires a unique alphanumeric agent name. `kind: pi`
+			// selects the manifest; the stable leaf ID supplies uniqueness.
+			const name = agentStartName(leaf.leafRunId);
+			await client.startAgent({ name, kind: "pi", paneId, args: leaf.launch.argv });
+			return;
+		} catch (error) {
+			if (attempt >= 29 || !(error instanceof Error) || !error.message.includes("agent_pane_busy")) throw error;
+			await new Promise(resolve => setTimeout(resolve, 100));
+		}
+	}
 }
 function resultId(value: unknown, kind: "tab" | "pane"): string {
 	if (!value || typeof value !== "object") throw new TopologyError(`Herdr ${kind} result missing stable ID.`);

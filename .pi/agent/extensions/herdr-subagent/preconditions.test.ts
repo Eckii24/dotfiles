@@ -4,7 +4,7 @@ import { HERDR_PROTOCOL, type HerdrCapabilities } from "./herdr-client.js";
 import { checkPreconditions, MAX_NESTING_DEPTH, PreconditionsError } from "./preconditions.js";
 
 type FakeClient = { probeCapabilities(): Promise<HerdrCapabilities>; snapshot(): Promise<unknown>; dispose(): void };
-const capabilities: HerdrCapabilities = { protocol: HERDR_PROTOCOL, version: "0.7.3", snapshot: true, tabs: true, agents: true, panes: true, layout: true, events: true, fixedInterrupt: true };
+const capabilities: HerdrCapabilities = { protocol: HERDR_PROTOCOL, version: "0.7.5", snapshot: true, tabs: true, agents: true, panes: true, layout: true, events: true, fixedInterrupt: true };
 const callerSnapshot = { snapshot: { panes: [{ pane_id: "pane-1", workspace_id: "workspace-1" }], agents: [{ pane_id: "pane-1", agent_session: { source: "herdr:pi", kind: "path", value: "/redacted/session.jsonl" } }] } };
 
 function baseEnv(extra: Record<string, string | undefined> = {}) {
@@ -84,7 +84,7 @@ test("requires caller pane, workspace, and native Herdr Pi integration", async (
 
 test("returns resolved caller context and validates parent nesting metadata through depth three", async () => {
 	const root = setup();
-	await expect(checkPreconditions(root.dependencies)).resolves.toEqual({ socketPath: "/runtime/herdr.sock", workspaceId: "workspace-1", callerPaneId: "pane-1", nestingDepth: 0, protocol: 16, capabilities, piExecutable: "/usr/local/bin/pi" });
+	await expect(checkPreconditions(root.dependencies)).resolves.toEqual({ socketPath: "/runtime/herdr.sock", workspaceId: "workspace-1", callerPaneId: "pane-1", nestingDepth: 0, protocol: 17, capabilities, piExecutable: "/usr/local/bin/pi" });
 	const nested = setup({ env: baseEnv({ PI_HERDR_PARENT_ROOT_RUN_ID: "root-run", PI_HERDR_NESTING_DEPTH: String(MAX_NESTING_DEPTH) }) });
 	await expect(checkPreconditions(nested.dependencies)).resolves.toMatchObject({ parentRootRunId: "root-run", nestingDepth: MAX_NESTING_DEPTH });
 	const legacy = setup({ env: baseEnv({ HERDR_PARENT_ROOT_RUN_ID: "legacy-root", HERDR_NESTING_DEPTH: "999" }) });

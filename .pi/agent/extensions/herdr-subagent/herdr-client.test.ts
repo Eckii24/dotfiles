@@ -102,22 +102,28 @@ test("times out a stalled Unix-socket connect", async () => {
 	}
 });
 
-test("sends start-agent focus in snake_case", async () => {
-	let startParams: unknown;
-	const server = await fake((socket, request) => { startParams = request.params; response(socket, request.id, { type: "agent_started" }); });
+test("uses Protocol-17 agent.start, pane.split, and literal pane text contracts", async () => {
+	const requests: Array<{ method: string; params: unknown }> = [];
+	const server = await fake((socket, request) => { requests.push({ method: String(request.method), params: request.params }); response(socket, request.id, { type: "ok" }); });
 	const client = new HerdrClient({ socketPath: server.path });
-	await client.startAgent({ name: "worker", argv: ["pi"], tabId: "tab-1", focus: false });
-	expect(startParams).toEqual({ name: "worker", argv: ["pi"], tab_id: "tab-1", focus: false });
+	await client.startAgent({ name: "worker", kind: "pi", paneId: "pane-1", args: ["--name", "worker"] });
+	await client.splitPane({ direction: "right", targetPaneId: "pane-1", workspaceId: "workspace-1", cwd: "/repo", env: { SAFE: "1" }, focus: false });
+	await client.sendAgentInput("pane-1", "literal task");
+	expect(requests).toEqual([
+		{ method: "agent.start", params: { name: "worker", kind: "pi", pane_id: "pane-1", args: ["--name", "worker"] } },
+		{ method: "pane.split", params: { direction: "right", target_pane_id: "pane-1", workspace_id: "workspace-1", cwd: "/repo", env: { SAFE: "1" }, focus: false } },
+		{ method: "pane.send_text", params: { pane_id: "pane-1", text: "literal task" } },
+	]);
 	client.dispose();
 });
 
-test("probes protocol 16 and exposes only fixed internal key candidates", async () => {
+test("probes protocol 17 and exposes only fixed internal key candidates", async () => {
 	const methods: string[] = []; const keyParams: unknown[] = [];
-	const server = await fake((socket, request) => { methods.push(String(request.method)); if (request.method === "ping") response(socket, request.id, { type: "pong", protocol: 16, version: "0.7.3" }); else { keyParams.push(request.params); response(socket, request.id, { type: "ok" }); } });
+	const server = await fake((socket, request) => { methods.push(String(request.method)); if (request.method === "ping") response(socket, request.id, { type: "pong", protocol: 17, version: "0.7.5" }); else { keyParams.push(request.params); response(socket, request.id, { type: "ok" }); } });
 	const client = new HerdrClient({ socketPath: server.path });
-	expect(await client.probeCapabilities()).toMatchObject({ protocol: 16, fixedInterrupt: true }); await client.interruptOwnedPane("p");
+	expect(await client.probeCapabilities()).toMatchObject({ protocol: 17, fixedInterrupt: true }); await client.interruptOwnedPane("p");
 	await client.submitOwnedPane("p");
-	expect(keyParams).toEqual([{ pane_id: "p", keys: ["ctrl+c"] }, { pane_id: "p", keys: ["enter"] }]); expect(methods).not.toContain("agent.stop"); expect("sendKeys" in client).toBe(false); client.dispose();
+	expect(keyParams).toEqual([{ pane_id: "p", keys: ["ctrl+c"] }, { pane_id: "p", keys: ["enter"] }]); expect(methods).not.toContain("agent.stop"); expect(methods).not.toContain("agent.send"); expect("sendKeys" in client).toBe(false); client.dispose();
 });
 
 test("rejects unsupported protocol and connect abort", async () => {

@@ -6,8 +6,9 @@ type Call = [string, unknown?];
 function fake(extra: { failStart?: number; failBind?: number; noLayout?: boolean; foreign?: boolean; failClose?: string } = {}) {
 	const calls: Call[] = []; let starts = 0; let binds = 0; let closed = new Set<string>();
 	const client = {
-		async createTab(params: unknown) { calls.push(["createTab", params]); return { tab: { tab_id: "tab-1" }, root_pane: { pane_id: "bootstrap-1" } }; },
-		async startAgent(params: unknown) { calls.push(["startAgent", params]); starts += 1; if (starts === extra.failStart) throw new Error("start failed"); return { pane_id: `child-${starts}` }; },
+		async createTab(params: unknown) { calls.push(["createTab", params]); return { tab: { tab_id: "tab-1" }, root_pane: { pane_id: "child-1" } }; },
+		async splitPane(params: unknown) { calls.push(["splitPane", params]); return { pane_id: `child-${starts + 1}` }; },
+		async startAgent(params: unknown) { calls.push(["startAgent", params]); starts += 1; if (starts === extra.failStart) throw new Error("start failed"); return {}; },
 		async closePane(id: string) { calls.push(["closePane", id]); if (id === extra.failClose) throw new Error("close failed"); closed.add(id); return {}; },
 		async closeTab(id: string) { calls.push(["closeTab", id]); return {}; },
 		async applyLayout(params: unknown) { calls.push(["layout", params]); return {}; },
@@ -32,15 +33,16 @@ test("sanitizes meaningful labels with short stable IDs", () => {
 	expect(topologyLabel(" \u001b]secret\u0007  Scout\n", "abcdefgh-123")).toBe("Scout · abcdefgh");
 });
 
-test("creates tab/bootstrap, starts child without focus, then closes bootstrap", async () => {
+test("uses tab-created shell pane for first child and starts Protocol-17 Pi integration", async () => {
 	const f = fake(); const result = await createTopology(input(f));
-	expect(result.group).toMatchObject({ tabId: "tab-1", tabLabel: "Plan\u001b[31m alpha · pi-herdr:deadbe", bootstrapPaneId: undefined });
+	expect(result.group).toMatchObject({ tabId: "tab-1", tabLabel: "Plan\u001b[31m alpha · pi-herdr:deadbe" });
 	expect([...result.group.ownedPaneIds]).toEqual(["child-1"]);
-	expect(f.calls.map(call => call[0])).toEqual(["reserve", "createTab", "startAgent", "bindLease", "closePane", "bindGroup", "layout"]);
-	expect(f.calls[2]![1]).toEqual({ name: "Worker 1 · leaf-1-1", argv: ["/usr/local/bin/pi", "--name", "child-1", "--append-system-prompt", "/runtime/launch-1/prompt.md"], cwd: "/repo", env: { SAFE: "1" }, tabId: "tab-1", workspaceId: "workspace-1", focus: false });
+	expect(f.calls.map(call => call[0])).toEqual(["reserve", "createTab", "startAgent", "bindLease", "bindGroup", "layout"]);
+	expect(f.calls[1]![1]).toEqual({ workspaceId: "workspace-1", label: "Plan\u001b[31m alpha · pi-herdr:deadbe", cwd: "/repo", env: { SAFE: "1" }, focus: false });
+	expect(f.calls[2]![1]).toEqual({ name: "pileaf112345678", kind: "pi", paneId: "child-1", args: ["--name", "child-1", "--append-system-prompt", "/runtime/launch-1/prompt.md"] });
 });
 
-test("uses protocol-16 pane/split layout nodes", () => {
+test("uses protocol-17 pane/split layout nodes", () => {
 	expect(defaultLayout(["one", "two", "three"])).toEqual({ type: "split", direction: "right", ratio: 0.5, first: { type: "pane", pane_id: "one" }, second: { type: "split", direction: "down", ratio: 0.5, first: { type: "pane", pane_id: "two" }, second: { type: "pane", pane_id: "three" } } });
 });
 
@@ -49,6 +51,7 @@ test("starts 1–4 leaves, binds stable pane IDs and applies exact layouts", asy
 		const f = fake(); const result = await createTopology(input(f, count));
 		expect(result.reservation.paneIds).toEqual(Array.from({ length: count }, (_, i) => `child-${i + 1}`));
 		expect(f.calls.filter(call => call[0] === "startAgent")).toHaveLength(count);
+		expect(f.calls.filter(call => call[0] === "splitPane")).toHaveLength(count - 1);
 		expect(f.calls.filter(call => call[0] === "bindLease")).toHaveLength(count);
 		expect(f.calls.find(call => call[0] === "layout")![1]).toMatchObject({ root: defaultLayout(result.reservation.paneIds) });
 	}
@@ -61,13 +64,13 @@ test("rejects fifth before capacity or client side effects", async () => {
 test("rolls back only before acceptance", async () => {
 	const f = fake({ failStart: 2 }); await expect(createTopology(input(f, 2))).rejects.toThrow("start failed");
 	expect(f.calls.map(call => call[0])).toContain("releaseGroup");
-	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["bootstrap-1", "child-1"]);
+	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["child-1", "child-2"]);
 });
 
 test("rolls back and stops before another child when acquired lease binding fails", async () => {
 	const f = fake({ failBind: 1 }); await expect(createTopology(input(f, 2))).rejects.toThrow("Write lease binding failed");
 	expect(f.calls.filter(call => call[0] === "startAgent")).toHaveLength(1);
-	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["child-1", "bootstrap-1"]);
+	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["child-1"]);
 	expect(f.calls.map(call => call[0])).toContain("releaseLease");
 	expect(f.calls.map(call => call[0])).toContain("releaseGroup");
 });
@@ -89,7 +92,7 @@ test("cleanup uses stable owned IDs, preserves foreign pane tab, and is idempote
 	expect(() => acceptLeaf(result.group, "foreign")).toThrow("not owned");
 	const first = await cleanupTopology({ client: f.client, capacity: f.capacity, result }); const second = await cleanupTopology({ client: f.client, capacity: f.capacity, result });
 	expect(first).toContain("WARNING: foreign pane present; tab left open."); expect(f.calls.filter(call => call[0] === "closeTab")).toHaveLength(0);
-	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["bootstrap-1", "child-1", "child-2"]);
+	expect(f.calls.filter(call => call[0] === "closePane").map(call => call[1])).toEqual(["child-1", "child-2"]);
 	expect(second).toContain("WARNING: foreign pane present; tab left open.");
 });
 

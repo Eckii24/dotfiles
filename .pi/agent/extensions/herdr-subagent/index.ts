@@ -10,7 +10,7 @@ import { createPiLaunchDescriptor, type PiLaunchDescriptor } from "./pi-launch.j
 import { findTurnAnchor, harvestTurn, materializeAndTrustSession, recordAbsentSessionBaseline, validatePiSessionRef, type SessionBaseline } from "./pi-session.js";
 import { checkPreconditions, MAX_NESTING_DEPTH, PreconditionsError, type PreconditionsContext } from "./preconditions.js";
 import { RunRegistry } from "./run-registry.js";
-import { acceptLeaf, addTopologyLeaf, cleanupTopology, createTopology, topologyLabel, type TopologyResult } from "./topology.js";
+import { acceptLeaf, addTopologyLeaf, agentStartName, cleanupTopology, createTopology, type TopologyResult } from "./topology.js";
 import { formatResult } from "./result-format.js";
 import { renderSubagentCall, renderSubagentResult } from "./subagent-render.js";
 import { createHerdrSubagentControlRuntime } from "./control.js";
@@ -72,7 +72,7 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			const paneIds = [...topology.group.ownedPaneIds];
 			for (const [index, entry] of prepared.entries()) if (input.mode !== "chain" || index === 0) { entry.leaf.paneId = paneIds.shift()!; entry.leaf.paneLabel = entry.launch.name; entry.leaf.status = "booting"; }
 			registry.register({ rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, status: "working", keepOpen: input.keepOpen, leaves: prepared.map(x => ({ leafRunId: x.ids.leafRunId, paneId: x.leaf.paneId, status: x.leaf.status, activeTurnId: x.ids.turnId })) });
-			for (const entry of prepared) registry.setFollowUpExpectations(ids.rootRunId, entry.ids.leafRunId, { agentName: topologyLabel(entry.launch.name, entry.ids.leafRunId), sessionName: entry.launch.name });
+			for (const entry of prepared) registry.setFollowUpExpectations(ids.rootRunId, entry.ids.leafRunId, { agentName: agentStartName(entry.ids.leafRunId), sessionName: entry.launch.name });
 			registry.setRelease(ids.rootRunId, async () => { for (const lease of topology!.leases.values()) await capacity.releaseWriteLease(lease); topology!.leases.clear(); await capacity.releaseGroup(topology!.reservation); });
 			const startedAt = now();
 			const run = async (entry: PreparedLeaf, previous?: string): Promise<LifecycleResult> => {

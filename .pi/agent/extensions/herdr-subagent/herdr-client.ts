@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import net from "node:net";
 
-export const HERDR_PROTOCOL = 16;
+export const HERDR_PROTOCOL = 17;
 export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 export const DEFAULT_MAX_FRAME_BYTES = 1_048_576;
@@ -47,7 +47,7 @@ export class HerdrClientError extends Error {
 
 type Pending = { resolve: (result: HerdrResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; abort?: () => void };
 
-/** Narrow protocol-16 Unix-socket client. Errors identify frames, never echo bodies. */
+/** Narrow protocol-17 Unix-socket client. Errors identify frames, never echo bodies. */
 export class HerdrClient {
 	readonly socketPath: string;
 	private readonly connectTimeoutMs: number;
@@ -88,13 +88,16 @@ export class HerdrClient {
 	}
 
 	snapshot(options?: RequestOptions) { return this.call("session.snapshot", {}, options); }
-	createTab(params: { workspaceId?: string; cwd?: string; label?: string; env?: Record<string, string> }, options?: RequestOptions) { return this.call("tab.create", snake(params), options); }
+	createTab(params: { workspaceId?: string; cwd?: string; label?: string; env?: Record<string, string>; focus?: boolean }, options?: RequestOptions) { return this.call("tab.create", snake(params), options); }
 	renameTab(tabId: string, label: string, options?: RequestOptions) { return this.call("tab.rename", { tab_id: requiredText(tabId, "tabId"), label: requiredText(label, "label") }, options); }
 	closeTab(tabId: string, options?: RequestOptions) { return this.call("tab.close", { tab_id: requiredText(tabId, "tabId") }, options); }
-	startAgent(params: { name: string; argv: string[]; cwd?: string; env?: Record<string, string>; tabId?: string; workspaceId?: string; split?: "right" | "down"; focus?: boolean }, options?: RequestOptions) { return this.call("agent.start", snake(params), options); }
+	/** Start Herdr's canonical Pi integration in an existing shell pane. */
+	startAgent(params: { name: string; kind: "pi"; paneId: string; args?: string[]; timeoutMs?: number }, options?: RequestOptions) { return this.call("agent.start", snake(params), options); }
+	splitPane(params: { direction: "right" | "down"; targetPaneId?: string; workspaceId?: string; cwd?: string; env?: Record<string, string>; focus?: boolean; ratio?: number }, options?: RequestOptions) { return this.call("pane.split", snake(params), options); }
 	getAgent(target: string, options?: RequestOptions) { return this.call("agent.get", { target: requiredText(target, "target") }, options); }
 	listAgents(options?: RequestOptions) { return this.call("agent.list", {}, options); }
-	sendAgentInput(target: string, text: string, options?: RequestOptions) { return this.call("agent.send", { target: requiredText(target, "target"), text: requiredText(text, "text") }, options); }
+	/** Literal text delivery to an owned pane; submission remains fixed Enter below. */
+	sendAgentInput(paneId: string, text: string, options?: RequestOptions) { return this.call("pane.send_text", { pane_id: requiredText(paneId, "paneId"), text: requiredText(text, "text") }, options); }
 	getPane(paneId: string, options?: RequestOptions) { return this.call("pane.get", { pane_id: requiredText(paneId, "paneId") }, options); }
 	listPanes(workspaceId?: string, options?: RequestOptions) { return this.call("pane.list", workspaceId === undefined ? {} : { workspace_id: requiredText(workspaceId, "workspaceId") }, options); }
 	processInfo(paneId?: string, options?: RequestOptions) { return this.call("pane.process_info", paneId === undefined ? {} : { pane_id: requiredText(paneId, "paneId") }, options); }
