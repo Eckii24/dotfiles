@@ -66,7 +66,7 @@ def normalize_url(url: str) -> str:
 
 def fetch_html(url: str) -> str:
     result = subprocess.run(
-        ["curl", "-LksS", "-A", USER_AGENT, url],
+        ["curl", "-LsS", "-A", USER_AGENT, url],
         capture_output=True,
         text=True,
         check=True,

@@ -1,8 +1,6 @@
 ---
 name: roast-me
 description: "Sharp professional roast-style critique for code, architecture, docs, UI, specs, plans, prompts, or ideas when user asks for brutal feedback."
-compatibility:
-  tools: read, write, bash
 ---
 
 # Roast Me

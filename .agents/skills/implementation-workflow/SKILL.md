@@ -46,11 +46,7 @@ For each phase state: objective, acceptance evidence, child shape, and escalatio
 
 ## Tracked-project integration
 
-`current-work.md` is a restart pointer, not a transcript. Keep it under 500 tokens when possible and point to detail.
-
-Update it only at material phase boundary, blocker, decision, handoff, or closeout. Do not update/read it after routine child completions. Keep Todo Tracker at major-phase granularity; detailed work stays in the plan.
-
-At a phase handoff, record only: completed phase and acceptance evidence, active artifacts, one decision/blocker, exact next phase/action, and budget used. On resume, use a fresh parent session when practical; read the anchor plus only the artifact section needed next, never prior tool history.
+For tracked work, use [project-memory](../project-memory/SKILL.md) as the authoritative anchor, handoff, resume, and archive contract. This workflow owns mode selection and phase delivery; update tracked state only at material boundaries.
 
 ## Output
 
