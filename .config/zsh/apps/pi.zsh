@@ -64,7 +64,8 @@ Prompt resolution:
   - Supported files: <name>, <name>.md, <name>.markdown
   - Named prompt missing everywhere -> error
 
-Always runs Pi in non-interactive print mode with -p --no-tools.
+Always runs Pi in non-interactive, ephemeral mode with -p --no-tools --no-session.
+Project AGENTS.md and CLAUDE.md context files are disabled with --no-context-files.
 Any remaining arguments are passed through to pi.
 EOF
         return 0
@@ -144,9 +145,9 @@ EOF
 
     [[ -n "$prompt_path" ]] && resolved_prompt="$(<"$prompt_path")"
 
-    command pi -p --no-tools --no-extensions "${pi_args[@]}" --append-system-prompt "$resolved_prompt" "${passthrough[@]}"
+    command pi -p --no-tools --no-extensions --no-session --no-context-files "${pi_args[@]}" --append-system-prompt "$resolved_prompt" "${passthrough[@]}"
     return
   fi
 
-  command pi -p --no-tools --no-extensions "${pi_args[@]}" "${passthrough[@]}"
+  command pi -p --no-tools --no-extensions --no-session --no-context-files "${pi_args[@]}" "${passthrough[@]}"
 }
