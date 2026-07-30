@@ -68,7 +68,7 @@ test("symlink aliases collide on canonical cwd, override warns, and release perm
 		const first = await c.acquireWriteLease({ cwd: f.cwd, rootRunId: "writer-1", tools: ["edit"] }); panes = [{ pane_id: "retained-pane" }]; const settled = await c.bindWriteLease(first, "retained-pane");
 		await expect(c.acquireWriteLease({ cwd: alias, rootRunId: "writer-2", tools: ["write"] })).rejects.toMatchObject({ code: "shared_workspace_write_conflict" });
 		const shared = await c.acquireWriteLease({ cwd: alias, rootRunId: "writer-2", tools: ["write"], allowSharedWorkspaceWrites: true }); expect(shared.warning).toBe("WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict.");
-		await c.releaseWriteLease(settled); const second = await c.acquireWriteLease({ cwd: alias, rootRunId: "writer-2", tools: ["write"] }); expect(second.acquired).toBeTrue(); await c.releaseWriteLease(second);
+		panes = []; await c.releaseWriteLease(settled); const second = await c.acquireWriteLease({ cwd: alias, rootRunId: "writer-2", tools: ["write"] }); expect(second.acquired).toBeTrue(); await c.releaseWriteLease(second);
 	} finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -121,6 +121,20 @@ test("recovers crash-left provisional group reservations after bounded TTL", asy
 		await expect(c.reserveGroup({ workspaceId: "w", rootRunId: "four", group: "four", paneCount: 1 })).rejects.toMatchObject({ code: "tab_capacity_exceeded" });
 		now = PROVISIONAL_TTL_MS + 1;
 		await expect(c.reserveGroup({ workspaceId: "w", rootRunId: "four", group: "four", paneCount: 1 })).resolves.toMatchObject({ provisional: true });
+	} finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("root+CWD lease survives one pane release while another owned pane remains live across coordinators", async () => {
+	const f = fixture(); try {
+		let panes: object[] = [{ pane_id: "blocked" }, { pane_id: "retained" }]; const one = coordinator(f.runtime, async () => ({ panes })); const two = coordinator(f.runtime, async () => ({ panes }));
+		const first = await one.acquireWriteLease({ cwd: f.cwd, rootRunId: "root", tools: ["edit"] }); const blocked = await one.bindWriteLease(first, "blocked");
+		const second = await one.acquireWriteLease({ cwd: f.cwd, rootRunId: "root", tools: ["edit"] }); const retained = await one.bindWriteLease(second, "retained");
+		await one.releaseWriteLease(blocked); // Background cleanup cannot drop live blocked authority.
+		await expect(two.acquireWriteLease({ cwd: f.cwd, rootRunId: "other", tools: ["write"] })).rejects.toMatchObject({ code: "shared_workspace_write_conflict" });
+		panes = [{ pane_id: "retained" }]; await one.releaseWriteLease(blocked);
+		await expect(two.acquireWriteLease({ cwd: f.cwd, rootRunId: "other", tools: ["write"] })).rejects.toMatchObject({ code: "shared_workspace_write_conflict" });
+		panes = []; await one.releaseWriteLease(retained);
+		await expect(two.acquireWriteLease({ cwd: f.cwd, rootRunId: "other", tools: ["write"] })).resolves.toMatchObject({ acquired: true });
 	} finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 

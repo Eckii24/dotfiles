@@ -155,7 +155,7 @@ Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
 | `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert |
 | Markdown-Body | nein | temporär als Datei geschrieben und via `--append-system-prompt <datei>` angehängt |
 
-Ungültige/unlesbare Profile werden bei Discovery verworfen. Projektprofile benötigen standardmäßig eine UI-Bestätigung. In Non-UI-Modi gibt es keine Dialogfreigabe; Projektprofile können nur mit explizitem `confirmProjectAgents: false` genutzt werden.
+Ungültige/unlesbare Profile werden bei Discovery verworfen. Jedes Item entdeckt Profile relativ zu seinem kanonischen CWD; parallele Items können daher verschiedene Projektprofile wählen. Ausgewählte Projektprofile werden über `source` und kanonischen Profilpfad dedupliziert und standardmäßig in einer gemeinsamen UI-Bestätigung bestätigt. In Non-UI-Modi schlägt jede solche Auswahl mit `project_agent_not_confirmed` fehl; nur explizites `confirmProjectAgents: false` umgeht dies.
 
 Temporäre Prompt-Dateien liegen in einem neuen `0700`-Runtime-Unterordner, werden exklusiv als `0600` erzeugt und nach stabiler Child-Bereitschaft oder Startfehler gelöscht.
 
@@ -198,7 +198,7 @@ Genau ein Ausführungsmodus ist erlaubt:
 | Parallel | `tasks` | 1–4 Child-Pis gleichzeitig |
 | Chain | `chain` | 1–4 Child-Pis nacheinander |
 
-`cwd` wird mit `realpath` kanonisiert und muss danach ein bestehendes Verzeichnis sein. Fehlt es bei einem Item, gilt CWD des aufrufenden Pi. Ein Chain-Schritt ersetzt jedes `{previous}` in seiner Task durch den finalen Text des vorherigen erfolgreichen Leafs.
+`cwd` wird mit `realpath` kanonisiert und muss danach ein bestehendes Verzeichnis sein. Auch der Aufrufer-CWD wird vor Discovery kanonisiert. Fehlt es bei einem Item, gilt CWD des aufrufenden Pi. Bei exakt `PI_SANDBOX=gondolin` muss jeder Item-CWD nach Kanonisierung dem Aufrufer-CWD entsprechen; Abweichungen schlagen vor Client-, Kapazitäts- oder Topologie-Allokation mit `invalid_execution_mode` fehl. Ein Chain-Schritt ersetzt jedes `{previous}` durch den finalen Text des vorherigen erfolgreichen Leafs als einzeiliges JSON-Stringliteral (`JSON.parse` stellt den Originaltext wieder her); rohe CR/LF gelangen nie in die Delivery. Die vollständige `pane.send_text`-Request (Sentinel, Pane-ID, JSON-Escaping, Envelope und Newline eingeschlossen) ist auf 65536 UTF-8-Bytes begrenzt und scheitert vor Sendung strukturiert mit `task_delivery_failed`.
 
 #### Aufrufbeispiele
 
@@ -246,7 +246,7 @@ Sequentielle Writer im selben Workspace:
 | maximal 3 verwaltete Tabs pro Workspace | Snapshot-Labels und Runtime-Reservierungen werden konservativ gezählt |
 | maximal 4 Panes pro Root-Run | Schema, Kapazität und Layout erzwingen Grenze |
 | parallele Writer | müssen unterschiedliche kanonische CWDs haben |
-| Writer-Lease | eine atomare Lease pro kanonischem CWD und Root-Run |
+| Writer-Lease | eine atomare Lease pro kanonischem CWD und Root-Run; alle gebundenen Pane-IDs gehören dazu, jede lebende Pane hält sie |
 | Chain | startet nächsten Pane erst nach Erfolg des vorherigen Leafs |
 | Blockierung | verhindert weitere noch nicht gestartete Chain-Schritte |
 

@@ -40,8 +40,10 @@ import { isNetworkAllowed, type SandboxPolicy } from "./policy/policy.ts";
 const DEFAULT_IMAGE = "pi-agent-base:0.12.0";
 const DEFAULT_IMAGE_ARCH = process.arch === "arm64" ? "aarch64" : "x86_64";
 const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-base.build.json");
-const BACKEND = process.env.GONDOLIN_VMM || "qemu";
 const NETWORK_POLICY = "deny-all";
+const SEARCH_MAX_BYTES = DEFAULT_MAX_BYTES;
+const SEARCH_META = "__GONDOLIN_SEARCH_META__";
+const VALID_BACKENDS = new Set(["qemu", "krun"]);
 const ROUTED_TOOLS = ["read", "write", "edit", "bash", "grep", "find", "ls"] as const;
 export const NETWORK_ALLOWED_HOSTS: string[] = [];
 export const SSH_UNSUPPORTED_DIAGNOSTIC = "ssh.enabled is unsupported: no verified fail-closed SSH mediation configuration";
@@ -56,6 +58,13 @@ type ExtensionDeps = {
   createVm?: () => Promise<VmLike>;
   ensureDefaultImage?: (image: string) => Promise<string>;
 };
+
+/** Policy wins over explicit injection; invalid injection fails before VM creation. */
+export function resolveBackend(policy: SandboxPolicy, env: NodeJS.ProcessEnv = process.env): "qemu" | "krun" {
+  const backend = policy.backend ?? env.GONDOLIN_VMM ?? "qemu";
+  if (!VALID_BACKENDS.has(backend)) throw new Error(`backend must be qemu or krun (received ${backend})`);
+  return backend as "qemu" | "krun";
+}
 
 /** Translate already validated/canonicalized policy into the only VM inputs used at runtime. */
 export function buildVmOptions(
@@ -234,7 +243,7 @@ export async function executeGuestRead(
   const requested = Math.max(0, Math.floor(params.limit ?? DEFAULT_MAX_LINES));
   const guestLines = Math.min(requested, DEFAULT_MAX_LINES) + 1;
   const script = [
-    `total=$(/usr/bin/wc -l < "$1") || exit $?`,
+    `total=$(/usr/bin/awk 'END { print NR }' "$1") || exit $?`,
     `printf '%s\\n' "$total"`,
     `/usr/bin/tail -n +"$2" -- "$1" | /usr/bin/head -n "$3" | /usr/bin/head -c "$4"`,
   ].join("; ");
@@ -285,6 +294,9 @@ async function runGuestBash(
     throw new Error("Invalid timeout: must be a finite positive number of seconds");
   }
   const controller = new AbortController();
+  if (signal?.aborted) {
+    return { output: "", exitCode: undefined, cancelled: true, truncated: false };
+  }
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   const timer = params.timeout ? setTimeout(abort, params.timeout * 1000) : undefined;
@@ -328,6 +340,87 @@ export async function executeGuestBash(
   else if (result.exitCode !== 0) rendered += `${rendered ? "\n" : ""}Command exited with code ${result.exitCode}`;
   return text(rendered || "(no output)", result.truncated ? { truncation: { truncated: true } } : undefined);
 }
+
+type BoundedSearchMeta = { shown: number; resultLimited: boolean; byteLimited: boolean };
+
+function renderGuestSearch(stdout: unknown, empty: string, noun: string, limit: number): ToolResult {
+  const source = String(stdout ?? "");
+  const newline = source.indexOf("\n");
+  if (newline < 0 || !source.startsWith(SEARCH_META)) throw new Error("search failed: missing guest metadata");
+  const [, shownText, resultText, byteText] = source.slice(0, newline).split("\t");
+  const meta: BoundedSearchMeta = {
+    shown: Number.parseInt(shownText, 10), resultLimited: resultText === "1", byteLimited: byteText === "1",
+  };
+  if (!Number.isSafeInteger(meta.shown)) throw new Error("search failed: invalid guest metadata");
+  let output = source.slice(newline + 1).trimEnd();
+  if (!output) return text(empty);
+  const notices: string[] = [];
+  if (meta.resultLimited) notices.push(`${limit} ${noun} limit reached. Use limit=${limit * 2} for more`);
+  if (meta.byteLimited) notices.push(`${SEARCH_MAX_BYTES / 1024}KB limit reached. Refine search`);
+  if (notices.length) output += `\n\n[${notices.join(". ")}]`;
+  return text(output, notices.length ? { resultLimitReached: meta.resultLimited ? limit : undefined, truncation: meta.byteLimited ? { truncated: true, maxBytes: SEARCH_MAX_BYTES } : undefined } : undefined);
+}
+
+/** Guest emits at most limit records and SEARCH_MAX_BYTES before stdout crosses VM boundary. */
+export async function executeGuestSearch(
+  vm: VmLike, args: string[], signal: AbortSignal | undefined, empty: string, noun: string, limit: number,
+): Promise<ToolResult> {
+  const result = await vm.exec(args, { signal });
+  if (!result.ok) throw new Error(result.stderr || `search failed (${result.exitCode})`);
+  return renderGuestSearch(result.stdoutBuffer ? Buffer.from(result.stdoutBuffer).toString("utf8") : result.stdout, empty, noun, limit);
+}
+
+const GUEST_GREP = `
+root=$1 pattern=$2 limit=$3 max=$4 ignore=$5 literal=$6 context=$7 glob=$8
+max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
+out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+fail() { printf '%s\\n' "$1" >&2; exit 2; }
+emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
+if [ -f "$root" ]; then cd "$(dirname "$root")" || fail "grep failed: invalid path: $root"; target=$(basename "$root");
+elif [ -d "$root" ]; then cd "$root" || fail "grep failed: invalid path: $root"; target=.
+else fail "grep failed: invalid path: $root"; fi
+# Text protocol cannot represent newline-bearing paths. Detect before rg emits text records.
+/usr/bin/find "$target" -print0 > /dev/null || fail "grep failed while scanning path names"
+while IFS= read -r -d '' name; do [[ "$name" == *$'\\n'* ]] && fail "grep failed: newline-bearing path is unsupported"; done < <(/usr/bin/find "$target" -print0)
+args=(/usr/bin/rg --line-number --color=never --hidden)
+[ "$ignore" = 1 ] && args+=(--ignore-case); [ "$literal" = 1 ] && args+=(--fixed-strings)
+[ "$context" -gt 0 ] && args+=(--context "$context"); [ -n "$glob" ] && args+=(--glob "$glob")
+"\${args[@]}" --files-with-matches -- "$pattern" "$target" > /dev/null; status=$?
+[ "$status" -eq 1 ] || [ "$status" -eq 0 ] || exit "$status"
+while IFS= read -r line; do emit "\${line#./}" || break; done < <("\${args[@]}" -- "$pattern" "$target")
+printf '${SEARCH_META}\\t%s\\t%s\\t%s\\n' "$shown" "$limited" "$byte_limited"; cat "$out"
+`;
+
+const GUEST_FIND = `
+root=$1 pattern=$2 limit=$3 max=$4
+max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
+out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+fail() { printf '%s\\n' "$1" >&2; exit 2; }
+emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
+[ -d "$root" ] || fail "find failed: not a directory: $root"
+if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  (cd "$root" && git ls-files -co --exclude-standard -z -- .) > /dev/null || fail "find failed while listing git files"
+  candidates() { cd "$root" && git ls-files -co --exclude-standard -z -- .; }
+else
+  (cd "$root" && /usr/bin/find . -type f -printf '%P\\0') > /dev/null || fail "find failed while listing files"
+  candidates() { cd "$root" && /usr/bin/find . -type f -printf '%P\\0'; }
+fi
+while IFS= read -r -d '' line; do [[ "$line" == *$'\\n'* ]] && fail "find failed: newline-bearing path is unsupported"; if [[ "$line" == $pattern ]]; then emit "$line" || break; fi; done < <(candidates)
+printf '${SEARCH_META}\\t%s\\t%s\\t%s\\n' "$shown" "$limited" "$byte_limited"; cat "$out"
+`;
+
+const GUEST_LS = `
+root=$1 limit=$2 max=$3
+max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
+out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+fail() { printf '%s\\n' "$1" >&2; exit 2; }
+emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
+[ -d "$root" ] || fail "ls failed: not a directory: $root"
+set -o pipefail
+(cd "$root" && /usr/bin/find . -mindepth 1 -maxdepth 1 -printf '%f\\0' | LC_ALL=C sort -z -f) > /dev/null || fail "ls failed while listing directory"
+while IFS= read -r -d '' name; do [[ "$name" == *$'\\n'* ]] && fail "ls failed: newline-bearing path is unsupported"; [ -d "$root/$name" ] && name="$name/"; emit "$name" || break; done < <(cd "$root" && /usr/bin/find . -mindepth 1 -maxdepth 1 -printf '%f\\0' | LC_ALL=C sort -z -f)
+printf '${SEARCH_META}\\t%s\\t%s\\t%s\\n' "$shown" "$limited" "$byte_limited"; cat "$out"
+`;
 
 function writeOps(vm: VmLike, cwd: string, mounts: readonly SandboxMount[]): WriteOperations {
   return {
@@ -383,6 +476,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     let inheritedSandboxMarker: string | undefined;
     let setSandboxMarker = false;
     let effectivePolicy: SandboxPolicy = {};
+    let backend: "qemu" | "krun" = "qemu";
     const readPolicy = async (trusted: boolean): Promise<SandboxPolicy> => {
       const projectPath = trusted ? path.join(cwd, ".pi", "settings.json") : path.join(cwd, ".pi", "settings.json.disabled");
       let projectId = path.resolve(cwd);
@@ -391,14 +485,14 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     };
 
     const createVm = deps.createVm ?? (async () => VM.create(
-      buildVmOptions(effectivePolicy, canonicalCwd, vmImage, BACKEND as "qemu" | "krun"),
+      buildVmOptions(effectivePolicy, canonicalCwd, vmImage, backend),
     ));
     const runtime = new SandboxRuntime(createVm);
 
     const latchFailure = (reason: string, ctx?: ExtensionContext) => {
       if (activation !== "failed") failedReason = reason;
       activation = "failed";
-      const message = `SANDBOX gondolin/${BACKEND} FAILED: ${failedReason}`;
+      const message = `SANDBOX gondolin/${backend} FAILED: ${failedReason}`;
       (ctx ?? lastContext)?.ui.setStatus("sandbox", message);
       (ctx ?? lastContext)?.ui.notify(`Sandbox startup failed: ${failedReason}`, "error");
     };
@@ -408,7 +502,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       try {
         const vm = await runtime.ensureStarted();
         currentVm = vm;
-        (ctx ?? lastContext)?.ui.setStatus("sandbox", `SANDBOX gondolin/${BACKEND} running VM=${vm.id.slice(0, 8)}`);
+        (ctx ?? lastContext)?.ui.setStatus("sandbox", `SANDBOX gondolin/${backend} running VM=${vm.id.slice(0, 8)}`);
         return vm;
       } catch (error) {
         latchFailure(errorMessage(error), ctx);
@@ -434,7 +528,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       description: "Show Gondolin sandbox activation and effective policy",
       async handler(_args, ctx) {
         const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
-        ctx.ui.notify(`SANDBOX ${activation}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${NETWORK_POLICY}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
+        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${NETWORK_POLICY}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
       },
     });
     registerPolicyCommands(pi, {
@@ -467,37 +561,29 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     const grep = local.grep;
     pi.registerTool({ ...grep, async execute(id, params, signal, update, ctx) {
       if (activation === "unlatched" || activation === "inactive") return local.grep.execute(id, params, signal, update);
-      return guarded(ctx, async (vm) => {
-        const guest = extensionPath(params.path || ".", canonicalCwd, mounts);
-        const args = ["/usr/bin/rg", "--line-number", "--color=never"];
-        if (params.ignoreCase) args.push("--ignore-case");
-        if (params.literal) args.push("--fixed-strings");
-        if (params.context && params.context > 0) args.push("--context", String(params.context));
-        if (params.glob) args.push("--glob", params.glob);
-        args.push("--", params.pattern, guest);
-        const result = await vm.exec(args, { signal });
-        if (result.exitCode !== 0 && result.exitCode !== 1) throw new Error(result.stderr || `grep failed (${result.exitCode})`);
-        const lines = String(result.stdout).trimEnd().split("\n").filter(Boolean).slice(0, params.limit ?? 100);
-        return text(lines.length ? lines.join("\n") : "No matches found");
+      return guarded(ctx, (vm) => {
+        const limit = Math.max(1, Math.min(params.limit ?? 100, DEFAULT_MAX_LINES));
+        return executeGuestSearch(vm, [
+          "/bin/bash", "-lc", GUEST_GREP, "grep-bounded", extensionPath(params.path || ".", canonicalCwd, mounts), params.pattern,
+          String(limit), String(SEARCH_MAX_BYTES), params.ignoreCase ? "1" : "0", params.literal ? "1" : "0",
+          String(Math.max(0, params.context ?? 0)), params.glob ?? "",
+        ], signal, "No matches found", "matches", limit);
       });
     }});
     const find = local.find;
     pi.registerTool({ ...find, async execute(id, params, signal, update, ctx) {
       if (activation === "unlatched" || activation === "inactive") return local.find.execute(id, params, signal, update);
-      return guarded(ctx, async (vm) => {
-        const result = await vm.exec(["/usr/bin/find", extensionPath(params.path || ".", canonicalCwd, mounts), "-type", "f", "-path", params.pattern], { signal });
-        if (!result.ok) throw new Error(result.stderr || `find failed (${result.exitCode})`);
-        const lines = String(result.stdout).trimEnd().split("\n").filter(Boolean).slice(0, params.limit ?? 1000);
-        return text(lines.length ? lines.join("\n") : "No files found matching pattern");
+      return guarded(ctx, (vm) => {
+        const limit = Math.max(1, Math.min(params.limit ?? 1000, DEFAULT_MAX_LINES));
+        return executeGuestSearch(vm, ["/bin/bash", "-lc", GUEST_FIND, "find-bounded", extensionPath(params.path || ".", canonicalCwd, mounts), params.pattern, String(limit), String(SEARCH_MAX_BYTES)], signal, "No files found matching pattern", "results", limit);
       });
     }});
     const ls = local.ls;
     pi.registerTool({ ...ls, async execute(id, params, signal, update, ctx) {
       if (activation === "unlatched" || activation === "inactive") return local.ls.execute(id, params, signal, update);
-      return guarded(ctx, async (vm) => {
-        const result = await vm.exec(["/bin/ls", "-1A", "--", extensionPath(params.path || ".", canonicalCwd, mounts)], { signal });
-        if (!result.ok) throw new Error(result.stderr || `ls failed (${result.exitCode})`);
-        return text(String(result.stdout).trimEnd().split("\n").filter(Boolean).slice(0, params.limit ?? 500).join("\n"));
+      return guarded(ctx, (vm) => {
+        const limit = Math.max(1, Math.min(params.limit ?? 500, DEFAULT_MAX_LINES));
+        return executeGuestSearch(vm, ["/bin/bash", "-lc", GUEST_LS, "ls-bounded", extensionPath(params.path || ".", canonicalCwd, mounts), String(limit), String(SEARCH_MAX_BYTES)], signal, "(empty directory)", "entries", limit);
       });
     }});
 
@@ -520,6 +606,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         // own their mount semantics and may intentionally use synthetic paths.
         if (!deps.createVm) canonicalCwd = await realpath(cwd);
         effectivePolicy = await readPolicy(ctx.isProjectTrusted());
+        backend = resolveBackend(effectivePolicy, env);
         mounts = policyMounts(effectivePolicy, canonicalCwd);
       } catch (error) {
         latchFailure(`policy rejected: ${errorMessage(error)}`, ctx);
@@ -542,7 +629,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         latchFailure(`image setup failed: ${errorMessage(error)}`, ctx);
         return;
       }
-      ctx.ui.setStatus("sandbox", `SANDBOX gondolin/${BACKEND} starting`);
+      ctx.ui.setStatus("sandbox", `SANDBOX gondolin/${backend} starting`);
       if (await ensure(ctx)) {
         // Subagents are independent Pi processes. They inherit environment, not
         // extension flags, so propagate activation only from a running parent.

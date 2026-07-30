@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrClient } from "./herdr-client.js";
+import { encodeHerdrRequest, HerdrClient, paneSendTextRequestByteLength, PAYLOAD_SIZE_REQUEST_ID } from "./herdr-client.js";
 
 type Server = { path: string; server: net.Server; clients: Set<net.Socket>; close(): Promise<void> };
 const servers: Server[] = [];
@@ -67,6 +67,13 @@ test("rejects malformed frames and unknown IDs", async () => {
 		const server = await fake(socket => socket.write(frame)); const client = new HerdrClient({ socketPath: server.path });
 		await expect(client.snapshot()).rejects.toMatchObject({ code: frame.startsWith("not") ? "malformed_frame" : "unknown_response" }); client.dispose(); await server.close(); servers.pop();
 	}
+});
+
+test("shared pane.send_text sizing includes UUID envelope, newline, pane ID, and JSON escaping", () => {
+	const paneId = "pane-12345678-1234-1234-1234-123456789abc"; const text = "line one\\line two\nquote: \\\"";
+	const encoded = encodeHerdrRequest(PAYLOAD_SIZE_REQUEST_ID, "pane.send_text", { pane_id: paneId, text });
+	expect(paneSendTextRequestByteLength(paneId, text)).toBe(encoded.length);
+	expect(encoded.toString()).toEndWith("\n"); expect(encoded.toString()).toContain("\\n"); expect(encoded.toString()).toContain("\\\\");
 });
 
 test("bounds request and frame sizes", async () => {

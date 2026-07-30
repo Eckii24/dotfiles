@@ -23,7 +23,7 @@ export type CapacityDependencies = {
 	writeFile?: typeof writeFile; rename?: typeof rename; rm?: typeof rm; realpath?: typeof realpath;
 };
 type ReservationRecord = { rootRunId: string; workspaceId: string; tabId?: string; paneIds: string[]; createdAt: number };
-type LeaseRecord = { rootRunId: string; cwd: string; createdAt: number; paneId?: string };
+type LeaseRecord = { rootRunId: string; cwd: string; createdAt: number; paneIds: string[] };
 type LockRecord = { pid: number; token: string };
 type State = { reservations: ReservationRecord[] };
 
@@ -91,22 +91,31 @@ export class CapacityCoordinator {
 				if (!input.allowSharedWorkspaceWrites) throw new CapacityError("shared_workspace_write_conflict", "Another declared writer holds this canonical cwd lease.");
 				return { cwd, rootRunId: input.rootRunId, acquired: false, warning: "WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict." };
 			}
-			if (!current) { current = { rootRunId: input.rootRunId, cwd, createdAt: this.now() }; await this.atomicWrite(file, JSON.stringify(current)); }
-			return { cwd, rootRunId: input.rootRunId, acquired: true, paneId: current.paneId };
+			if (!current) { current = { rootRunId: input.rootRunId, cwd, createdAt: this.now(), paneIds: [] }; await this.atomicWrite(file, JSON.stringify(current)); }
+			return { cwd, rootRunId: input.rootRunId, acquired: true };
 		});
 	}
 	async bindWriteLease(lease: WriteLease, paneId: string): Promise<WriteLease> {
 		if (!lease.acquired || !paneId) return lease;
 		return this.locked(async () => {
 			const file = this.leasePath(lease.cwd); const current = await this.readLease(file);
-			if (!current || current.rootRunId !== lease.rootRunId || current.paneId) return { ...lease, acquired: false };
-			const bound = { ...current, paneId } satisfies LeaseRecord; await this.atomicWrite(file, JSON.stringify(bound));
+			if (!current || current.rootRunId !== lease.rootRunId) return { ...lease, acquired: false };
+			const bound = { ...current, paneIds: [...new Set([...current.paneIds, paneId])] } satisfies LeaseRecord; await this.atomicWrite(file, JSON.stringify(bound));
 			return { ...lease, paneId };
 		});
 	}
 	async releaseWriteLease(lease: WriteLease): Promise<void> {
 		if (!lease.acquired) return;
-		await this.locked(async () => { const file = this.leasePath(lease.cwd); const current = await this.readLease(file); if (current?.rootRunId === lease.rootRunId && current.paneId === lease.paneId) await (this.d.rm ?? rm)(file, { force: true }); });
+		await this.locked(async () => {
+			const file = this.leasePath(lease.cwd); const current = await this.readLease(file);
+			if (!current || current.rootRunId !== lease.rootRunId) return;
+			if (!lease.paneId) { if (!current.paneIds.length) await (this.d.rm ?? rm)(file, { force: true }); return; }
+			// A live pane remains authority for its root+CWD lease even when background cleanup runs.
+			if (allPaneIds(capacitySnapshot(await this.d.snapshot())).has(lease.paneId)) return;
+			const paneIds = current.paneIds.filter(id => id !== lease.paneId);
+			if (paneIds.length) await this.atomicWrite(file, JSON.stringify({ ...current, paneIds }));
+			else await (this.d.rm ?? rm)(file, { force: true });
+		});
 	}
 	private async runtime() {
 		try { await (this.d.mkdir ?? mkdir)(this.root, { recursive: true, mode: 0o700 }); await (this.d.chmod ?? chmod)(this.root, 0o700); const info = await (this.d.lstat ?? lstat)(this.root) as Stat; const uid = this.d.uid ?? process.getuid?.();
@@ -128,7 +137,8 @@ export class CapacityCoordinator {
 	private alive(pid: number) { if (this.d.processAlive) return this.d.processAlive(pid); try { process.kill(pid, 0); return true; } catch { return false; } }
 	private async readLock(path: string): Promise<LockRecord | undefined> { try { const x: unknown = JSON.parse(await (this.d.readFile ?? readFile)(path, "utf8")); return !!x && typeof x === "object" && Number.isInteger((x as LockRecord).pid) && (x as LockRecord).pid > 0 && typeof (x as LockRecord).token === "string" && !!(x as LockRecord).token ? x as LockRecord : undefined; } catch { return undefined; } }
 	private async reconciled(snapshot: CapacitySnapshot): Promise<State> { const state = await this.loadState(); const tabs = allTabIds(snapshot); const now = this.now(); state.reservations = state.reservations.filter(r => r.tabId ? tabs.has(r.tabId) : now - r.createdAt <= PROVISIONAL_TTL_MS); await this.saveState(state); return state; }
-	private async liveLease(lease: LeaseRecord, snapshot: CapacitySnapshot) { return lease.paneId ? allPaneIds(snapshot).has(lease.paneId) : this.now() - lease.createdAt <= PROVISIONAL_TTL_MS; }
+	/** Lease ownership is root+CWD; any live bound pane keeps it authoritative. */
+	private async liveLease(lease: LeaseRecord, snapshot: CapacitySnapshot) { return lease.paneIds.length ? lease.paneIds.some(id => allPaneIds(snapshot).has(id)) : this.now() - lease.createdAt <= PROVISIONAL_TTL_MS; }
 	private async loadState(): Promise<State> { try { const parsed: unknown = JSON.parse(await (this.d.readFile ?? readFile)(join(this.root, "capacity.json"), "utf8")); if (typeof parsed === "object" && parsed && Array.isArray((parsed as State).reservations)) return { reservations: (parsed as State).reservations.filter(validReservation) }; } catch { /* absent/corrupt state is empty; snapshot remains authority */ } return { reservations: [] }; }
 	private saveState(state: State) { return this.atomicWrite(join(this.root, "capacity.json"), JSON.stringify({ reservations: state.reservations })); }
 	private async atomicWrite(path: string, body: string) { const temporary = `${path}.${randomUUID()}.tmp`; await (this.d.writeFile ?? writeFile)(temporary, body, { mode: 0o600 }); await (this.d.rename ?? rename)(temporary, path); }
@@ -136,7 +146,7 @@ export class CapacityCoordinator {
 	private leasePath(cwd: string) { return join(this.root, `write-${createHash("sha256").update(cwd).digest("hex")}.json`); }
 }
 function validReservation(value: unknown): value is ReservationRecord { const x = value as ReservationRecord; return !!x && typeof x.rootRunId === "string" && typeof x.workspaceId === "string" && Array.isArray(x.paneIds) && (x.tabId === undefined || typeof x.tabId === "string"); }
-function validLease(value: unknown): value is LeaseRecord { const x = value as LeaseRecord; return !!x && typeof x.rootRunId === "string" && typeof x.cwd === "string" && typeof x.createdAt === "number" && (x.paneId === undefined || typeof x.paneId === "string"); }
+function validLease(value: unknown): value is LeaseRecord { const x = value as LeaseRecord; return !!x && typeof x.rootRunId === "string" && typeof x.cwd === "string" && typeof x.createdAt === "number" && Array.isArray(x.paneIds) && x.paneIds.every(id => typeof id === "string"); }
 function capacitySnapshot(value: unknown): CapacitySnapshot {
 	const outer = value as { snapshot?: unknown; result?: { snapshot?: unknown } };
 	const body = outer?.snapshot ?? outer?.result?.snapshot ?? value;

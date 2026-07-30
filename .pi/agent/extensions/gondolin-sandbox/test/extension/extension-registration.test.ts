@@ -156,6 +156,62 @@ test("scout-like tool subset starts without adding absent mutation tools", async
   assert.ok(!pi.statuses.some((status) => /ownership collision/i.test(status)));
 });
 
+test("sandbox search/list use bounded guest scripts with Pi-compatible paths and semantics", async () => {
+  const calls: any[] = [];
+  const vm = { id: "vm-search", start: async () => {}, close: async () => {}, exec: async (args: string[], options: any) => {
+    calls.push({ args, options });
+    return { ok: true, exitCode: 0, stdout: "__GONDOLIN_SEARCH_META__\t1\t0\t0\nsrc/a.ts\n", stderr: "" };
+  }};
+  const pi = harness({ flag: true, vm });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  const grep = await pi.tools.get("grep").execute("id", { pattern: "hit", path: "src", glob: "*.ts" });
+  const find = await pi.tools.get("find").execute("id", { pattern: "**/*.ts", path: "src" });
+  const listing = await pi.tools.get("ls").execute("id", { path: "src" });
+  assert.equal(grep.content[0].text, "src/a.ts");
+  assert.equal(find.content[0].text, "src/a.ts");
+  assert.equal(listing.content[0].text, "src/a.ts");
+  assert.ok(calls[0].args[2].includes("--hidden"));
+  assert.ok(calls[0].args[2].includes("--glob"));
+  assert.ok(calls[1].args[2].includes("--exclude-standard"));
+  assert.ok(calls[2].args[2].includes("sort -z -f"));
+  assert.deepEqual(calls.map((call) => call.args[4]), ["/workspace/src", "/workspace/src", "/workspace/src"]);
+  assert.ok(calls.every((call) => call.options.signal === undefined));
+});
+
+test("guest search scripts preserve errors, path types, subdirectory paths, and safe filename transport", async () => {
+  const calls: any[] = [];
+  const vm = { id: "vm-search-safety", start: async () => {}, close: async () => {}, exec: async (args: string[]) => {
+    calls.push(args);
+    if (args[3] === "grep-bounded" && args[5] === "[") {
+      return { ok: false, exitCode: 2, stdout: "", stderr: "regex parse error" };
+    }
+    return { ok: true, exitCode: 0, stdout: "__GONDOLIN_SEARCH_META__\t1\t0\t0\nnested/a.ts\n", stderr: "" };
+  }};
+  const pi = harness({ flag: true, vm });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+
+  const regexFailure = await pi.tools.get("grep").execute("id", { pattern: "[", path: "one-file.ts" });
+  assert.equal(regexFailure.isError, true);
+  assert.match(regexFailure.content[0].text, /regex parse error/);
+  await pi.tools.get("grep").execute("id", { pattern: "hit", path: "one-file.ts" });
+  await pi.tools.get("find").execute("id", { pattern: "**/*.ts", path: "subdir" });
+  await pi.tools.get("ls").execute("id", { path: "subdir" });
+
+  const [badGrep, grep, find, ls] = calls;
+  assert.equal(grep[4], "/workspace/one-file.ts");
+  assert.match(grep[2], /\[ -f "\$root" \]/);
+  assert.doesNotMatch(grep[2], /2>\/dev\/null/);
+  assert.match(grep[2], /newline-bearing path is unsupported/);
+  assert.match(find[2], /\[ -d "\$root" \] \|\| fail/);
+  assert.match(find[2], /git ls-files -co --exclude-standard -z -- \./);
+  assert.match(find[2], /cd "\$root"/);
+  assert.match(find[2], /-printf '%P\\0'/);
+  assert.match(ls[2], /\[ -d "\$root" \] \|\| fail/);
+  assert.match(ls[2], /sort -z -f/);
+  assert.match(ls[2], /newline-bearing path is unsupported/);
+  assert.equal(badGrep[3], "grep-bounded");
+});
+
 test("tool collision latches a boundary failure", async () => {
   const pi = harness({ flag: true });
   pi.api.getAllTools = () => [...pi.tools.values()].map((tool: any) => ({

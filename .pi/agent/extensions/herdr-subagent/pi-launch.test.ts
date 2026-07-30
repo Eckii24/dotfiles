@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { accessSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { accessSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -36,7 +36,7 @@ test("builds persisted interactive argv with exact model and tools, never task o
 	try {
 		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { SECRET: "must-not-inherit" } });
 		expect(launch.executable).toBe(process.execPath);
-		expect(launch.cwd).toBe(value.cwd);
+		expect(launch.cwd).toBe(realpathSync(value.cwd));
 		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--tools", "subagent,subagent_control", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv).not.toContain("--mode");
 		expect(launch.argv).not.toContain("rpc");
@@ -49,7 +49,7 @@ test("builds persisted interactive argv with exact model and tools, never task o
 			PI_HERDR_AGENT_PROFILE, PI_HERDR_GROUP, PI_HERDR_LEAF_RUN_ID, PI_HERDR_NESTING_DEPTH,
 			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT,
 		].sort();
-		expect(launch.log).toEqual({ executable: process.execPath, argv: launch.argv, cwd: value.cwd, envNames, name: launch.name });
+		expect(launch.log).toEqual({ executable: process.execPath, argv: launch.argv, cwd: realpathSync(value.cwd), envNames, name: launch.name });
 		expect(launch.log.envNames).not.toContain("PRIVATE PROFILE BODY");
 		expect(launch.env).toEqual({
 		[PI_HERDR_ROOT_RUN_ID]: "root-123", [PI_HERDR_LEAF_RUN_ID]: "leaf-456789", [PI_HERDR_NESTING_DEPTH]: "1",
@@ -112,7 +112,7 @@ test("worker/scout-like profiles receive no nested tools, and cwd is canonicaliz
 	try {
 		const alias = join(value.root, "workspace-link"); symlinkSync(value.cwd, alias);
 		const launch = await createPiLaunchDescriptor(input(alias, { profile: { name: "reader", tools: ["read"], systemPrompt: "body" } }), { runtimeRoot: value.runtime });
-		expect(launch.cwd).toBe(value.cwd);
+		expect(launch.cwd).toBe(realpathSync(value.cwd));
 		expect(launch.argv).toEqual(["--name", launch.name, "--tools", "read", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv.join(" ")).not.toContain("herdr_subagent");
 		await launch.cleanupAfterFailure();

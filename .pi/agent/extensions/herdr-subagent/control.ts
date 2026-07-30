@@ -4,6 +4,7 @@ import { DEFAULT_TIMEOUT_SECONDS, normalizeControlParams, type NormalizedControl
 import { runLifecycleTurn, type HerdrLifecyclePort, type LifecycleResult, type SessionHarvestPort } from "./lifecycle.js";
 import { RunRegistry, type FollowUpExpectations, type RunLeafHandle, type RunRootHandle } from "./run-registry.js";
 import { validatePiSessionRef, materializeAndTrustSession, findTurnAnchor, harvestTurn, type TrustedMaterializedSession } from "./pi-session.js";
+import { DEFAULT_MAX_PAYLOAD_BYTES, paneSendTextRequestByteLength } from "./herdr-client.js";
 import { createTaskDelivery } from "./task-delivery.js";
 
 export type ControlClient = { getAgent(id: string): Promise<any>; sendAgentInput(id: string, text: string): Promise<any>; submitOwnedPane(id: string): Promise<any>; interruptOwnedPane(id: string): Promise<any>; closePane(id: string): Promise<any>; closeTab(id: string): Promise<any>; snapshot(): Promise<any>; dispose?(): void };
@@ -28,7 +29,8 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
   try {
    if (input.action === "steer") {
     const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot);
-    await client.sendAgentInput(leaf.paneId, literal(input.message)); await client.submitOwnedPane(leaf.paneId);
+    const message = literal(input.message); validatePaneTextPayload(leaf.paneId, message);
+    await client.sendAgentInput(leaf.paneId, message); await client.submitOwnedPane(leaf.paneId);
     return wrap(result(input.action, root, leaves));
    }
    if (input.action === "follow_up") {
@@ -37,7 +39,7 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
     const leaf = leaves[0]!; const expectations = deps.registry.getFollowUpExpectations(root.rootRunId, leaf.leafRunId);
     if (!expectations) throw failure("pi_integration_missing", "Retained leaf launch identity is unavailable.");
     const trusted = await live(client, root, leaf, true, deps.sessionRoot, expectations);
-    const turnId = randomUUID(); const delivery = createTaskDelivery(literal(input.message), turnId);
+    const turnId = randomUUID(); const delivery = createTaskDelivery(literal(input.message), turnId); validatePaneTextPayload(leaf.paneId, delivery.prompt);
     // Claim before lifecycle delivery. A second controller sees working and cannot send.
     if (!deps.registry.claimFollowUp(root.rootRunId, leaf.leafRunId, turnId, delivery.marker)) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request.");
     const life = await (deps.runLifecycle ?? runLifecycleTurn)(deps.lifecyclePort(client, leaf.paneId), deps.sessionPort(deps.sessionRoot), {
@@ -67,8 +69,9 @@ function updateFollowUp(registry: RunRegistry, rootRunId: string, leafRunId: str
  const root = registry.get(rootRunId); if (root && root.leaves.every(leaf => leaf.status !== "working" && leaf.status !== "booting" && leaf.status !== "queued")) registry.updateRoot(rootRunId, { status: life.status });
 }
 function eligible(action: NormalizedControlParams["action"]) { return (leaf: RunLeafHandle) => action === "status" ? true : action === "steer" ? leaf.status === "working" || leaf.status === "blocked" : action === "abort" ? leaf.status === "booting" || leaf.status === "working" || leaf.status === "blocked" : action === "follow_up" ? leaf.status === "succeeded" : action === "collect" ? leaf.status === "blocked" || leaf.status === "working" || leaf.status === "succeeded" : true; }
-function choose(root: RunRootHandle, input: NormalizedControlParams, predicate: (leaf: RunLeafHandle) => boolean) { const candidates = input.leafRunId ? root.leaves.filter(x => x.leafRunId === input.leafRunId && (input.action === "status" || input.action === "close" || predicate(x))) : root.leaves.filter(predicate); if (input.leafRunId && candidates.length !== 1) throw failure("unknown_or_foreign_run", "Owned leaf is missing or ineligible."); if (!input.leafRunId && candidates.length !== 1 && input.action !== "status" && input.action !== "close") throw failure("ambiguous_turn", "Control requires an explicit leaf or one eligible leaf."); return candidates; }
+function choose(root: RunRootHandle, input: NormalizedControlParams, predicate: (leaf: RunLeafHandle) => boolean) { if (input.action === "follow_up" && input.leafRunId && root.leaves.some(x => x.leafRunId === input.leafRunId && x.status === "working")) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request."); const candidates = input.leafRunId ? root.leaves.filter(x => x.leafRunId === input.leafRunId && (input.action === "status" || input.action === "close" || predicate(x))) : root.leaves.filter(predicate); if (input.leafRunId && candidates.length !== 1) throw failure("unknown_or_foreign_run", "Owned leaf is missing or ineligible."); if (!input.leafRunId && candidates.length !== 1 && input.action !== "status" && input.action !== "close") throw failure("ambiguous_turn", "Control requires an explicit leaf or one eligible leaf."); return candidates; }
 function literal(text: string) { if (!text || /[\r\n]/.test(text)) throw failure("invalid_execution_mode", "message must be non-empty and newline-free."); return text; }
+function validatePaneTextPayload(paneId: string, text: string) { if (paneSendTextRequestByteLength(paneId, text) > DEFAULT_MAX_PAYLOAD_BYTES) throw failure("task_delivery_failed", `Task delivery request exceeds ${DEFAULT_MAX_PAYLOAD_BYTES} UTF-8 bytes.`); }
 function failure(code: any, message: string) { return Object.assign(new Error(message), { code }); }
 function result(action: string, root: RunRootHandle, leaves: RunLeafHandle[]) { return { action, rootRunId: root.rootRunId, status: root.status, tabId: root.tabId, leaves: leaves.map(x => ({ leafRunId: x.leafRunId, paneId: x.paneId, status: x.status, ...(x.session ? { session: x.session } : {}) })) }; }
 function controlText(value: ControlDetails) { return value.finalOutput || `${value.action}: ${value.status}`; }

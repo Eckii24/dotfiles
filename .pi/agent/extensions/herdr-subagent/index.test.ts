@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import herdrExtension, { createHerdrSubagentRuntime, formatSubagentPrompt, HerdrSetupError, lifecyclePort, sessionPort } from "./index.js";
+import { realpathSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CapacityCoordinator } from "./capacity.js";
+import { DEFAULT_MAX_PAYLOAD_BYTES, paneSendTextRequestByteLength } from "./herdr-client.js";
+import herdrExtension, { createHerdrSubagentRuntime, expandChainTask, formatSubagentPrompt, HerdrSetupError, lifecyclePort, sessionPort } from "./index.js";
 import { ContractValidationError } from "./contracts.js";
 import { PreconditionsError } from "./preconditions.js";
 import { RunRegistry } from "./run-registry.js";
@@ -9,7 +15,7 @@ const ids = () => ({ rootRunId: "root", leafRunId: "leaf", turnId: "turn" });
 const profile = (source: "user" | "project" = "user", tools: string[] = []) => ({ name: "scout", description: "desc", systemPrompt: "SECRET PROFILE BODY", source, filePath: "/profile.md", tools });
 const preflight = async () => ({ socketPath: "/socket", workspaceId: "workspace", callerPaneId: "caller", nestingDepth: 0, protocol: 1, capabilities: {} as any, piExecutable: "/bin/pi" });
 
-function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry } = {}) {
+function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string> } = {}) {
 	const events = options.events ?? [];
 	const client = { dispose: () => events.push("dispose") } as any;
 	const launch = { executable: "/bin/pi", name: "scout", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => { events.push("ready-cleanup"); }, cleanupAfterFailure: async () => { events.push("failure-cleanup"); } };
@@ -17,12 +23,13 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 	let received: any; const receivedInputs: any[] = [];
 	const runtime = createHerdrSubagentRuntime({
 		preflight, ids, registry: options.registry,
-		discover: (() => ({ agents: [profile(options.source, options.tools)], projectAgentsDir: options.source === "project" ? "/project/agents" : null })) as any,
+		discover: (options.discover ?? (() => ({ agents: [profile(options.source, options.tools)], projectAgentsDir: options.source === "project" ? "/project/agents" : null }))) as any,
+		env: options.env,
 		createClient: () => client,
 		createCapacity: () => options.capacity ?? ({ acquireWriteLease: async () => ({}) }),
 		createLaunch: async () => launch as any,
-		createTopology: async (input: any) => { topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)); return topology; },
-		addTopologyLeaf: async ({ result, leaf }: any) => { const pane = `pane-${result.group.ownedPaneIds.size + 1}`; result.group.ownedPaneIds.add(pane); return pane; },
+		createTopology: async (input: any) => options.createTopology ? options.createTopology(input, topology) : (topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)), topology),
+		addTopologyLeaf: options.addTopologyLeaf ?? (async ({ result }: any) => { const pane = `pane-${result.group.ownedPaneIds.size + 1}`; result.group.ownedPaneIds.add(pane); return pane; }),
 		cleanupTopology: async () => { events.push("topology-cleanup"); return []; },
 		acceptLeaf: () => {},
 		runLifecycle: (async (_port: any, _sessions: any, input: any) => {
@@ -121,11 +128,31 @@ test("launched lifecycle failure and abort return structured terminal results an
 	expect(aborted.events).toEqual(["failure-cleanup", "topology-cleanup", "dispose"]);
 });
 
-test("project confirmation decline names requested profiles without launch", async () => {
-	const f = vertical({ source: "project" }); let prompt: string | undefined;
-	const projectContext = { ...context, hasUI: true, ui: { confirm: async (_title: string, body: string) => { prompt = body; return false; } } };
-	await expect(f.runtime.execute(params(), projectContext)).rejects.toMatchObject({ code: "project_agent_not_confirmed" });
-	expect(prompt).toContain("Agents: scout"); expect(prompt).not.toContain("[object Object]"); expect(f.events).toEqual([]);
+test("project confirmation rejects non-UI before client, capacity, or topology", async () => {
+	const f = vertical({ source: "project" });
+	await expect(f.runtime.execute(params(), context)).rejects.toMatchObject({ code: "project_agent_not_confirmed" });
+	expect(f.events).toEqual([]);
+});
+
+test("project confirmation aggregates distinct selected local profiles and explicit false bypasses", async () => {
+	const cwd = process.cwd(); let confirms = 0; let prompt = "";
+	const discover = (itemCwd: string) => ({ agents: [{ ...profile("project"), name: itemCwd === cwd ? "first" : "second", filePath: itemCwd === cwd ? "/one/.pi/agents/first.md" : "/two/.pi/agents/second.md" }], projectAgentsDir: "/ignored" });
+	const f = vertical({ discover });
+	const uiContext = { ...context, hasUI: true, ui: { confirm: async (_title: string, body: string) => { confirms++; prompt = body; return true; } } };
+	await f.runtime.execute({ group: "x", tasks: [{ agent: "first", task: "one" }, { agent: "second", task: "two", cwd: "/tmp" }] }, uiContext);
+	expect(confirms).toBe(1); expect(prompt).toContain("first, second"); expect(prompt).toContain("/one/.pi/agents/first.md"); expect(prompt).toContain("/two/.pi/agents/second.md");
+	const bypass = vertical({ source: "project" });
+	await expect(bypass.runtime.execute(params({ confirmProjectAgents: false }), context)).resolves.toBeDefined();
+});
+
+test("canonical item cwd selects profiles from each project and Gondolin rejects differing cwd before client", async () => {
+	const seen: string[] = []; const f = vertical({ discover: cwd => { seen.push(cwd); return { agents: [{ ...profile(), name: cwd === process.cwd() ? "first" : "second" }], projectAgentsDir: null }; } });
+	await f.runtime.execute({ group: "x", tasks: [{ agent: "first", task: "one" }, { agent: "second", task: "two", cwd: "/tmp" }] }, context);
+	expect(seen).toEqual([realpathSync(process.cwd()), realpathSync("/tmp")]);
+	const gondolin = vertical({ env: { PI_SANDBOX: "gondolin" } as NodeJS.ProcessEnv });
+	await expect(gondolin.runtime.execute({ group: "x", tasks: [{ agent: "scout", task: "one" }, { agent: "scout", task: "two", cwd: "/tmp" }] }, context)).rejects.toMatchObject({ code: "invalid_execution_mode" });
+	expect(gondolin.events).toEqual([]);
+	await expect(gondolin.runtime.execute({ group: "x", tasks: [{ agent: "scout", task: "one" }, { agent: "scout", task: "two", cwd: process.cwd() }] }, context)).resolves.toBeDefined();
 });
 
 test("parallel launches one tab's leaves concurrently in input order with independent sentinels", async () => {
@@ -150,18 +177,56 @@ test("parallel blocked returns before deferred sibling and disposes client only 
 	expect(f.runtime.registry.get("root")?.leaves.map(leaf => leaf.status)).toEqual(["blocked", "succeeded"]); expect(f.events).toContain("dispose");
 });
 
+test("parallel blocked background cleanup retains bound writer leases", async () => {
+	let releaseSibling!: () => void; const releases: any[] = []; const capacity = { acquireWriteLease: async (input: any) => ({ cwd: input.cwd, rootRunId: input.rootRunId, acquired: true }), releaseWriteLease: async (lease: any) => { releases.push(lease); } };
+	const f = vertical({ tools: ["edit"], capacity, createTopology: (input, topology) => { topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)); input.leaves.forEach((leaf: any) => topology.leases.set(leaf.leafRunId, leaf.lease)); return topology; }, lifecycle: async input => { await input.onReady(); const task = input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, ""); if (task === "block") return { status: "blocked", delivered: true, enterSent: true, state: "blocked" }; return await new Promise(resolve => { releaseSibling = () => resolve({ status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "done", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }); }); } });
+	await f.runtime.execute({ group: "parallel", allowSharedWorkspaceWrites: true, tasks: [{ agent: "scout", task: "block" }, { agent: "scout", task: "later" }] }, context);
+	releaseSibling(); await new Promise(resolve => setTimeout(resolve, 0));
+	expect(releases).toEqual([]);
+});
+
 test("chain registers every queued leaf before launch, then starts later pane after success", async () => {
 	const seen: string[] = []; let count = 0; let queued: string[] | undefined; const registry = new RunRegistry();
 	const f = vertical({ registry, lifecycle: async input => { seen.push(input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, "")); queued ??= registry.get("root")?.leaves.map(leaf => leaf.status); await input.onReady(); count++; return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: count === 1 ? "prior" : "ok", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }; } });
 	const result = await f.runtime.execute({ group: "chain", chain: [{ agent: "scout", task: "first" }, { agent: "scout", task: "{previous}:{previous}" }] }, context);
-	expect(queued).toEqual(["booting", "queued"]); expect(seen).toEqual(["first", "prior:prior"]); expect(result.details.children.map((x: any) => x.status)).toEqual(["succeeded", "succeeded"]);
+	expect(queued).toEqual(["booting", "queued"]); expect(seen).toEqual(["first", "\"prior\":\"prior\""]); expect(result.details.children.map((x: any) => x.status)).toEqual(["succeeded", "succeeded"]);
 });
 
-test("chain declared writer reacquires its cwd lease only when later pane starts", async () => {
+test("chain previous JSON expansion is one-line, reversible, and payload-validated before next delivery", async () => {
+	const prior = "line one\r\nline two \\ \" quote 😀";
+	const expanded = expandChainTask("prior={previous}", prior);
+	expect(expanded).not.toMatch(/[\r\n]/); expect(JSON.parse(expanded.slice("prior=".length))).toBe(prior);
+	const seen: string[] = []; let calls = 0;
+	const f = vertical({ lifecycle: async input => { seen.push(input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, "")); await input.onReady(); calls++; return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: calls === 1 ? "\n\\".repeat(DEFAULT_MAX_PAYLOAD_BYTES) : "unexpected", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }; } });
+	await expect(f.runtime.execute({ group: "chain", chain: [{ agent: "scout", task: "first" }, { agent: "scout", task: "{previous}" }] }, context)).rejects.toMatchObject({ code: "task_delivery_failed" });
+	expect(seen).toEqual(["first"]);
+});
+
+test("chain writer acquires only initial and later-start lease", async () => {
 	const acquired: any[] = []; const capacity = { acquireWriteLease: async (input: any) => { acquired.push(input); return { cwd: input.cwd, rootRunId: input.rootRunId, acquired: true }; }, releaseWriteLease: async () => {}, releaseGroup: async () => {} };
 	const f = vertical({ tools: ["edit"], capacity });
 	await f.runtime.execute({ group: "chain", chain: [{ agent: "scout", task: "first" }, { agent: "scout", task: "second" }] }, context);
-	expect(acquired).toHaveLength(3); expect(acquired.map(value => value.cwd)).toEqual([process.cwd(), process.cwd(), process.cwd()]);
+	expect(acquired).toHaveLength(2); expect(acquired.map(value => value.cwd)).toEqual([process.cwd(), process.cwd()]);
+});
+
+test("oversize escaped pane.send_text request fails before lifecycle delivery", async () => {
+	const marker = " [herdr:task-sentinel:v1:turn]";
+	const overhead = paneSendTextRequestByteLength("pane-1", marker);
+	const task = "\\".repeat(Math.floor((DEFAULT_MAX_PAYLOAD_BYTES - overhead) / 2) + 1);
+	const f = vertical();
+	await expect(f.runtime.execute(params({ task }), context)).rejects.toMatchObject({ code: "task_delivery_failed" });
+	expect(f.receivedInputs).toEqual([]);
+});
+
+test("later chain add failure releases provisional writer lease for immediate other-coordinator acquisition", async () => {
+	const runtimeRoot = await mkdtemp(join(tmpdir(), "pi-herdr-chain-lease-"));
+	try {
+		const snapshot = async () => ({}); const first = new CapacityCoordinator({ runtimeRoot, snapshot }); const other = new CapacityCoordinator({ runtimeRoot, snapshot });
+		const discover = (_cwd: string) => ({ agents: [{ ...profile(), name: "reader", tools: [] }, { ...profile(), name: "writer", tools: ["edit"] }], projectAgentsDir: null });
+		const f = vertical({ discover, capacity: first, addTopologyLeaf: async () => { throw new Error("add failed"); } });
+		await expect(f.runtime.execute({ group: "chain", chain: [{ agent: "reader", task: "first" }, { agent: "writer", task: "second" }] }, context)).rejects.toMatchObject({ code: "agent_start_failed" });
+		await expect(other.acquireWriteLease({ cwd: process.cwd(), rootRunId: "other", tools: ["write"] })).resolves.toMatchObject({ acquired: true });
+	} finally { await rm(runtimeRoot, { recursive: true, force: true }); }
 });
 
 test("parallel explicit shared-write override returns a warning", async () => {

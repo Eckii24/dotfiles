@@ -14,14 +14,14 @@ function basic(leaves: any[] = [{ leafRunId: "leaf", paneId: "pane", status: "wo
  return { registry, calls, runtime: createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions" }) };
 }
 
-async function retained(mutate?: (raw: any) => any | Promise<any>, waitForLifecycle?: Promise<void>) {
+async function retained(mutate?: (raw: any) => any | Promise<any>, waitForLifecycle?: Promise<void>, onLifecycleEntry?: () => void) {
  const root = await realpath(await mkdtemp(join(tmpdir(), "herdr-control-"))); const sessionPath = join(root, "session.jsonl"); await writeFile(sessionPath, '{"type":"session","version":3,"id":"session"}\n');
  const registry = new RunRegistry(); registry.register({ rootRunId: "root", workspaceId: "work", tabId: "tab", tabLabel: "tab", status: "succeeded", keepOpen: true, leaves: [{ leafRunId: "leaf", paneId: "pane", status: "succeeded", session: { source: "herdr:pi", path: sessionPath, sessionId: "session" } }] });
  registry.setFollowUpExpectations("root", "leaf", { agentName: "agent-name", sessionName: "session-name" });
  const base = () => ({ agent: { pane_id: "pane", agent_status: "done", name: "agent-name", env: { PI_HERDR_ROOT_RUN_ID: "root", PI_HERDR_LEAF_RUN_ID: "leaf" }, agent_session: { source: "herdr:pi", kind: "path", value: sessionPath, name: "session-name" } } });
  const calls: string[] = []; let lifecycleCalls = 0;
  const client: any = { getAgent: async () => mutate ? await mutate(base()) : base(), sendAgentInput: async (_: string, value: string) => calls.push(`send:${value}`), submitOwnedPane: async () => calls.push("enter"), interruptOwnedPane: async () => {}, closePane: async () => {}, closeTab: async () => {}, snapshot: async () => ({ snapshot: { panes: [] } }) };
- const runtime = createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: root, lifecyclePort: () => ({}) as any, sessionPort: () => ({}) as any, runLifecycle: (async () => { lifecycleCalls++; await waitForLifecycle; return { status: "succeeded", state: "done", delivered: true, enterSent: true, session: { source: "herdr:pi", kind: "path", root, path: sessionPath, sessionId: "session", bytes: 1 }, result: { pending: false, status: "succeeded", output: "FINAL", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" } }; }) as any });
+ const runtime = createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: root, lifecyclePort: () => ({}) as any, sessionPort: () => ({}) as any, runLifecycle: (async () => { lifecycleCalls++; onLifecycleEntry?.(); await waitForLifecycle; return { status: "succeeded", state: "done", delivered: true, enterSent: true, session: { source: "herdr:pi", kind: "path", root, path: sessionPath, sessionId: "session", bytes: 1 }, result: { pending: false, status: "succeeded", output: "FINAL", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" } }; }) as any });
  return { root, registry, calls, runtime, get lifecycleCalls() { return lifecycleCalls; } };
 }
 
@@ -72,13 +72,13 @@ test("follow_up authoritative proof negatives deliver no input", async () => {
 });
 
 test("atomic follow_up claim rejects concurrent delivery", async () => {
- let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); const f = await retained(undefined, gate);
+ let release!: () => void; let entered!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); const lifecycleEntered = new Promise<void>(resolve => { entered = resolve; }); const f = await retained(undefined, gate, entered);
  try {
   const first = f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "next" });
-  for (let turn = 0; turn < 20 && f.registry.getLeaf("root", "leaf")?.status !== "working"; turn++) await Promise.resolve();
+  await lifecycleEntered;
   await expect(f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "duplicate" })).rejects.toMatchObject({ code: "ambiguous_turn" }); expect(f.lifecycleCalls).toBe(1);
   release(); await first;
- } finally { await rm(f.root, { recursive: true, force: true }); }
+ } finally { release(); await rm(f.root, { recursive: true, force: true }); }
 });
 
 test("close re-snapshots and leaves a tab open when a foreign pane arrives", async () => {

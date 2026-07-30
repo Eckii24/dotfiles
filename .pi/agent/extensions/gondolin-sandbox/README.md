@@ -2,7 +2,9 @@
 
 Dormant unless `--sandbox` or exact `PI_SANDBOX=gondolin`. Active TUI/print/json routes built-in file and shell surfaces into one Gondolin VM per Pi process. Every sandboxed bash and `user_bash` command is rewritten guest-side by the verified RTK 0.43.0 binary before execution; host `rtk-rewrite` deliberately skips sandboxed calls. Host guardrails deliberately skip all sandboxed calls: the guest workspace is intentionally unrestricted within its mounts. RPC activation fails closed. Default host exposure: current workspace RW at `/workspace`; network deny by default; no credential mounts.
 
-Sandboxed child Pi processes inherit `PI_SANDBOX=gondolin`. Profile-restricted tools remain absent; ownership validation ignores absent routed tools but fails closed for any present routed tool owned by another extension.
+Sandboxed child Pi processes inherit `PI_SANDBOX=gondolin`. Profile-restricted tools remain absent; ownership validation ignores absent routed tools but fails closed for any present routed tool owned by another extension. Backend resolves effective policy `backend`, then `GONDOLIN_VMM`, then `qemu`; only `qemu` and `krun` are accepted. `/sandbox-status` reports resolved backend.
+
+Sandboxed `grep`, `find`, and `ls` bound output inside guest before VM transfer, report result/byte truncation, and return paths relative to requested root for later `read`. `grep` includes hidden files while respecting gitignore. `find` uses Git's ignored-file rules inside Git worktrees; outside one, bundled `find` supplies glob matching without `.gitignore` interpretation.
 
 Commands: `/sandbox-status`, `/sandbox-policy`, `/sandbox-mount-ro`, `/sandbox-mount-rw`, `/sandbox-network-allow`, `/sandbox-network-deny`. Policy writes only occur through interactive idle TUI commands; project policy requires Pi trust and full-section approval.
 

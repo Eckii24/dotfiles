@@ -67,7 +67,7 @@ test("golden parity preserves user, project, and both discovery semantics", () =
 			const both = discoverAgentProfiles(cwd, "both");
 			expect(both.agents.map(agent => agent.name).sort()).toEqual(["bare", "base", "explicit", "no-model", "project-only"]);
 			expect(both.agents.find(agent => agent.name === "base")).toMatchObject({ source: "project", description: "Project override profile" });
-			expect(projectProfilesRequiringConfirmation(both.agents, ["bare", "base", "base", "missing", "project-only"])
+			expect(projectProfilesRequiringConfirmation([both.agents.find(agent => agent.name === "base")!, both.agents.find(agent => agent.name === "base")!, both.agents.find(agent => agent.name === "project-only")!])
 				.map(agent => agent.name)).toEqual(["base", "project-only"]);
 		});
 	} finally {
@@ -92,6 +92,19 @@ test("orchestrator profile parses with exact nested tools and large model", () =
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("deduplicates selected project profiles by source and canonical file path", () => {
+	const root = mkdtempSync(join(tmpdir(), "pi-herdr-confirm-"));
+	try {
+		const target = join(root, "profile.md"); const alias = join(root, "alias.md");
+		writeFileSync(target, "profile"); symlinkSync(target, alias);
+		const selected = projectProfilesRequiringConfirmation([
+			{ name: "one", description: "one", systemPrompt: "", source: "project", filePath: target },
+			{ name: "two", description: "two", systemPrompt: "", source: "project", filePath: alias },
+		] as any);
+		expect(selected.map(agent => agent.name)).toEqual(["one"]);
+	} finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("uses nearest project agents directory and preserves Markdown symlink paths", () => {

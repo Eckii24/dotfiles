@@ -106,9 +106,20 @@ export function discoverAgentProfiles(cwd: string, scope: AgentScope): AgentProf
 	return { agents: Array.from(agents.values()), projectAgentsDir };
 }
 
-/** Returns unique requested profiles that require project-local confirmation. */
-export function projectProfilesRequiringConfirmation(agents: readonly AgentProfile[], requestedNames: Iterable<string>): AgentProfile[] {
-	return Array.from(new Set(requestedNames))
-		.map(name => agents.find(agent => agent.name === name))
-		.filter((agent): agent is AgentProfile => agent?.source === "project");
+/** Returns unique selected project profiles, identified by immutable discovery source. */
+export function projectProfilesRequiringConfirmation(selectedProfiles: Iterable<AgentProfile>): AgentProfile[] {
+	const seen = new Set<string>();
+	const projectProfiles: AgentProfile[] = [];
+	for (const profile of selectedProfiles) {
+		const identity = `${profile.source}\0${canonicalProfilePath(profile.filePath)}`;
+		if (profile.source === "project" && !seen.has(identity)) {
+			seen.add(identity);
+			projectProfiles.push(profile);
+		}
+	}
+	return projectProfiles;
+}
+
+function canonicalProfilePath(filePath: string): string {
+	try { return fs.realpathSync(filePath); } catch { return path.resolve(filePath); }
 }

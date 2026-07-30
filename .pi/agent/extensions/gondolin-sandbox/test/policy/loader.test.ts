@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fingerprintSandbox } from "../../policy/approvals";
@@ -96,7 +96,7 @@ describe("fail-closed project policy loading", () => {
       { hostPath: join(root, "absent"), guestPath: "/optional", required: false },
     ] } } }));
     expect((await loadApprovedEffectivePolicy({ globalPath, projectPath, approvalsPath: join(root, "approvals.json"), projectId: root })).mounts?.readOnly)
-      .toEqual([{ hostPath: actual, guestPath: "/actual", required: true }]);
+      .toEqual([{ hostPath: await realpath(actual), guestPath: "/actual", required: true }]);
     await writeFile(globalPath, JSON.stringify({ sandbox: { mounts: { readOnly: [
       { hostPath: join(root, "absent"), guestPath: "/required", required: true },
     ] } } }));

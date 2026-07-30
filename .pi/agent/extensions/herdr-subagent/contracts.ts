@@ -19,7 +19,7 @@ export const ERROR_CODES = [
 	"invalid_group", "tab_capacity_exceeded", "pane_capacity_exceeded", "nesting_depth_exceeded", "shared_workspace_write_conflict",
 	"tab_create_failed", "agent_start_failed", "child_boot_timeout", "task_delivery_failed", "task_anchor_missing", "child_blocked",
 	"turn_timeout", "pane_lost", "session_reference_missing", "session_path_untrusted", "session_parse_failed", "ambiguous_turn",
-	"empty_final_output", "result_unavailable", "child_model_error", "child_aborted", "cleanup_incomplete", "unknown_or_foreign_run",
+	"empty_final_output", "result_unavailable", "child_model_error", "child_aborted", "cleanup_incomplete", "unknown_or_foreign_run", "sandbox_cwd_restricted",
 ] as const;
 
 const Strict = { additionalProperties: false } as const;

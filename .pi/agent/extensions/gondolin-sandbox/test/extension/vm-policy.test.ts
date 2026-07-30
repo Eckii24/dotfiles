@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildVmOptions, SSH_UNSUPPORTED_DIAGNOSTIC } from "../../index.ts";
+import { buildVmOptions, resolveBackend, SSH_UNSUPPORTED_DIAGNOSTIC } from "../../index.ts";
 
 const policy = {
   image: "registry.example/pi-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -35,6 +35,13 @@ test("workspace none omits the host cwd and workspace rw uses a writable provide
 
   const writable = buildVmOptions({ workspace: { mode: "rw" } }, "/host/repo", "image", "qemu");
   assert.ok(writable.vfs?.mounts?.["/workspace"]);
+});
+
+test("backend resolution prefers effective policy, then injection, then qemu and validates values", () => {
+  assert.equal(resolveBackend({ backend: "krun" }, { GONDOLIN_VMM: "qemu" }), "krun");
+  assert.equal(resolveBackend({}, { GONDOLIN_VMM: "krun" }), "krun");
+  assert.equal(resolveBackend({}, {}), "qemu");
+  assert.throws(() => resolveBackend({}, { GONDOLIN_VMM: "bad" }), /backend must be qemu or krun/);
 });
 
 test("ssh.enabled fails closed without a verified keyless mediation configuration", () => {

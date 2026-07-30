@@ -7,8 +7,19 @@ export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 export const DEFAULT_MAX_FRAME_BYTES = 1_048_576;
 export const DEFAULT_MAX_PAYLOAD_BYTES = 65_536;
+/** UUID-length stand-in used before Herdr assigns its request ID. */
+export const PAYLOAD_SIZE_REQUEST_ID = "00000000-0000-4000-8000-000000000000";
 
 type JsonObject = Record<string, unknown>;
+
+/** Exact UTF-8 wire encoding, including JSON envelope and newline. */
+export function encodeHerdrRequest(id: string, method: string, params: JsonObject): Buffer {
+	return Buffer.from(JSON.stringify({ id, method, params }) + "\n");
+}
+/** Exact pane.send_text request size using a production UUID-sized request ID. */
+export function paneSendTextRequestByteLength(paneId: string, text: string): number {
+	return encodeHerdrRequest(PAYLOAD_SIZE_REQUEST_ID, "pane.send_text", { pane_id: paneId, text }).length;
+}
 export type HerdrEvent = { event: string; data: unknown };
 export type HerdrResult = JsonObject;
 export type HerdrSubscription = JsonObject;
@@ -181,7 +192,7 @@ export class HerdrClient {
 	}
 	private async request(method: string, params: JsonObject, options: RequestOptions): Promise<HerdrResult> {
 		if (options.signal?.aborted) throw new HerdrClientError("aborted", "Herdr request aborted");
-		const id = randomUUID(); const encoded = Buffer.from(JSON.stringify({ id, method, params }) + "\n");
+		const id = randomUUID(); const encoded = encodeHerdrRequest(id, method, params);
 		if (encoded.length > this.maxPayloadBytes) throw new HerdrClientError("payload_too_large", "Herdr request exceeds payload limit");
 		await this.connect(options);
 		if (this.disposed) throw new HerdrClientError("disposed", "Herdr client disposed");

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mutatePolicy } from "../../policy/handlers";
@@ -36,7 +36,7 @@ describe("pure policy mutation handlers", () => {
       theme: "dark",
       sandbox: {
         network: { allow: [], deny: [] },
-        mounts: { readOnly: [{ hostPath: hostDir, guestPath: "/guest/docs", required: false }] },
+        mounts: { readOnly: [{ hostPath: await realpath(hostDir), guestPath: "/guest/docs", required: false }] },
       },
     });
 
