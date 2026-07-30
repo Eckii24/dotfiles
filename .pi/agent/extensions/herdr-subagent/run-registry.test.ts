@@ -69,6 +69,13 @@ test("atomic follow-up claim permits one caller and terminal marker clearing pre
 	expect(registry.getLeaf(rootId, leafId)).toMatchObject({ status: "succeeded", activeTurnId: undefined, activeMarker: undefined });
 });
 
+test("trusted terminal leaf result survives sibling background completion and root recomputes", () => {
+	const registry = new RunRegistry(); registry.register(root({ status: "blocked", leaves: [{ leafRunId: leafId, paneId: "pane-1", status: "blocked" }, { leafRunId: "sibling", paneId: "pane-2", status: "working" }] }));
+	registry.updateLeaf(rootId, "sibling", { status: "succeeded", activeTurnId: undefined, activeMarker: undefined, terminal: { status: "succeeded", output: "sibling final", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" } });
+	expect(registry.recomputeRoot(rootId)).toMatchObject({ status: "blocked" });
+	expect(registry.getLeaf(rootId, "sibling")?.terminal).toMatchObject({ output: "sibling final", finalEntryId: "final" });
+});
+
 test("retained handles remain controllable; successful close removes local authority", () => {
 	const registry = new RunRegistry(); registry.register(root({ status: "succeeded", keepOpen: true }));
 	expect(registry.resolveControl(rootId, rootId, leafId).ok).toBe(true);

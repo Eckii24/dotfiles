@@ -31,7 +31,7 @@ const ErrorCodeSchema = StringEnum(ERROR_CODES);
 
 export const HerdrSubagentItemSchema = Type.Object({
 	name: Type.Optional(Type.String()),
-	agent: Type.String({ description: "Agent profile name. Profiles declaring edit or write are writers." }),
+	agent: Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." }),
 	task: Type.String(),
 	cwd: Type.Optional(Type.String({ description: "Existing working directory. Parallel writers require distinct canonical cwd values." })),
 }, Strict);
@@ -39,10 +39,10 @@ export const HerdrSubagentItemSchema = Type.Object({
 /** Strict wire schema; cross-field mode rules are enforced by normalizeSubagentParams. */
 export const HerdrSubagentParamsSchema = Type.Object({
 	group: Type.String(),
-	agent: Type.Optional(Type.String()),
+	agent: Type.Optional(Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." })),
 	task: Type.Optional(Type.String()),
 	cwd: Type.Optional(Type.String()),
-	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every declared writer a distinct canonical cwd." })),
+	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every default-tool or declared writer a distinct canonical cwd." })),
 	chain: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Sequential panes; use for multiple writers sharing one cwd." })),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(Type.Boolean()),
@@ -140,7 +140,8 @@ export type NormalizedSubagentParams = {
 };
 export type NormalizedControlParams =
 	| { action: "status"; rootRunId: string; leafRunId?: string }
-	| { action: "steer" | "follow_up"; rootRunId: string; leafRunId?: string; message: string }
+	| { action: "steer"; rootRunId: string; leafRunId?: string; message: string }
+	| { action: "follow_up"; rootRunId: string; leafRunId?: string; message: string; timeoutSeconds?: number }
 	| { action: "collect"; rootRunId: string; leafRunId?: string; timeoutSeconds?: number; closeAfterCollect?: boolean }
 	| { action: "abort"; rootRunId: string; leafRunId?: string; timeoutSeconds?: number }
 	| { action: "close"; rootRunId: string; leafRunId?: string };
@@ -259,9 +260,13 @@ export function normalizeControlParams(raw: unknown): NormalizedControlParams {
 		if (message || timeoutSeconds !== undefined || closeAfterCollect !== undefined) invalid("invalid_execution_mode", "status accepts rootRunId and optional leafRunId only");
 		return { action, rootRunId, ...(leafRunId ? { leafRunId } : {}) };
 	}
-	if (action === "steer" || action === "follow_up") {
-		if (!message || timeoutSeconds !== undefined || closeAfterCollect !== undefined) invalid("invalid_execution_mode", `${action} requires message and accepts optional leafRunId only`);
+	if (action === "steer") {
+		if (!message || timeoutSeconds !== undefined || closeAfterCollect !== undefined) invalid("invalid_execution_mode", "steer requires message and accepts optional leafRunId only");
 		return { action, rootRunId, ...(leafRunId ? { leafRunId } : {}), message };
+	}
+	if (action === "follow_up") {
+		if (!message || closeAfterCollect !== undefined) invalid("invalid_execution_mode", "follow_up requires message and accepts optional leafRunId and timeoutSeconds");
+		return { action, rootRunId, ...(leafRunId ? { leafRunId } : {}), message, ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }) };
 	}
 	if (action === "collect") {
 		if (message) invalid("invalid_execution_mode", "collect does not accept message");

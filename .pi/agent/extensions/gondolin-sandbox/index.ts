@@ -241,14 +241,17 @@ export async function executeGuestRead(
 ): Promise<ToolResult> {
   const start = Math.max(1, Math.floor(params.offset ?? 1));
   const requested = Math.max(0, Math.floor(params.limit ?? DEFAULT_MAX_LINES));
-  const guestLines = Math.min(requested, DEFAULT_MAX_LINES) + 1;
+  // Pi reads text via split("\n"): empty files and a final newline each retain
+  // one empty line. Emit selected records without an artificial final newline.
   const script = [
-    `total=$(/usr/bin/awk 'END { print NR }' "$1") || exit $?`,
+    `max=$4; err=$(mktemp) || exit 1; exec 3>&2 2>"$err"; finish() { status=$?; [ "$status" -eq 0 ] || /usr/bin/head -c "$max" "$err" >&3; rm -f "$err"; trap - EXIT; exit "$status"; }; trap finish EXIT`,
+    `[ -f "$1" ] && [ -r "$1" ] || { printf 'read failed: cannot read: %s\\n' "$1" >&2; exit 2; }; total=$(( $(/usr/bin/wc -l < "$1") + 1 )) || exit $?`,
     `printf '%s\\n' "$total"`,
-    `/usr/bin/tail -n +"$2" -- "$1" | /usr/bin/head -n "$3" | /usr/bin/head -c "$4"`,
+    `/usr/bin/awk -v start="$2" -v count="$3" -v total="$total" 'BEGIN { ORS=""; emitted=0 } NR >= start && emitted < count { if (emitted) printf "\\n"; printf "%s", $0; emitted++ } END { virtual=NR+1; if (total == virtual && start <= virtual && start + emitted <= virtual && emitted < count) { if (emitted) printf "\\n"; emitted++ } }' "$1" | /usr/bin/head -c "$((max - 128))"`,
+
   ].join("; ");
   const result = await vm.exec([
-    "/bin/bash", "-lc", script, "read-bounded", guestPath, String(start), String(guestLines), String(DEFAULT_MAX_BYTES + 1),
+    "/bin/bash", "-lc", script, "read-bounded", guestPath, String(start), String(Math.min(requested, DEFAULT_MAX_LINES)), String(DEFAULT_MAX_BYTES),
   ], { signal });
   if (!result.ok) throw new Error(result.stderr || `read failed (${result.exitCode})`);
   const source = result.stdoutBuffer ? Buffer.from(result.stdoutBuffer).toString("utf8") : String(result.stdout ?? "");
@@ -256,7 +259,7 @@ export async function executeGuestRead(
   if (metadataEnd < 0) throw new Error("read failed: missing guest metadata");
   const totalLines = Number.parseInt(source.slice(0, metadataEnd), 10);
   if (!Number.isSafeInteger(totalLines)) throw new Error("read failed: invalid guest metadata");
-  if (start > totalLines && totalLines > 0) throw new Error(`Offset ${params.offset} is beyond end of file (${totalLines} lines total)`);
+  if (start > totalLines) throw new Error(`Offset ${params.offset} is beyond end of file (${totalLines} lines total)`);
   const selected = source.slice(metadataEnd + 1);
   const truncation = truncateHead(selected);
   let output = truncation.firstLineExceedsLimit
@@ -265,8 +268,8 @@ export async function executeGuestRead(
   if (truncation.truncated) {
     const next = start + truncation.outputLines;
     output += `\n\n[Showing lines ${start}-${next - 1} of ${totalLines}. Use offset=${next} to continue.]`;
-  } else {
-    const shown = Math.min(requested, truncation.outputLines);
+  } else if (requested !== undefined) {
+    const shown = Math.min(requested, totalLines - start + 1);
     const end = start - 1 + shown;
     if (end < totalLines) output += `\n\n[${totalLines - end} more lines in file. Use offset=${end + 1} to continue.]`;
   }
@@ -358,7 +361,7 @@ function renderGuestSearch(stdout: unknown, empty: string, noun: string, limit: 
   if (meta.resultLimited) notices.push(`${limit} ${noun} limit reached. Use limit=${limit * 2} for more`);
   if (meta.byteLimited) notices.push(`${SEARCH_MAX_BYTES / 1024}KB limit reached. Refine search`);
   if (notices.length) output += `\n\n[${notices.join(". ")}]`;
-  return text(output, notices.length ? { resultLimitReached: meta.resultLimited ? limit : undefined, truncation: meta.byteLimited ? { truncated: true, maxBytes: SEARCH_MAX_BYTES } : undefined } : undefined);
+  return text(output, notices.length ? { matchLimitReached: meta.resultLimited ? limit : undefined, resultLimitReached: meta.resultLimited ? limit : undefined, truncation: meta.byteLimited ? { truncated: true, maxBytes: SEARCH_MAX_BYTES } : undefined } : undefined);
 }
 
 /** Guest emits at most limit records and SEARCH_MAX_BYTES before stdout crosses VM boundary. */
@@ -366,53 +369,73 @@ export async function executeGuestSearch(
   vm: VmLike, args: string[], signal: AbortSignal | undefined, empty: string, noun: string, limit: number,
 ): Promise<ToolResult> {
   const result = await vm.exec(args, { signal });
-  if (!result.ok) throw new Error(result.stderr || `search failed (${result.exitCode})`);
-  return renderGuestSearch(result.stdoutBuffer ? Buffer.from(result.stdoutBuffer).toString("utf8") : result.stdout, empty, noun, limit);
+  const stdout = result.stdoutBuffer ? Buffer.from(result.stdoutBuffer).toString("utf8") : String(result.stdout ?? "");
+  const stderr = String(result.stderr ?? "");
+  if (Buffer.byteLength(stdout) > SEARCH_MAX_BYTES || Buffer.byteLength(stderr) > SEARCH_MAX_BYTES) {
+    throw new Error("search failed: guest output exceeded limit");
+  }
+  if (!result.ok) throw new Error(stderr || `search failed (${result.exitCode})`);
+  return renderGuestSearch(stdout, empty, noun, limit);
 }
 
-const GUEST_GREP = `
-root=$1 pattern=$2 limit=$3 max=$4 ignore=$5 literal=$6 context=$7 glob=$8
-max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
-out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+export const GUEST_GREP = `
+root=$1 pattern=$2 limit=$3 stderr_max=$4 ignore=$5 literal=$6 context=$7 glob=$8
+err=$(mktemp) || exit 1; out=$(mktemp) || exit 1; exec 3>&2 2>"$err"
+finish() { status=$?; [ "$status" -eq 0 ] || /usr/bin/head -c "$stderr_max" "$err" >&3; rm -f "$err" "$out"; trap - EXIT; exit "$status"; }; trap finish EXIT
+max=$((stderr_max - 256)); line_cap=${DEFAULT_MAX_LINES}; shown=0; matches=0; bytes=0; limited=0; byte_limited=0; lines_truncated=0
 fail() { printf '%s\\n' "$1" >&2; exit 2; }
-emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
+emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; bytes=$((bytes + size)); }
+short() { line=$1; if [ "\${#line}" -gt 500 ]; then lines_truncated=1; printf '%s...' "\${line:0:500}"; else printf '%s' "$line"; fi; }
 if [ -f "$root" ]; then cd "$(dirname "$root")" || fail "grep failed: invalid path: $root"; target=$(basename "$root");
 elif [ -d "$root" ]; then cd "$root" || fail "grep failed: invalid path: $root"; target=.
 else fail "grep failed: invalid path: $root"; fi
-# Text protocol cannot represent newline-bearing paths. Detect before rg emits text records.
-/usr/bin/find "$target" -print0 > /dev/null || fail "grep failed while scanning path names"
 while IFS= read -r -d '' name; do [[ "$name" == *$'\\n'* ]] && fail "grep failed: newline-bearing path is unsupported"; done < <(/usr/bin/find "$target" -print0)
-args=(/usr/bin/rg --line-number --color=never --hidden)
-[ "$ignore" = 1 ] && args+=(--ignore-case); [ "$literal" = 1 ] && args+=(--fixed-strings)
-[ "$context" -gt 0 ] && args+=(--context "$context"); [ -n "$glob" ] && args+=(--glob "$glob")
-"\${args[@]}" --files-with-matches -- "$pattern" "$target" > /dev/null; status=$?
-[ "$status" -eq 1 ] || [ "$status" -eq 0 ] || exit "$status"
-while IFS= read -r line; do emit "\${line#./}" || break; done < <("\${args[@]}" -- "$pattern" "$target")
+args=(/usr/bin/rg --null --with-filename --line-number --no-heading --color=never --hidden)
+[ "$ignore" = 1 ] && args+=(--ignore-case); [ "$literal" = 1 ] && args+=(--fixed-strings); [ -n "$glob" ] && args+=(--glob "$glob")
+"\${args[@]}" --files-with-matches -- "$pattern" "$target" >/dev/null; status=$?; [ "$status" -eq 0 ] || [ "$status" -eq 1 ] || exit "$status"
+while IFS= read -r -d '' file && IFS= read -r record; do
+  [[ "$file" == *$'\\n'* ]] && fail "grep failed: newline-bearing path is unsupported"
+  [[ "$record" =~ ^([0-9]+):(.*)$ ]] || fail "grep failed: malformed result record"
+  line_no=\${BASH_REMATCH[1]}
+  matches=$((matches + 1)); if [ "$matches" -gt "$limit" ] || [ "$matches" -gt "$line_cap" ]; then limited=1; break; fi
+  start=$((line_no - context)); [ "$start" -lt 1 ] && start=1; end=$((line_no + context)); first=1
+  while IFS= read -r source_line || [ -n "$source_line" ]; do
+    current=$((start + first - 1)); prefix="\${file#./}:$current:"; [ "$current" -eq "$line_no" ] || prefix="\${file#./}-$current-"
+    emit "$prefix$(short "$source_line")" || break 2; first=$((first + 1))
+  done < <(/usr/bin/sed -n "\${start},\${end}p" -- "$file")
+  shown=$matches
+done < <("\${args[@]}" -- "$pattern" "$target")
 printf '${SEARCH_META}\\t%s\\t%s\\t%s\\n' "$shown" "$limited" "$byte_limited"; cat "$out"
 `;
 
-const GUEST_FIND = `
-root=$1 pattern=$2 limit=$3 max=$4
-max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
-out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+export const GUEST_FIND = `
+root=$1 pattern=$2 limit=$3 stderr_max=$4
+err=$(mktemp) || exit 1; out=$(mktemp) || exit 1; exec 3>&2 2>"$err"
+finish() { status=$?; [ "$status" -eq 0 ] || /usr/bin/head -c "$stderr_max" "$err" >&3; rm -f "$err" "$out"; trap - EXIT; exit "$status"; }; trap finish EXIT
+max=$((stderr_max - 256)); line_cap=${DEFAULT_MAX_LINES}; shown=0; bytes=0; limited=0; byte_limited=0
 fail() { printf '%s\\n' "$1" >&2; exit 2; }
 emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
+glob_match() { local value=$1 glob=$2 segment rest; if [[ "$glob" == \*\*/* ]]; then rest=\${glob#**/}; glob_match "$value" "$rest" && return; [[ "$value" == */* ]] && glob_match "\${value#*/}" "$glob" && return; return 1; fi; if [[ "$glob" != */* ]]; then [[ "\${value##*/}" == $glob ]]; return; fi; segment=\${glob%%/*}; rest=\${glob#*/}; [[ "$value" == */* ]] || return 1; [[ "\${value%%/*}" == $segment ]] && glob_match "\${value#*/}" "$rest"; }
 [ -d "$root" ] || fail "find failed: not a directory: $root"
 if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  (cd "$root" && git ls-files -co --exclude-standard -z -- .) > /dev/null || fail "find failed while listing git files"
+  (cd "$root" && git ls-files -co --exclude-standard -z -- .) >/dev/null || fail "find failed while listing git files"
   candidates() { cd "$root" && git ls-files -co --exclude-standard -z -- .; }
 else
-  (cd "$root" && /usr/bin/find . -type f -printf '%P\\0') > /dev/null || fail "find failed while listing files"
+  (cd "$root" && /usr/bin/find . -type f -printf '%P\\0') >/dev/null || fail "find failed while listing files"
   candidates() { cd "$root" && /usr/bin/find . -type f -printf '%P\\0'; }
 fi
-while IFS= read -r -d '' line; do [[ "$line" == *$'\\n'* ]] && fail "find failed: newline-bearing path is unsupported"; if [[ "$line" == $pattern ]]; then emit "$line" || break; fi; done < <(candidates)
+while IFS= read -r -d '' line; do
+  [[ "$line" == *$'\\n'* ]] && fail "find failed: newline-bearing path is unsupported"
+  if glob_match "$line" "$pattern"; then emit "$line" || break; fi
+done < <(candidates)
 printf '${SEARCH_META}\\t%s\\t%s\\t%s\\n' "$shown" "$limited" "$byte_limited"; cat "$out"
 `;
 
 const GUEST_LS = `
-root=$1 limit=$2 max=$3
-max=$((max - 128)); line_cap=${DEFAULT_MAX_LINES}
-out=$(mktemp); trap 'rm -f "$out"' EXIT; shown=0; bytes=0; limited=0; byte_limited=0
+root=$1 limit=$2 stderr_max=$3
+err=$(mktemp) || exit 1; out=$(mktemp) || exit 1; exec 3>&2 2>"$err"
+finish() { status=$?; [ "$status" -eq 0 ] || /usr/bin/head -c "$stderr_max" "$err" >&3; rm -f "$err" "$out"; trap - EXIT; exit "$status"; }; trap finish EXIT
+max=$((stderr_max - 256)); line_cap=${DEFAULT_MAX_LINES}; shown=0; bytes=0; limited=0; byte_limited=0
 fail() { printf '%s\\n' "$1" >&2; exit 2; }
 emit() { line=$1; size=$(printf '%s\\n' "$line" | wc -c); if [ $shown -ge "$limit" ] || [ $shown -ge "$line_cap" ]; then limited=1; return 1; fi; if [ $((bytes + size)) -gt "$max" ]; then byte_limited=1; return 1; fi; printf '%s\\n' "$line" >> "$out"; shown=$((shown + 1)); bytes=$((bytes + size)); }
 [ -d "$root" ] || fail "ls failed: not a directory: $root"

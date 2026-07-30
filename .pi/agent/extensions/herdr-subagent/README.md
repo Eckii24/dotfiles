@@ -151,7 +151,7 @@ Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
 |---|---:|---|
 | `name` | ja | Auswahlname im Tool-Aufruf |
 | `description` | ja | Wird dem aufrufenden Modell im Prompt angezeigt |
-| `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben |
+| `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben; ohne Feld nutzt Pi seine mutation-fähigen Default-Tools |
 | `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert |
 | Markdown-Body | nein | temporär als Datei geschrieben und via `--append-system-prompt <datei>` angehängt |
 
@@ -159,7 +159,7 @@ Ungültige/unlesbare Profile werden bei Discovery verworfen. Jedes Item entdeckt
 
 Temporäre Prompt-Dateien liegen in einem neuen `0700`-Runtime-Unterordner, werden exklusiv als `0600` erzeugt und nach stabiler Child-Bereitschaft oder Startfehler gelöscht.
 
-> `tools: [edit, write]` ist nur eine deklarative Writer-Klassifikation für Leases. Es ist kein Sandbox-Nachweis und beweist nicht, dass ein Profil tatsächlich schreibt.
+> Profile ohne `tools` nutzen Pi-Defaults und werden konservativ als Writer klassifiziert. Explizite `edit`-, `write`- oder `bash`-Deklarationen sind ebenfalls Writer; Bash darf schreiben. Dies ist kein Sandbox-Nachweis.
 
 ## Aufrufkonfiguration
 
@@ -376,7 +376,7 @@ type Control = {
   rootRunId: string;
   leafRunId?: string;
   message?: string;             // für steer/follow_up, nicht leer, ohne CR/LF
-  timeoutSeconds?: number;      // collect/abort, 1..86400
+  timeoutSeconds?: number;      // follow_up/collect/abort, 1..86400
   closeAfterCollect?: boolean;  // nur collect
 };
 ```
@@ -385,7 +385,7 @@ type Control = {
 |---|---|---|
 | `status` | alle | lokaler Registry-Status, keine Live-Operation |
 | `steer` | `working` oder `blocked` | literal Text + festes Enter an eigene Pane |
-| `follow_up` | erfolgreicher retained Leaf | neuer korrelierter nativer Pi-Turn |
+| `follow_up` | erfolgreicher retained Leaf | neuer korrelierter nativer Pi-Turn, optionaler Timeout |
 | `collect` | `blocked`, `working`, `succeeded` | vorhandenen aktiven Turn sicher ernten |
 | `abort` | `booting`, `working`, `blocked` | festes Ctrl-C-Kandidaten-Signal, dann schließen |
 | `close` | eigene Leafs | eigene Pane schließen, Tab nur ohne fremde Pane |
@@ -396,14 +396,14 @@ Beispiele:
 
 ```json
 {"action":"status","rootRunId":"<root>"}
-{"action":"follow_up","rootRunId":"<root>","leafRunId":"<leaf>","message":"Fasse Ergebnis zusammen."}
+{"action":"follow_up","rootRunId":"<root>","leafRunId":"<leaf>","message":"Fasse Ergebnis zusammen.","timeoutSeconds":300}
 {"action":"collect","rootRunId":"<root>","leafRunId":"<leaf>","closeAfterCollect":true}
 {"action":"close","rootRunId":"<root>"}
 ```
 
 `follow_up` verlangt zusätzlich: ursprünglicher lokal registrierter Run mit `keepOpen: true`, Leaf `succeeded`, aktiver adressierbarer Herdr-Agent mit exakt registrierter Pane-ID und Zustand `idle`/`done`. Herdr-gelieferte Root-/Leaf-Metadaten sowie Agent-/Session-Namen müssen, falls vorhanden, exakt zum Launch passen. `agent_session.source` muss `herdr:pi` sein; vertrauenswürdiger Pfad und Session-ID müssen unverändert bleiben. Fehlende oder abweichende Evidenz liefert nichts aus. Ein atomarer Registry-Claim verhindert zwei parallele Follow-ups; nach nativem Final darf derselbe Leaf erneut folgen.
 
-Bei mehreren eligible Leafs `leafRunId` explizit setzen; eine angezeigte Handle-Auswahl stets übernehmen. Bei `blocked`: Frage/Permission sichtbar in der eigenen Child-Pane lösen, anschließend `collect`; bis Erfolg ist kein Follow-up möglich. Danach retained Panes mit `close` freigeben. `steer` kann Text senden, ist aber kein Beweis, dass eine interaktive Blockierung korrekt aufgelöst wurde.
+Bei mehreren eligible Leafs `leafRunId` explizit setzen; eine angezeigte Handle-Auswahl stets übernehmen. Bei `blocked`: Frage/Permission sichtbar in der eigenen Child-Pane lösen, anschließend genau ein begrenztes `collect`; bis Erfolg ist kein Follow-up möglich. Nie Fragebogen, wiederholtes `status` oder Bash-`sleep`-Polling verwenden; `status` ist nur lokaler Snapshot, Child-Prompts nie automatisch bestätigen. Danach retained Panes mit `close` freigeben. `steer` kann Text senden, ist aber kein Beweis, dass eine interaktive Blockierung korrekt aufgelöst wurde.
 
 `abort` wartet höchstens eine Sekunde (auch bei höherem Parameterwert) und meldet immer `abortCandidateSent: true`, `gracefulAbortProven: false`. Es darf nie als nachgewiesen sanfter Pi-Abbruch interpretiert werden.
 
@@ -434,7 +434,7 @@ flowchart LR
 | TOCTOU-Schutz | Datei zunächst muss fehlen; non-symlink/current-user regular file; `lstat`/offener FD/Inode/Realpath vor Lesen erneut verglichen |
 | Parser-Grenzen | höchstens 4 MiB Session, 256 KiB pro JSONL-Zeile, v3-Header und wohlgeformte Entries |
 | Ergebnis-Korrelation | Sentinel genau einmal als User-Terminal-Suffix; finaler Assistant muss Nachfahre sein; interleavte Inputs werden abgelehnt |
-| Schreibschutz | kanonische CWD-Leases für deklarierte `edit`/`write`-Profile; expliziter unsicherer Override mit Warnung |
+| Schreibschutz | kanonische CWD-Leases für Profile mit Pi-Default-Tools oder deklariertem `edit`/`write`/`bash`; expliziter unsicherer Override mit Warnung |
 | Ressourcenbegrenzung | höchstens 3 Tabs/Workspace, 4 Panes/Group, Nesting-Tiefe 3, Timeouts |
 | Cleanup | nur nachgewiesen eigene Pane; Tab bleibt bei fremder/unklarer Ownership offen |
 
@@ -473,7 +473,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 - Kein Ergebnis aus `idle`/`done` ohne korrelierte native Pi-JSONL.
 - Kein automatisches Neusenden einer Task nach verzögertem Flush/Ereignisverlust.
 - Kein mehrzeiliger `task` oder `message`: Protokoll akzeptiert nur newline-freien literal Text.
-- Keine Garantie, dass deklarierte Nicht-Writer nicht schreiben oder deklarierte Writer tatsächlich schreiben; Klassifikation ist Koordinationshilfe, keine Sandbox.
+- Keine Garantie, dass als Nicht-Writer klassifizierte Profile nicht schreiben oder Writer tatsächlich schreiben; Klassifikation ist Koordinationshilfe, keine Sandbox.
 - Kein belegter graceful abort; Ctrl-C ist nur Kandidat.
 
 ## Fehlerbehebung

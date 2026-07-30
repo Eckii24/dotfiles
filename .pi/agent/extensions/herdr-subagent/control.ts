@@ -9,7 +9,7 @@ import { createTaskDelivery } from "./task-delivery.js";
 
 export type ControlClient = { getAgent(id: string): Promise<any>; sendAgentInput(id: string, text: string): Promise<any>; submitOwnedPane(id: string): Promise<any>; interruptOwnedPane(id: string): Promise<any>; closePane(id: string): Promise<any>; closeTab(id: string): Promise<any>; snapshot(): Promise<any>; dispose?(): void };
 export type ControlDeps = {
- registry: RunRegistry; createClient: (socketPath: string) => ControlClient; preflight: () => Promise<{ socketPath: string }>; sessionRoot: string; now?: () => number;
+ registry: RunRegistry; createClient: (socketPath: string) => ControlClient; preflight: () => Promise<{ socketPath: string }>; sessionRoot: string; now?: () => number; sleeper?: { sleep(ms: number, signal?: AbortSignal): Promise<void> };
  runLifecycle?: typeof runLifecycleTurn; lifecyclePort?: (client: ControlClient, paneId: string) => HerdrLifecyclePort; sessionPort?: (root: string) => SessionHarvestPort;
 };
 type State = "idle" | "working" | "blocked" | "done" | "unknown";
@@ -19,7 +19,7 @@ type ControlDetails = Record<string, any>;
 export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
  const now = deps.now ?? Date.now;
  const wrap = (value: ControlDetails): AgentToolResult<ControlDetails> => ({ content: [{ type: "text", text: controlText(value) }], details: value });
- return { async execute(raw: unknown): Promise<AgentToolResult<ControlDetails>> {
+ return { async execute(raw: unknown, signal?: AbortSignal, onUpdate?: (value: AgentToolResult<ControlDetails>) => void): Promise<AgentToolResult<ControlDetails>> {
   const input = normalizeControlParams(raw); const resolved = deps.registry.resolveControl(input.rootRunId, input.rootRunId, input.leafRunId);
   if (!resolved.ok) throw Object.assign(new Error(resolved.error.message), resolved.error);
   const root = resolved.root; const leaves = choose(root, input, eligible(input.action));
@@ -43,13 +43,13 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
     // Claim before lifecycle delivery. A second controller sees working and cannot send.
     if (!deps.registry.claimFollowUp(root.rootRunId, leaf.leafRunId, turnId, delivery.marker)) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request.");
     const life = await (deps.runLifecycle ?? runLifecycleTurn)(deps.lifecyclePort(client, leaf.paneId), deps.sessionPort(deps.sessionRoot), {
-     agentId: leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId, timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, clock: { now }, sleeper: { sleep: async ms => await new Promise(resolve => setTimeout(resolve, ms)) }, retainedDone: trusted,
+     agentId: leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId, timeoutMs: (input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000, clock: { now }, sleeper: { sleep: ms => delay(ms, signal) }, retainedDone: trusted, signal,
     });
-    updateFollowUp(deps.registry, root.rootRunId, leaf.leafRunId, life);
+    updateFollowUp(deps.registry, root.rootRunId, leaf.leafRunId, turnId, delivery.marker, life);
     const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!;
     return wrap({ ...result(input.action, updatedRoot, [updated]), turnId, state: life.state, ...(life.result && !life.result.pending ? { finalOutput: life.result.output, stopReason: life.result.stopReason } : {}), ...(life.reason ? { reason: life.reason } : {}) });
    }
-   if (input.action === "collect") return wrap(await collect(client, deps, root, leaves, input));
+   if (input.action === "collect") return wrap(await collect(client, deps, root, leaves, input, signal, onUpdate));
    if (input.action === "abort") {
     const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot); await client.interruptOwnedPane(leaf.paneId);
     await new Promise(resolve => setTimeout(resolve, Math.min((input.timeoutSeconds ?? 1) * 1000, 1000)));
@@ -57,24 +57,40 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
     return wrap({ ...result(input.action, root, [leaf]), abortCandidateSent: true, gracefulAbortProven: false, warnings });
    }
    const warnings = await closeOwned(client, deps.registry, root, leaves);
-   return wrap({ ...result(input.action, root, leaves), warnings });
+   return wrap({ ...result(input.action, root, leaves), priorStatus: root.status, warnings });
   } finally { client.dispose?.(); }
  }};
 }
 
-function updateFollowUp(registry: RunRegistry, rootRunId: string, leafRunId: string, life: LifecycleResult) {
- const patch: any = { status: life.status, activeTurnId: undefined, activeMarker: undefined };
- if (life.result && !life.result.pending && life.session) patch.session = { source: "herdr:pi", path: life.session.path, sessionId: life.result.sessionId, anchorEntryId: life.result.anchorEntryId, finalEntryId: life.result.finalEntryId };
- registry.updateLeaf(rootRunId, leafRunId, patch);
- const root = registry.get(rootRunId); if (root && root.leaves.every(leaf => leaf.status !== "working" && leaf.status !== "booting" && leaf.status !== "queued")) registry.updateRoot(rootRunId, { status: life.status });
+function updateFollowUp(registry: RunRegistry, rootRunId: string, leafRunId: string, turnId: string, marker: string, life: LifecycleResult) {
+ const retainTurn = life.status === "blocked" && life.delivered;
+ const patch: any = { status: life.status, activeTurnId: retainTurn ? turnId : undefined, activeMarker: retainTurn ? marker : undefined };
+ if (life.result && !life.result.pending && life.session) {
+  patch.session = { source: "herdr:pi", path: life.session.path, sessionId: life.result.sessionId, anchorEntryId: life.result.anchorEntryId, finalEntryId: life.result.finalEntryId };
+  patch.terminal = { status: life.result.status, ...(life.result.output ? { output: life.result.output } : {}), ...(life.result.stopReason ? { stopReason: life.result.stopReason } : {}), sessionId: life.result.sessionId, anchorEntryId: life.result.anchorEntryId, finalEntryId: life.result.finalEntryId };
+ }
+ registry.updateLeaf(rootRunId, leafRunId, patch); registry.recomputeRoot(rootRunId);
 }
-function eligible(action: NormalizedControlParams["action"]) { return (leaf: RunLeafHandle) => action === "status" ? true : action === "steer" ? leaf.status === "working" || leaf.status === "blocked" : action === "abort" ? leaf.status === "booting" || leaf.status === "working" || leaf.status === "blocked" : action === "follow_up" ? leaf.status === "succeeded" : action === "collect" ? leaf.status === "blocked" || leaf.status === "working" || leaf.status === "succeeded" : true; }
+function isTerminalStatus(status: RunLeafHandle["status"]): status is "succeeded" | "failed" | "aborted" | "timed_out" | "lost" {
+ return status === "succeeded" || status === "failed" || status === "aborted" || status === "timed_out" || status === "lost";
+}
+function eligible(action: NormalizedControlParams["action"]) { return (leaf: RunLeafHandle) => action === "status" ? true : action === "steer" ? leaf.status === "working" || leaf.status === "blocked" : action === "abort" ? leaf.status === "booting" || leaf.status === "working" || leaf.status === "blocked" : action === "follow_up" ? leaf.status === "succeeded" : action === "collect" ? leaf.status === "blocked" || leaf.status === "working" || isTerminalStatus(leaf.status) : true; }
 function choose(root: RunRootHandle, input: NormalizedControlParams, predicate: (leaf: RunLeafHandle) => boolean) { if (input.action === "follow_up" && input.leafRunId && root.leaves.some(x => x.leafRunId === input.leafRunId && x.status === "working")) throw failure("ambiguous_turn", "Follow-up leaf was claimed by another control request."); const candidates = input.leafRunId ? root.leaves.filter(x => x.leafRunId === input.leafRunId && (input.action === "status" || input.action === "close" || predicate(x))) : root.leaves.filter(predicate); if (input.leafRunId && candidates.length !== 1) throw failure("unknown_or_foreign_run", "Owned leaf is missing or ineligible."); if (!input.leafRunId && candidates.length !== 1 && input.action !== "status" && input.action !== "close") throw failure("ambiguous_turn", "Control requires an explicit leaf or one eligible leaf."); return candidates; }
 function literal(text: string) { if (!text || /[\r\n]/.test(text)) throw failure("invalid_execution_mode", "message must be non-empty and newline-free."); return text; }
 function validatePaneTextPayload(paneId: string, text: string) { if (paneSendTextRequestByteLength(paneId, text) > DEFAULT_MAX_PAYLOAD_BYTES) throw failure("task_delivery_failed", `Task delivery request exceeds ${DEFAULT_MAX_PAYLOAD_BYTES} UTF-8 bytes.`); }
 function failure(code: any, message: string) { return Object.assign(new Error(message), { code }); }
 function result(action: string, root: RunRootHandle, leaves: RunLeafHandle[]) { return { action, rootRunId: root.rootRunId, status: root.status, tabId: root.tabId, leaves: leaves.map(x => ({ leafRunId: x.leafRunId, paneId: x.paneId, status: x.status, ...(x.session ? { session: x.session } : {}) })) }; }
-function controlText(value: ControlDetails) { return value.finalOutput || `${value.action}: ${value.status}`; }
+function controlText(value: ControlDetails) {
+ const live = value.leaves?.filter((leaf: any) => leaf.status === "working" || leaf.status === "blocked") ?? [];
+ if (value.action === "status") return `status snapshot: root ${value.rootRunId} is ${value.status}; ${live.length ? `live leaves: ${live.map((leaf: any) => `${leaf.leafRunId}=${leaf.status}`).join(", ")}` : "no live leaves"}.`;
+ if (value.action === "steer") return `steer delivered: root ${value.rootRunId} is ${value.status}.`;
+ if (value.action === "close") return `close completed: root ${value.rootRunId} prior status was ${value.priorStatus ?? value.status}.`;
+ if (value.action === "collect" && value.state === "blocked") return `collect blocked: resolve child visibly, then collect; never follow_up blocked child.`;
+ if (value.action === "collect" && value.pending) return `collect pending: root ${value.rootRunId}; ${live.map((leaf: any) => `${leaf.leafRunId}=${leaf.status}`).join(", ") || "no live leaf"}.`;
+ if (value.action === "collect" && value.terminalStatus && value.terminalStatus !== "succeeded") return `collect terminal ${value.terminalStatus}: root ${value.rootRunId} is ${value.status}${value.finalOutput ? `; output: ${value.finalOutput}` : ""}.`;
+ if (value.finalOutput) return value.finalOutput;
+ return `${value.action} outcome: root ${value.rootRunId} is ${value.status}.`;
+}
 function state(raw: any): State { const v = raw?.agent?.agent_status ?? raw?.agent_status ?? raw?.agent?.state ?? raw?.state; return v === "idle" || v === "working" || v === "blocked" || v === "done" ? v : "unknown"; }
 function agentPane(raw: any) { const agent = raw?.agent ?? raw; const value = agent?.pane_id ?? agent?.paneId; return typeof value === "string" ? value : undefined; }
 function supplied(record: any, keys: readonly string[]) {
@@ -109,19 +125,51 @@ async function live(client: ControlClient, ownedRoot: RunRootHandle, leaf: RunLe
  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
  return trusted;
 }
-async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHandle, leaves: RunLeafHandle[], input: Extract<NormalizedControlParams, { action: "collect" }>) {
- const leaf = leaves[0]!; const agent = await client.getAgent(leaf.paneId); if (!agent || agent.exists === false || agentPane(agent) !== leaf.paneId) throw failure("pane_lost", "Owned pane disappeared or changed.");
- if (state(agent) === "blocked") return { ...result("collect", root, [leaf]), state: "blocked" };
- if (!leaf.activeTurnId || !leaf.activeMarker || (leaf.status !== "working" && leaf.status !== "blocked")) throw failure("result_unavailable", "No active turn retained for collection.");
- const ref = await validatePiSessionRef(agent.agent ?? agent, deps.sessionRoot); if (!leaf.session || ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
- const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
- const anchor = await findTurnAnchor(trusted, leaf.activeMarker); if ((anchor as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
- const harvested = await harvestTurn(trusted, leaf.activeMarker, anchor as any, { state: state(agent) }); if ((harvested as any).pending) return { ...result("collect", root, [leaf]), state: state(agent) };
- const h: any = harvested; deps.registry.updateLeaf(root.rootRunId, leaf.leafRunId, { status: h.status, activeTurnId: undefined, activeMarker: undefined, session: { source: "herdr:pi", path: trusted.path, sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId } });
- deps.registry.updateRoot(root.rootRunId, { status: h.status });
- const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!; const output = { ...result("collect", updatedRoot, [updated]), finalOutput: h.output, stopReason: h.stopReason };
- if (input.closeAfterCollect) return { ...output, warnings: await closeOwned(client, deps.registry, root, [updated]) }; return output;
+async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHandle, leaves: RunLeafHandle[], input: Extract<NormalizedControlParams, { action: "collect" }>, signal?: AbortSignal, onUpdate?: (value: AgentToolResult<ControlDetails>) => void) {
+ const clock = deps.now ?? Date.now; const deadline = clock() + (input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000; let remaining = (input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000; const leafId = leaves[0]!.leafRunId; let lastUpdate = "";
+ const update = (pending: ControlDetails) => { const text = controlText(pending); if (text !== lastUpdate) { lastUpdate = text; onUpdate?.({ content: [{ type: "text", text }], details: pending }); } };
+ const pause = async () => { const ms = Math.min(250, Math.max(1, remaining)); remaining -= ms; await (deps.sleeper?.sleep(ms, signal) ?? delay(ms, signal)); };
+ for (;;) {
+  if (signal?.aborted) throw failure("child_aborted", "Collection aborted.");
+  const currentRoot = deps.registry.get(root.rootRunId)!; const leaf = deps.registry.getLeaf(root.rootRunId, leafId)!;
+  if (leaf.terminal || isTerminalStatus(leaf.status)) {
+   const terminalStatus = leaf.terminal?.status ?? leaf.status;
+   const output: any = { ...result("collect", currentRoot, [leaf]), terminalStatus, ...(leaf.terminal?.output ? { finalOutput: leaf.terminal.output } : {}), ...(leaf.terminal?.stopReason ? { stopReason: leaf.terminal.stopReason } : {}) };
+   if (input.closeAfterCollect) output.warnings = await closeOwned(client, deps.registry, currentRoot, [leaf]); return output;
+  }
+  // A parallel sibling can still be completing in the detached lifecycle after
+  // another leaf returns blocked. Its marker is published only with its terminal
+  // or blocked lifecycle state; wait for that registry transition, never harvest
+  // an unproven turn.
+  if (leaf.status === "working" && leaf.activeTurnId && !leaf.activeMarker) {
+   const pending = { ...result("collect", currentRoot, [leaf]), state: "working", pending: true }; update(pending);
+   if (clock() >= deadline || remaining <= 0) return pending;
+   await pause(); continue;
+  }
+  const agent = await withAbort((client as any).getAgent(leaf.paneId, { signal }), signal); if (!agent || agent.exists === false || agentPane(agent) !== leaf.paneId) throw failure("pane_lost", "Owned pane disappeared or changed.");
+  const liveState = state(agent);
+  if (liveState === "blocked") {
+   const pending = { ...result("collect", currentRoot, [leaf]), state: "blocked", pending: true }; update(pending);
+   if (clock() >= deadline || remaining <= 0) return pending;
+   await pause(); continue;
+  }
+  if (!leaf.activeTurnId || !leaf.activeMarker || (leaf.status !== "working" && leaf.status !== "blocked")) throw failure("result_unavailable", "No active turn retained for collection.");
+  const ref = await validatePiSessionRef(agent.agent ?? agent, deps.sessionRoot); if (!leaf.session || ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
+  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
+  const anchor = await findTurnAnchor(trusted, leaf.activeMarker);
+  const harvested = (anchor as any).pending ? undefined : await harvestTurn(trusted, leaf.activeMarker, anchor as any, { state: liveState });
+  if (harvested && !(harvested as any).pending) {
+   const h: any = harvested; deps.registry.updateLeaf(root.rootRunId, leaf.leafRunId, { status: h.status, activeTurnId: undefined, activeMarker: undefined, session: { source: "herdr:pi", path: trusted.path, sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId }, terminal: { status: h.status, ...(h.output ? { output: h.output } : {}), ...(h.stopReason ? { stopReason: h.stopReason } : {}), sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId } });
+   deps.registry.recomputeRoot(root.rootRunId); const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!; const output: any = { ...result("collect", updatedRoot, [updated]), terminalStatus: h.status, finalOutput: h.output, stopReason: h.stopReason };
+   if (input.closeAfterCollect) output.warnings = await closeOwned(client, deps.registry, updatedRoot, [updated]); return output;
+  }
+  const pending = { ...result("collect", currentRoot, [leaf]), state: liveState, pending: true }; update(pending);
+  if (clock() >= deadline || remaining <= 0) return pending;
+  await pause();
+ }
 }
+function delay(ms: number, signal?: AbortSignal) { return new Promise<void>((resolve, reject) => { if (signal?.aborted) return reject(failure("child_aborted", "Collection aborted.")); const timer = setTimeout(() => done(resolve), ms); const abort = () => { clearTimeout(timer); done(() => reject(failure("child_aborted", "Collection aborted."))); }; const done = (settle: () => void) => { signal?.removeEventListener("abort", abort); settle(); }; signal?.addEventListener("abort", abort, { once: true }); }); }
+function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> { if (!signal) return promise; if (signal.aborted) return Promise.reject(failure("child_aborted", "Collection aborted.")); return new Promise<T>((resolve, reject) => { const abort = () => done(() => reject(failure("child_aborted", "Collection aborted."))); const done = (settle: () => void) => { signal.removeEventListener("abort", abort); settle(); }; signal.addEventListener("abort", abort, { once: true }); promise.then(value => done(() => resolve(value)), error => done(() => reject(error))); }); }
 async function closeOwned(client: ControlClient, registry: RunRegistry, root: RunRootHandle, leaves: RunLeafHandle[]) {
  const warnings: string[] = []; const owned = new Set(root.leaves.map(x => x.paneId)); let foreign = true;
  try { foreign = tabPanes(await client.snapshot(), root.tabId).some(id => !owned.has(id)); } catch { warnings.push("WARNING: could not verify tab ownership; tab left open."); }

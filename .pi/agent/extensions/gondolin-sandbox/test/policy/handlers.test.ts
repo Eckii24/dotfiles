@@ -48,6 +48,12 @@ describe("pure policy mutation handlers", () => {
     expect((await readSettings()).sandbox.mounts.readOnly).toEqual([]);
   });
 
+  test("allows independent /pi-src and /pi-agent guest mounts", async () => {
+    await mutatePolicy({ kind: "mount-ro", action: "add", value: hostDir, guestPath: "/pi-src", scope: "global", paths: paths() });
+    await mutatePolicy({ kind: "mount-ro", action: "add", value: hostDir, guestPath: "/pi-agent", scope: "global", paths: paths() });
+    expect((await readSettings()).sandbox.mounts.readOnly.map((mount: { guestPath: string }) => mount.guestPath)).toEqual(["/pi-src", "/pi-agent"]);
+  });
+
   test("all network handlers normalize, deduplicate, exactly remove, and project writes record full-section approval", async () => {
     await mkdir(join(root, "outside"), { recursive: true });
     const initial = await readSettings();

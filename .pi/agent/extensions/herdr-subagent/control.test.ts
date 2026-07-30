@@ -11,17 +11,17 @@ function active(paneId = "pane", state = "done", session?: any) {
 function basic(leaves: any[] = [{ leafRunId: "leaf", paneId: "pane", status: "working" }]) {
  const registry = new RunRegistry(); registry.register({ rootRunId: "root", workspaceId: "work", tabId: "tab", tabLabel: "tab", status: "working", keepOpen: true, leaves });
  const calls: string[] = []; const client: any = { getAgent: async (id: string) => active(id, "working"), sendAgentInput: async (_: string, value: string) => calls.push(`send:${value}`), submitOwnedPane: async () => calls.push("enter"), interruptOwnedPane: async () => calls.push("interrupt"), closePane: async (id: string) => calls.push(`close:${id}`), closeTab: async () => calls.push("tab"), snapshot: async () => ({ snapshot: { panes: leaves.map(x => ({ pane_id: x.paneId, tab_id: "tab" })) } }) };
- return { registry, calls, runtime: createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions" }) };
+ return { registry, calls, client, runtime: createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions" }) };
 }
 
-async function retained(mutate?: (raw: any) => any | Promise<any>, waitForLifecycle?: Promise<void>, onLifecycleEntry?: () => void) {
+async function retained(mutate?: (raw: any) => any | Promise<any>, waitForLifecycle?: Promise<void>, onLifecycleEntry?: () => void, lifecycleResult?: any) {
  const root = await realpath(await mkdtemp(join(tmpdir(), "herdr-control-"))); const sessionPath = join(root, "session.jsonl"); await writeFile(sessionPath, '{"type":"session","version":3,"id":"session"}\n');
  const registry = new RunRegistry(); registry.register({ rootRunId: "root", workspaceId: "work", tabId: "tab", tabLabel: "tab", status: "succeeded", keepOpen: true, leaves: [{ leafRunId: "leaf", paneId: "pane", status: "succeeded", session: { source: "herdr:pi", path: sessionPath, sessionId: "session" } }] });
  registry.setFollowUpExpectations("root", "leaf", { agentName: "agent-name", sessionName: "session-name" });
  const base = () => ({ agent: { pane_id: "pane", agent_status: "done", name: "agent-name", env: { PI_HERDR_ROOT_RUN_ID: "root", PI_HERDR_LEAF_RUN_ID: "leaf" }, agent_session: { source: "herdr:pi", kind: "path", value: sessionPath, name: "session-name" } } });
  const calls: string[] = []; let lifecycleCalls = 0;
  const client: any = { getAgent: async () => mutate ? await mutate(base()) : base(), sendAgentInput: async (_: string, value: string) => calls.push(`send:${value}`), submitOwnedPane: async () => calls.push("enter"), interruptOwnedPane: async () => {}, closePane: async () => {}, closeTab: async () => {}, snapshot: async () => ({ snapshot: { panes: [] } }) };
- const runtime = createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: root, lifecyclePort: () => ({}) as any, sessionPort: () => ({}) as any, runLifecycle: (async () => { lifecycleCalls++; onLifecycleEntry?.(); await waitForLifecycle; return { status: "succeeded", state: "done", delivered: true, enterSent: true, session: { source: "herdr:pi", kind: "path", root, path: sessionPath, sessionId: "session", bytes: 1 }, result: { pending: false, status: "succeeded", output: "FINAL", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" } }; }) as any });
+ const runtime = createHerdrSubagentControlRuntime({ registry, createClient: () => client, preflight: async () => ({ socketPath: "/socket" }), sessionRoot: root, lifecyclePort: () => ({}) as any, sessionPort: () => ({}) as any, runLifecycle: (async () => { lifecycleCalls++; onLifecycleEntry?.(); await waitForLifecycle; return lifecycleResult ?? { status: "succeeded", state: "done", delivered: true, enterSent: true, session: { source: "herdr:pi", kind: "path", root, path: sessionPath, sessionId: "session", bytes: 1 }, result: { pending: false, status: "succeeded", output: "FINAL", stopReason: "stop", sessionId: "session", anchorEntryId: "anchor", finalEntryId: "final" } }; }) as any });
  return { root, registry, calls, runtime, get lifecycleCalls() { return lifecycleCalls; } };
 }
 
@@ -79,6 +79,51 @@ test("atomic follow_up claim rejects concurrent delivery", async () => {
   await expect(f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "duplicate" })).rejects.toMatchObject({ code: "ambiguous_turn" }); expect(f.lifecycleCalls).toBe(1);
   release(); await first;
  } finally { release(); await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("delivered blocked follow_up retains turn marker for later collect", async () => {
+ const f = await retained(undefined, undefined, undefined, { status: "blocked", state: "blocked", delivered: true, enterSent: true, reason: "confirm" });
+ try {
+  const value = await f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "next" });
+  expect(value.details).toMatchObject({ state: "blocked" }); expect(f.registry.getLeaf("root", "leaf")).toMatchObject({ status: "blocked", activeTurnId: expect.any(String), activeMarker: expect.stringContaining("herdr:task-sentinel") });
+ } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("collect returns persisted trusted sibling final without re-harvesting marker", async () => {
+ const f = basic([{ leafRunId: "blocked", paneId: "blocked-pane", status: "blocked" }, { leafRunId: "sibling", paneId: "pane", status: "succeeded", terminal: { status: "succeeded", output: "background final", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" } }]);
+ f.registry.updateRoot("root", { status: "blocked" });
+ const value = await f.runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "sibling" });
+ expect(value.details).toMatchObject({ finalOutput: "background final", stopReason: "stop" }); expect(value.content[0]?.text).toBe("background final");
+});
+
+test("collect waits for deferred parallel sibling lifecycle to persist its terminal", async () => {
+ const f = basic([{ leafRunId: "blocked", paneId: "blocked-pane", status: "blocked" }, { leafRunId: "sibling", paneId: "pane", status: "working", activeTurnId: "turn" }]); f.registry.updateRoot("root", { status: "blocked" }); let sleeps = 0;
+ const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...f.client, getAgent: async () => { throw new Error("must wait for registry terminal"); } }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions", now: () => 0, sleeper: { sleep: async () => { if (++sleeps === 1) f.registry.updateLeaf("root", "sibling", { status: "succeeded", activeTurnId: undefined, activeMarker: undefined, terminal: { status: "succeeded", output: "deferred final", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" } }); } } });
+ const updates: any[] = []; const value = await runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "sibling", timeoutSeconds: 1 }, undefined, update => updates.push(update));
+ expect(value.details).toMatchObject({ terminalStatus: "succeeded", finalOutput: "deferred final" }); expect(sleeps).toBe(1); expect(updates).toHaveLength(1);
+});
+
+test("collect accepts every persisted terminal status and closes after persisted collection", async () => {
+ for (const status of ["succeeded", "failed", "aborted", "timed_out", "lost"] as const) {
+  const f = basic([{ leafRunId: "leaf", paneId: "pane", status, terminal: { status, output: "saved", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" } }]); f.registry.updateRoot("root", { status: status === "succeeded" ? "succeeded" : "failed" });
+  const value = await f.runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "leaf", closeAfterCollect: true });
+  expect(value.details).toMatchObject({ terminalStatus: status }); expect(f.calls).toContain("close:pane"); expect(f.registry.get("root")).toBeUndefined();
+ }
+});
+
+test("collect accepts terminal lifecycle status without fabricating a trusted final", async () => {
+ for (const status of ["succeeded", "failed", "aborted", "timed_out", "lost"] as const) {
+  const f = basic([{ leafRunId: "leaf", paneId: "pane", status }]); f.registry.updateRoot("root", { status: status === "succeeded" ? "succeeded" : status });
+  f.client.getAgent = async () => { throw new Error("terminal collection must not query live pane"); };
+  const value = await f.runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "leaf" });
+  expect(value.details).toMatchObject({ terminalStatus: status }); expect(value.details.finalOutput).toBeUndefined();
+ }
+});
+
+test("collect fixed clock times out, suppresses duplicate updates, and observes abort", async () => {
+ const f = basic([{ leafRunId: "leaf", paneId: "pane", status: "blocked" }]); let sleeps = 0; const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...(f as any).client, getAgent: async () => active("pane", "blocked") }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions", now: () => 0, sleeper: { sleep: async () => { sleeps++; } } });
+ const updates: any[] = []; const value = await runtime.execute({ action: "collect", rootRunId: "root", timeoutSeconds: 1 }, undefined, update => updates.push(update)); expect(value.details).toMatchObject({ pending: true, state: "blocked" }); expect(sleeps).toBe(4); expect(updates).toHaveLength(1);
+ const controller = new AbortController(); controller.abort(); await expect(runtime.execute({ action: "collect", rootRunId: "root" }, controller.signal)).rejects.toMatchObject({ code: "child_aborted" });
 });
 
 test("close re-snapshots and leaves a tab open when a foreign pane arrives", async () => {

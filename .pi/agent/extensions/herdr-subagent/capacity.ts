@@ -46,8 +46,10 @@ export function managedRunIdFromLabel(label: string): string | undefined {
 	const at = label.lastIndexOf(MANAGED_LABEL_MARKER); const id = at < 0 ? "" : label.slice(at + MANAGED_LABEL_MARKER.length);
 	return /^[a-f0-9]{6}$/.test(id) ? id : undefined;
 }
-/** Declared-tool classification, not sandboxing or proof of eventual file writes. */
-export function isDeclaredWriter(tools: readonly string[] | undefined): boolean { return tools?.some(tool => tool === "edit" || tool === "write") ?? false; }
+/** Conservative tool classification: omitted tools launch Pi defaults, including mutation-capable tools. */
+export function isDeclaredWriter(tools: readonly string[] | undefined): boolean {
+	return tools === undefined || tools.some(tool => tool === "edit" || tool === "write" || tool === "bash");
+}
 
 export class CapacityCoordinator {
 	private readonly root: string; private readonly now: () => number;
@@ -88,7 +90,7 @@ export class CapacityCoordinator {
 			const file = this.leasePath(cwd); let current = await this.readLease(file);
 			if (current && !(await this.liveLease(current, capacitySnapshot(await this.d.snapshot())))) { await (this.d.rm ?? rm)(file, { force: true }); current = undefined; }
 			if (current && current.rootRunId !== input.rootRunId) {
-				if (!input.allowSharedWorkspaceWrites) throw new CapacityError("shared_workspace_write_conflict", "Another declared writer holds this canonical cwd lease.");
+				if (!input.allowSharedWorkspaceWrites) throw new CapacityError("shared_workspace_write_conflict", "Another writer holds this canonical cwd lease.");
 				return { cwd, rootRunId: input.rootRunId, acquired: false, warning: "WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict." };
 			}
 			if (!current) { current = { rootRunId: input.rootRunId, cwd, createdAt: this.now(), paneIds: [] }; await this.atomicWrite(file, JSON.stringify(current)); }

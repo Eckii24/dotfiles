@@ -143,7 +143,12 @@ function markerCount(text: string, marker: string) { let count = 0; for (let at 
 const ABORTED = Symbol("aborted");
 async function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T | typeof ABORTED> {
 	if (!signal) return promise; if (signal.aborted) return ABORTED;
-	return Promise.race([promise, new Promise<typeof ABORTED>(resolve => signal.addEventListener("abort", () => resolve(ABORTED), { once: true }))]);
+	return new Promise<T | typeof ABORTED>((resolve, reject) => {
+		const abort = () => done(() => resolve(ABORTED));
+		const done = (settle: () => void) => { signal.removeEventListener("abort", abort); settle(); };
+		signal.addEventListener("abort", abort, { once: true });
+		promise.then(value => done(() => resolve(value)), error => done(() => reject(error)));
+	});
 }
 async function abort(port: HerdrLifecyclePort, input: LifecycleOptions, state: AgentState, delivered: boolean, enterSent: boolean, sent: boolean): Promise<LifecycleResult> {
 	// Never let an unresponsive RPC defeat cancellation. Cleanup remains owned and best-effort.

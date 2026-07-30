@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { CapacityCoordinator, isDeclaredWriter } from "./capacity.js";
+import { CapacityCoordinator, isDeclaredWriter, type WriteLease } from "./capacity.js";
 import { discoverAgentProfiles, projectProfilesRequiringConfirmation, type AgentProfile } from "./agent-profiles.js";
 import { HerdrSubagentParamsSchema, HerdrSubagentControlParamsSchema, ContractValidationError, createRunIds, makeError, normalizeSubagentParams, type ErrorCode, type HerdrLeafResult, type HerdrSubagentResult, type NormalizedItem } from "./contracts.js";
 import { DEFAULT_MAX_PAYLOAD_BYTES, HerdrClient, paneSendTextRequestByteLength } from "./herdr-client.js";
@@ -28,14 +28,35 @@ export type HerdrRuntimeDependencies = {
 	sessionRoot?: string; registry?: RunRegistry; env?: NodeJS.ProcessEnv;
 };
 export class HerdrSetupError extends Error { constructor(readonly code: ErrorCode, message: string) { super(message); this.name = "HerdrSetupError"; } }
-type PreparedLeaf = { item: NormalizedItem; profile: any; cwd: string; ids: { leafRunId: string; turnId: string }; lease: any; launch: PiLaunchDescriptor; leaf: HerdrLeafResult; life?: LifecycleResult };
+type PreparedLeaf = { item: NormalizedItem; profile: any; cwd: string; ids: { leafRunId: string; turnId: string }; lease?: WriteLease; launch: PiLaunchDescriptor; leaf: HerdrLeafResult; life?: LifecycleResult };
 
 /** Single, parallel, and chain share validation/preflight, but chain starts topology leaves only after success. */
 export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) {
 	const registry = deps.registry ?? new RunRegistry(); const now = deps.now ?? Date.now; const env = deps.env ?? process.env;
 	const discover = deps.discover ?? discoverAgentProfiles; const createClient = deps.createClient ?? (path => new HerdrClient({ socketPath: path }) as Client);
-	return { registry, async execute(raw: unknown, ctx: RuntimeContext, signal?: AbortSignal, onUpdate?: ToolUpdate): Promise<any> {
-		let topology: TopologyResult | undefined; let client: Client | undefined; let capacity: any; let prepared: PreparedLeaf[] = []; let deferClientDispose = false;
+	return { registry, async shutdown() {
+		const roots = registry.rootsSnapshot(); if (!roots.length) return;
+		let client: Client | undefined;
+		try {
+			const preflight = await (deps.preflight ?? checkPreconditions)(); client = createClient(preflight.socketPath);
+			for (const root of roots) {
+				const launched = root.leaves.filter(leaf => leaf.paneId);
+				const owned = new Set(launched.map(leaf => leaf.paneId));
+				let tabSafe = false;
+				try { tabSafe = !shutdownTabPanes(await client.snapshot(), root.tabId).some(id => !owned.has(id)); } catch { /* unknown ownership leaves tab open */ }
+				let closed = true;
+				for (const leaf of launched) try { await client.closePane(leaf.paneId); } catch { closed = false; }
+				if (!closed) continue;
+				try { await registry.release(root.rootRunId); registry.close(root.rootRunId); } catch { /* retain authority if release fails */ }
+				if (!tabSafe) continue;
+				try {
+					if (shutdownTabPanes(await client.snapshot(), root.tabId).some(id => !owned.has(id))) continue;
+					await client.closeTab(root.tabId);
+				} catch { /* snapshot/close failure leaves tab open */ }
+			}
+		} catch { /* preflight/client failure retains leases and local authority */ } finally { client?.dispose(); }
+	}, async execute(raw: unknown, ctx: RuntimeContext, signal?: AbortSignal, onUpdate?: ToolUpdate): Promise<any> {
+		let topology: TopologyResult | undefined; let client: Client | undefined; let capacity: any; let prepared: PreparedLeaf[] = []; let deferClientDispose = false; let registeredRootRunId: string | undefined;
 		try {
 			const input = normalizeSubagentParams(raw);
 			const preflight = await (deps.preflight ?? checkPreconditions)();
@@ -54,7 +75,7 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			if (input.mode === "parallel") {
 				const writerCwds = new Set<string>();
 				for (const entry of prepared) if (isDeclaredWriter(entry.profile.tools)) {
-					if (writerCwds.has(entry.cwd) && !input.allowSharedWorkspaceWrites) throw new HerdrSetupError("shared_workspace_write_conflict", "Parallel declared writers require distinct canonical cwd values.");
+					if (writerCwds.has(entry.cwd) && !input.allowSharedWorkspaceWrites) throw new HerdrSetupError("shared_workspace_write_conflict", "Parallel writers require distinct canonical cwd values.");
 					writerCwds.add(entry.cwd);
 				}
 			}
@@ -73,10 +94,11 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 				entry.leaf = { leafRunId: entry.ids.leafRunId, name: entry.item.name, agent: entry.profile.name, cwd: entry.cwd, paneId: "", paneLabel: "", status: "queued" };
 			}
 			const first = prepared[0]!;
-			topology = await (deps.createTopology ?? createTopology)({ client, capacity, workspaceId: preflight.workspaceId, rootRunId: ids.rootRunId, group: input.group, paneCount: prepared.length, leaves: input.mode === "chain" ? [{ leafRunId: first.ids.leafRunId, launch: first.launch, lease: first.lease }] : prepared.map(x => ({ leafRunId: x.ids.leafRunId, launch: x.launch, lease: x.lease })) });
+			topology = await (deps.createTopology ?? createTopology)({ client, capacity, workspaceId: preflight.workspaceId, rootRunId: ids.rootRunId, group: input.group, paneCount: prepared.length, leaves: input.mode === "chain" ? [{ leafRunId: first.ids.leafRunId, launch: first.launch, lease: first.lease! }] : prepared.map(x => ({ leafRunId: x.ids.leafRunId, launch: x.launch, lease: x.lease! })) });
 			const paneIds = [...topology.group.ownedPaneIds];
 			for (const [index, entry] of prepared.entries()) if (input.mode !== "chain" || index === 0) { entry.leaf.paneId = paneIds.shift()!; entry.leaf.paneLabel = entry.launch.name; entry.leaf.status = "booting"; }
 			registry.register({ rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, status: "working", keepOpen: input.keepOpen, leaves: prepared.map(x => ({ leafRunId: x.ids.leafRunId, paneId: x.leaf.paneId, status: x.leaf.status, activeTurnId: x.ids.turnId })) });
+			registeredRootRunId = ids.rootRunId;
 			for (const entry of prepared) registry.setFollowUpExpectations(ids.rootRunId, entry.ids.leafRunId, { agentName: agentStartName(entry.ids.leafRunId), sessionName: entry.launch.name });
 			registry.setRelease(ids.rootRunId, async () => { for (const lease of topology!.leases.values()) await capacity.releaseWriteLease(lease); topology!.leases.clear(); await capacity.releaseGroup(topology!.reservation); });
 			const startedAt = now();
@@ -89,7 +111,8 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 				entry.life = life; applyLife(entry.leaf, life); if (life.delivered) (deps.acceptLeaf ?? acceptLeaf)(topology!.group, entry.ids.leafRunId);
 				// A permission-blocked delivered turn remains collectable after a fixed human resolution.
 				const active = life.status === "blocked" && life.delivered;
-				registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: entry.leaf.status, activeTurnId: active ? entry.ids.turnId : undefined, activeMarker: active ? delivery.marker : undefined, ...(entry.leaf.piSession ? { session: { source: "herdr:pi", path: entry.leaf.piSession.path, sessionId: entry.leaf.piSession.sessionId } } : {}) });
+				registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: entry.leaf.status, activeTurnId: active ? entry.ids.turnId : undefined, activeMarker: active ? delivery.marker : undefined, ...(entry.leaf.piSession ? { session: { source: "herdr:pi", path: entry.leaf.piSession.path, sessionId: entry.leaf.piSession.sessionId, anchorEntryId: entry.leaf.piSession.anchorEntryId, finalEntryId: entry.leaf.piSession.finalEntryId } } : {}), ...terminalPatch(life) });
+				registry.recomputeRoot(ids.rootRunId);
 				return life;
 			};
 			if (input.mode === "parallel") {
@@ -98,7 +121,7 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 					catch (error) {
 						const life: LifecycleResult = { status: "failed", delivered: false, enterSent: false, state: "unknown", reason: error instanceof Error ? error.message : "Child lifecycle failed." };
 						entry.life = life; applyLife(entry.leaf, life);
-						registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: entry.leaf.status });
+						registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: entry.leaf.status, activeTurnId: undefined, activeMarker: undefined });
 						return life;
 					}
 				};
@@ -112,10 +135,11 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 				}
 				if (blocked) {
 					registry.updateRoot(ids.rootRunId, { status: "blocked" });
-					const result: HerdrSubagentResult = { protocolVersion: 1, rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), nestingDepth: preflight.nestingDepth + 1, group: input.group, mode: input.mode, status: "blocked", workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, keepOpen: input.keepOpen, startedAt, finishedAt: now(), children: prepared.map(x => x.leaf), warnings: [...topology.warnings, ...prepared.flatMap(x => x.lease.warning ? [x.lease.warning] : [])] };
+					const result: HerdrSubagentResult = { protocolVersion: 1, rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), nestingDepth: preflight.nestingDepth + 1, group: input.group, mode: input.mode, status: "blocked", workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, keepOpen: input.keepOpen, startedAt, finishedAt: now(), children: prepared.map(x => x.leaf), warnings: [...topology.warnings, ...prepared.flatMap(x => x.lease?.warning ? [x.lease.warning] : [])] };
 					const backgroundClient = client; deferClientDispose = true;
 					void Promise.all(runs).then(async () => {
 						for (const entry of prepared) if (!entry.life?.delivered) await entry.launch.cleanupAfterFailure().catch(() => undefined);
+						registry.recomputeRoot(ids.rootRunId);
 						// Do not release bound leases: blocked/retained panes remain write-capable.
 					}).catch(() => undefined).finally(() => { try { backgroundClient?.dispose(); } catch {} });
 					const formatted = formatResult(result, retainedControls(registry, result)); onUpdate?.(formatted); return formatted;
@@ -129,11 +153,11 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 					if (index) {
 						entry.lease = await capacity.acquireWriteLease({ cwd: entry.cwd, rootRunId: ids.rootRunId, tools: entry.profile.tools, allowSharedWorkspaceWrites: input.allowSharedWorkspaceWrites });
 						try {
-							const paneId = await (deps.addTopologyLeaf ?? addTopologyLeaf)({ client, capacity, result: topology, leaf: { leafRunId: entry.ids.leafRunId, launch: entry.launch, lease: entry.lease } });
+							const paneId = await (deps.addTopologyLeaf ?? addTopologyLeaf)({ client, capacity, result: topology, leaf: { leafRunId: entry.ids.leafRunId, launch: entry.launch, lease: entry.lease! } });
 							entry.leaf.paneId = paneId; entry.leaf.paneLabel = entry.launch.name; entry.leaf.status = "booting"; registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { paneId, status: "booting" });
 						} catch (error) {
 							// addTopologyLeaf transfers ownership only after recording its bound lease.
-							if (entry.lease.acquired && !topology.leases.has(entry.ids.leafRunId)) await capacity.releaseWriteLease(entry.lease).catch(() => undefined);
+							if (entry.lease?.acquired && !topology.leases.has(entry.ids.leafRunId)) await capacity.releaseWriteLease(entry.lease).catch(() => undefined);
 							throw error;
 						}
 					}
@@ -141,17 +165,27 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 					previous = entry.leaf.finalOutput ?? "";
 				}
 			}
+			// Chain entries after the first non-success never get panes. Keep them in the
+			// public result as queued, but remove them from local control authority so
+			// root-wide close can release the launched topology and its leases.
+			if (input.mode === "chain") for (const entry of prepared) if (!entry.leaf.paneId && entry.leaf.status === "queued") registry.close(ids.rootRunId, entry.ids.leafRunId);
 			for (const entry of prepared) if (!entry.life || !entry.life.delivered) await entry.launch.cleanupAfterFailure().catch(() => undefined);
 			// Discard any provisional lease not transferred to topology ownership.
 			if (input.mode === "chain") for (const entry of prepared) if (entry.lease?.acquired && !topology.leases.has(entry.ids.leafRunId)) await capacity.releaseWriteLease(entry.lease).catch(() => undefined);
 			const completed = prepared.filter(x => x.life).map(x => x.life!);
 			const status = completed.some(x => x.status === "blocked") ? "blocked" : completed.some(x => x.status === "timed_out") ? "timed_out" : completed.some(x => x.status === "aborted") ? "aborted" : completed.some(x => x.status !== "succeeded") ? "failed" : "succeeded";
 			registry.updateRoot(ids.rootRunId, { status });
-			const result: HerdrSubagentResult = { protocolVersion: 1, rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), nestingDepth: preflight.nestingDepth + 1, group: input.group, mode: input.mode, status, workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, keepOpen: input.keepOpen, startedAt, finishedAt: now(), children: prepared.map(x => x.leaf), warnings: [...topology.warnings, ...(input.mode === "parallel" && input.allowSharedWorkspaceWrites && prepared.filter(x => isDeclaredWriter(x.profile.tools)).length > new Set(prepared.filter(x => isDeclaredWriter(x.profile.tools)).map(x => x.cwd)).size ? ["WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict."] : []), ...prepared.flatMap(x => x.lease.warning ? [x.lease.warning] : [])] };
-			if (!input.keepOpen && status !== "blocked") { result.warnings.push(...await (deps.cleanupTopology ?? cleanupTopology)({ client, capacity, result: topology })); registry.close(ids.rootRunId); }
+			const result: HerdrSubagentResult = { protocolVersion: 1, rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), nestingDepth: preflight.nestingDepth + 1, group: input.group, mode: input.mode, status, workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, keepOpen: input.keepOpen, startedAt, finishedAt: now(), children: prepared.map(x => x.leaf), warnings: [...topology.warnings, ...(input.mode === "parallel" && input.allowSharedWorkspaceWrites && prepared.filter(x => isDeclaredWriter(x.profile.tools)).length > new Set(prepared.filter(x => isDeclaredWriter(x.profile.tools)).map(x => x.cwd)).size ? ["WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict."] : []), ...prepared.flatMap(x => x.lease?.warning ? [x.lease.warning] : [])] };
+			if (!input.keepOpen && status !== "blocked") {
+				result.warnings.push(...await (deps.cleanupTopology ?? cleanupTopology)({ client, capacity, result: topology }));
+				if (topology.group.ownedPaneIds.size === 0) registry.close(ids.rootRunId);
+			}
 			const formatted = formatResult(result, retainedControls(registry, result)); onUpdate?.(formatted); return formatted;
 		} catch (error) {
-			if (topology) try { await (deps.cleanupTopology ?? cleanupTopology)({ client: client!, capacity, result: topology }); } catch {}
+			if (topology) try {
+				await (deps.cleanupTopology ?? cleanupTopology)({ client: client!, capacity, result: topology });
+				if (registeredRootRunId && topology.group.ownedPaneIds.size === 0) registry.close(registeredRootRunId);
+			} catch {}
 			else for (const entry of prepared) if (entry.lease?.acquired) await capacity?.releaseWriteLease(entry.lease).catch(() => undefined);
 			for (const entry of prepared) await entry.launch?.cleanupAfterFailure().catch(() => undefined);
 			throw setupError(error);
@@ -173,8 +207,13 @@ export function validatePaneTextPayload(paneId: string, text: string) {
 function retainedControls(registry: RunRegistry, result: HerdrSubagentResult) {
 	const root = registry.get(result.rootRunId); if (!root) return undefined;
 	const names = new Map(result.children.map(child => [child.leafRunId, child.name]));
-	const leaves = root.leaves.filter(leaf => leaf.status === "blocked" || (root.keepOpen && leaf.status === "succeeded")).map(leaf => ({ leafRunId: leaf.leafRunId, name: names.get(leaf.leafRunId), status: leaf.status }));
+	const retained = root.status === "blocked" || root.keepOpen ? root.leaves.filter(leaf => leaf.paneId && leaf.status !== "queued") : [];
+	const leaves = retained.map(leaf => ({ leafRunId: leaf.leafRunId, name: names.get(leaf.leafRunId), status: leaf.status }));
 	return leaves.length ? { rootRunId: root.rootRunId, status: root.status, leaves } : undefined;
+}
+function terminalPatch(life: LifecycleResult) {
+	const result = life.result;
+	return result && !result.pending && life.session ? { terminal: { status: result.status, ...(result.output ? { output: result.output } : {}), ...(result.stopReason ? { stopReason: result.stopReason } : {}), sessionId: result.sessionId, anchorEntryId: result.anchorEntryId, finalEntryId: result.finalEntryId } } : {};
 }
 function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 	leaf.status = life.status; if (life.status === "blocked" && life.reason) leaf.blockedReason = life.reason;
@@ -183,30 +222,32 @@ function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 	if (!leaf.error && life.status !== "succeeded" && life.status !== "blocked") leaf.error = makeError(lifecycleCode(life.status), life.reason ?? `Child ${life.status}.`);
 }
 export function formatSubagentPrompt(agents: readonly AgentProfile[]): string {
-	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? "declared writer: edit/write" : "no declared edit/write tools"}]: ${agent.description}`).join("\n")}` : "";
+	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? agent.tools === undefined ? "writer: Pi default tools" : "writer: edit/write/bash" : "no writer tools"}]: ${agent.description}`).join("\n")}` : "";
 	return `## Subagents
 Use \`subagent\` only inside managed Pi for interactive child panes.
 Before parallel launch:
-- Profiles declaring \`edit\` or \`write\` are writers. Parallel writers must use distinct existing canonical \`cwd\` values; omitted \`cwd\` values all resolve to caller cwd.
+- Profiles omitting \`tools\` use Pi defaults and are writers. Profiles declaring \`edit\`, \`write\`, or \`bash\` are also writers. Parallel writers must use distinct existing canonical \`cwd\` values; omitted \`cwd\` values all resolve to caller cwd.
 - A running, blocked, or retained writer holds its canonical cwd lease until its pane closes. Close it or choose another cwd before launching another writer there.
-- For same-cwd parallel work, choose profiles without declared write tools. For same-cwd writer work, use \`chain\`.
+- For same-cwd parallel work, choose profiles with explicit read-only tool lists. For same-cwd writer work, use \`chain\`.
 - Set \`allowSharedWorkspaceWrites: true\` only when user explicitly accepts concurrent-write conflict risk.
 Chain \`{previous}\`: prior final is inserted as one-line JSON string content (reversible with \`JSON.parse\`); final \`pane.send_text\` request, including sentinel and JSON encoding, must fit 65536 UTF-8 bytes.
-Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, and non-empty newline-free message; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. Resolve blocked leaves visibly, then \`collect\`; use \`close\` to release retained panes.${list}`;
+Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, non-empty newline-free message, and optional timeoutSeconds; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. Resolve blocked leaves visibly, then one bounded \`collect\`; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is a local snapshot, not live proof; never auto-approve child prompts. Use \`close\` to release retained panes.${list}`;
 }
 
 export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
 	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; return { systemPrompt: `${event.systemPrompt}\n\n${formatSubagentPrompt(agents)}` }; });
-	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles declaring edit/write are writers: give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles without declared write tools. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
+	pi.on("session_shutdown", async () => { await runtime.shutdown(); });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools use Pi defaults and are writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
-	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; pass rootRunId, leafRunId, and non-empty newline-free message. Select a leaf when handles are shown (required for multiple eligible leaves). A native final remains follow_up eligible; concurrent turns fail closed. Resolve blocked leaves visibly then collect, and close retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params) => control.execute(params) });
+	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; it accepts optional timeoutSeconds. Select a leaf when multiple eligible handles exist; native final remains follow_up eligible. Resolve blocked leaves visibly, then one bounded collect; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is local snapshot only; never auto-approve child prompts. Use close to release retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params, signal, onUpdate) => control.execute(params, signal, onUpdate) });
 }
 async function canonicalCwd(cwd: string) { const { realpath } = await import("node:fs/promises"); return realpath(cwd); }
 function setupError(error: unknown): Error { if (error instanceof ContractValidationError || error instanceof PreconditionsError || error instanceof HerdrSetupError) return error; return new HerdrSetupError(errorCode(error), error instanceof Error ? error.message : "Herdr subagent setup failed."); }
 function errorCode(error: unknown): ErrorCode { return error instanceof PreconditionsError ? error.code : typeof error === "object" && error && typeof (error as any).code === "string" ? (error as any).code : "agent_start_failed"; }
 function lifecycleCode(status: string): ErrorCode { return status === "timed_out" ? "turn_timeout" : status === "lost" ? "pane_lost" : status === "aborted" ? "child_aborted" : "result_unavailable"; }
 function object(value: any): any { return value && typeof value === "object" ? value : {}; }
+function shutdownTabPanes(raw: any, tabId: string): string[] { const body = raw?.snapshot ?? raw?.result?.snapshot ?? raw; if (!Array.isArray(body?.panes)) throw new Error("snapshot panes unavailable"); return body.panes.flatMap((pane: any) => (pane?.tab_id === tabId || pane?.tabId === tabId) && typeof (pane.pane_id ?? pane.paneId) === "string" ? [pane.pane_id ?? pane.paneId] : []); }
 function state(value: any): AgentSnapshot["state"] { const raw = object(value).agent_status ?? object(value).state ?? object(value).status; return raw === "idle" || raw === "working" || raw === "blocked" || raw === "done" ? raw : "unknown"; }
 export function lifecyclePort(client: Client, paneId: string): HerdrLifecyclePort { return { getAgent: async (_id, signal) => { let raw: any; try { raw = await client.getAgent(paneId, { signal }); } catch (error) { if (error instanceof Error && /(?:pane|agent)_not_found/.test(error.message)) return undefined; throw error; } const agent = object(raw); const value = object(agent.agent ?? agent); return { paneId: String(value.pane_id ?? value.paneId ?? paneId), state: state(value), exists: value.exists !== false, agentInfo: value, blockedReason: typeof value.message === "string" ? value.message : undefined }; }, sendLiteral: async (_id, text, signal) => client.sendAgentInput(paneId, text, { signal }), sendEnter: async (_id, signal) => client.submitOwnedPane(paneId, { signal }), waitForEvent: async () => {}, interruptOwnedPane: async id => client.interruptOwnedPane(id), closeOwnedPane: async id => client.closePane(id), validateRetainedDone: async (_id, session, signal) => { const raw = object(await client.getAgent(paneId, { signal })); const agent = object(raw.agent ?? raw); if (!agent || agent.exists === false || String(agent.pane_id ?? agent.paneId ?? "") !== paneId || (state(agent) !== "idle" && state(agent) !== "done")) return false; try { const ref = await validatePiSessionRef(agent, session.root); if (ref.path !== session.path) return false; const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); return !(trusted as any).pending && trusted.sessionId === session.sessionId; } catch { return false; } } }; }
 export function sessionPort(root: string): SessionHarvestPort { const paths = new Map<SessionBaseline, any>(); return { prepare: async agent => { if (!("agent_session" in object(agent.agentInfo))) return { pending: true }; const ref = await validatePiSessionRef(agent.agentInfo, root); const baseline = await recordAbsentSessionBaseline(ref); paths.set(baseline, ref); return baseline; }, materialize: async baseline => materializeAndTrustSession(paths.get(baseline), baseline), findAnchor: async (session, marker) => findTurnAnchor(session, marker), harvest: async (session, marker, anchor, lifecycle) => harvestTurn(session, marker, anchor, lifecycle) }; }

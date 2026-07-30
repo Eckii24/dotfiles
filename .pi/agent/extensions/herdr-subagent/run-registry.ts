@@ -5,7 +5,8 @@ export type RegistryRootStatus = "working" | "succeeded" | "blocked" | "failed" 
 export type RegistryLeafStatus = "queued" | "booting" | "working" | "blocked" | "succeeded" | "failed" | "aborted" | "timed_out" | "lost";
 export type RunSessionIdentity = { source: "herdr:pi"; path: string; sessionId?: string; anchorEntryId?: string; finalEntryId?: string };
 /** Active turn marker is process-local control state, never a public pane target. */
-export type RunLeafHandle = { leafRunId: string; paneId: string; status: RegistryLeafStatus; session?: RunSessionIdentity; activeTurnId?: string; activeMarker?: string };
+export type TrustedTerminalResult = { status: Exclude<RegistryLeafStatus, "queued" | "booting" | "working" | "blocked">; output?: string; stopReason?: string; sessionId: string; anchorEntryId: string; finalEntryId: string };
+export type RunLeafHandle = { leafRunId: string; paneId: string; status: RegistryLeafStatus; session?: RunSessionIdentity; activeTurnId?: string; activeMarker?: string; terminal?: TrustedTerminalResult }; 
 export type RunRootHandle = {
 	rootRunId: string;
 	parentRootRunId?: string;
@@ -59,7 +60,7 @@ export class RunRegistry {
 		const root = this.roots.get(rootRunId); if (!root) return undefined;
 		Object.assign(root, patch); return copyRoot(root);
 	}
-	updateLeaf(rootRunId: string, leafRunId: string, patch: Pick<Partial<RunLeafHandle>, "status" | "paneId" | "session" | "activeTurnId" | "activeMarker">): RunLeafHandle | undefined {
+	updateLeaf(rootRunId: string, leafRunId: string, patch: Pick<Partial<RunLeafHandle>, "status" | "paneId" | "session" | "activeTurnId" | "activeMarker" | "terminal">): RunLeafHandle | undefined {
 		const leaf = this.roots.get(rootRunId)?.leaves.find(value => value.leafRunId === leafRunId);
 		if (!leaf) return undefined;
 		Object.assign(leaf, patch); return copyLeaf(leaf);
@@ -71,6 +72,21 @@ export class RunRegistry {
 		Object.assign(leaf, { status: "working", activeTurnId: turnId, activeMarker: marker, session: leaf.session && { ...leaf.session, anchorEntryId: undefined, finalEntryId: undefined } });
 		return copyLeaf(leaf);
 	}
+
+	/** Recomputes from leaves; a blocked leaf wins while any sibling remains live. */
+	recomputeRoot(rootRunId: string): RunRootHandle | undefined {
+		const root = this.roots.get(rootRunId); if (!root) return undefined;
+		const statuses = root.leaves.map(leaf => leaf.status);
+		if (statuses.some(status => status === "working" || status === "booting" || status === "queued")) root.status = statuses.includes("blocked") ? "blocked" : "working";
+		else if (statuses.includes("blocked")) root.status = "blocked";
+		else if (statuses.includes("timed_out")) root.status = "timed_out";
+		else if (statuses.includes("aborted")) root.status = "aborted";
+		else if (statuses.some(status => status !== "succeeded")) root.status = "failed";
+		else root.status = "succeeded";
+		return copyRoot(root);
+	}
+	/** Locally owned roots for shutdown cleanup; never recovery authority. */
+	rootsSnapshot(): RunRootHandle[] { return [...this.roots.values()].map(copyRoot); }
 
 	/** A root controls itself and registered descendants; descendants never control ancestors or siblings. */
 	resolveControl(controllerRootRunId: string, targetRootRunId: string, leafRunId?: string): ControlResolution {
@@ -159,7 +175,7 @@ function copyRoot(root: RegisterRun | RunRootHandle): RunRootHandle {
 	return { ...root, ...(root.parentRootRunId ? { parentRootRunId: root.parentRootRunId } : {}), leaves: leaves as RunLeafHandle[] };
 }
 function copyMaybe(root: RunRootHandle | undefined) { return root ? copyRoot(root) : undefined; }
-function copyLeaf(leaf: RunLeafHandle | undefined): RunLeafHandle | undefined { return leaf && { ...leaf, ...(leaf.session ? { session: { ...leaf.session } } : {}) }; }
+function copyLeaf(leaf: RunLeafHandle | undefined): RunLeafHandle | undefined { return leaf && { ...leaf, ...(leaf.session ? { session: { ...leaf.session } } : {}), ...(leaf.terminal ? { terminal: { ...leaf.terminal } } : {}) }; }
 function foreign(): ControlResolution { return { ok: false, error: ownershipError("Run is unknown or not owned by this root run.") }; }
 function ownershipError(message: string): HerdrError { return { code: "unknown_or_foreign_run", message }; }
 function validId(value: unknown): value is string { return typeof value === "string" && value.trim().length > 0; }

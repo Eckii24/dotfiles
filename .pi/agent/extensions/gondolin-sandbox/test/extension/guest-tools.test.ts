@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 import test from "node:test";
-import { BoundedTailAccumulator, executeGuestBash, executeGuestRead, executeGuestSearch } from "../../index.ts";
+import { BoundedTailAccumulator, executeGuestBash, executeGuestRead, executeGuestSearch, GUEST_FIND, GUEST_GREP } from "../../index.ts";
+
+const execFile = promisify(execFileCallback);
+async function guestScript(script: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
+  return execFile("/bin/bash", ["-lc", script, "guest-test", ...args], { cwd, maxBuffer: 128 * 1024 });
+}
 
 test("read executes and slices content entirely in the guest", async () => {
   const calls: any[] = [];
@@ -11,7 +20,7 @@ test("read executes and slices content entirely in the guest", async () => {
   const result = await executeGuestRead(vm as never, "/workspace/a.txt", { offset: 2, limit: 1 });
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].args.slice(0, 2), ["/bin/bash", "-lc"]);
-  assert.deepEqual(calls[0].args.slice(4, 7), ["/workspace/a.txt", "2", "2"]);
+  assert.deepEqual(calls[0].args.slice(4, 7), ["/workspace/a.txt", "2", "1"]);
   assert.match(result.content[0].text, /^two/);
   assert.match(result.content[0].text, /more lines/);
 });
@@ -21,6 +30,81 @@ test("read counts an unterminated final line and rejects only true beyond-end of
   const result = await executeGuestRead(vm as never, "/workspace/a.txt", { offset: 2, limit: 1 });
   assert.equal(result.content[0].text, "b\n");
   await assert.rejects(() => executeGuestRead(vm as never, "/workspace/a.txt", { offset: 3, limit: 1 }), /beyond end.*2 lines total/);
+});
+
+test("guest read script exactly preserves Pi split slices, including trailing empty lines", async () => {
+  const root = await mkdtemp(`${tmpdir()}/gondolin-read-`);
+  try {
+    const run = async (content: string, offset: number, limit: number) => {
+      const file = `${root}/input`;
+      await writeFile(file, content);
+      const vm = { exec: async (args: string[]) => {
+        const result = await guestScript(args[2], args.slice(4), root);
+        return { ok: true, exitCode: 0, ...result };
+      }};
+      return (await executeGuestRead(vm as never, file, { offset, limit })).content[0].text;
+    };
+    assert.equal(await run("", 1, 1), "");
+    assert.equal(await run("a", 1, 99), "a");
+    assert.equal(await run("a\n", 1, 99), "a\n");
+    assert.equal(await run("a\nb", 1, 99), "a\nb");
+    assert.equal(await run("a\nb\n", 1, 99), "a\nb\n");
+    assert.equal(await run("a\nb\n", 3, 1), "");
+    assert.match(await run("a\nb\n", 1, 0), /3 more lines/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guest grep uses NUL filenames, preserves contexts, and bounds output/errors", async () => {
+  const root = await mkdtemp(`${tmpdir()}/gondolin-grep-`);
+  try {
+    const regular = `${root}/single.txt`;
+    await writeFile(regular, "needle\nafter\n");
+    await writeFile(`${root}/name:colon.txt`, "needle:12:content\n");
+    await writeFile(`${root}/long.txt`, `${"needle ".repeat(200)}\n`);
+    const grep = (target: string, pattern = "needle", limit = "20", context = "0") =>
+      guestScript(GUEST_GREP.replaceAll("/usr/bin/rg", "rg"), [target, pattern, limit, "51200", "0", "0", context, ""], root);
+    const single = await grep(regular);
+    assert.match(single.stdout, /single\.txt:1:needle/);
+    assert.doesNotMatch(single.stdout, /:1: needle/);
+    const colon = await grep(root);
+    assert.match(colon.stdout, /name:colon\.txt:1:needle:12:content/);
+    const context = await grep(regular, "needle", "1", "1");
+    assert.match(context.stdout, /single\.txt:1:needle/);
+    assert.match(context.stdout, /single\.txt-2-after/);
+    const long = await grep(`${root}/long.txt`);
+    assert.match(long.stdout, /\.\.\./);
+    await assert.rejects(() => grep(root, "[", "20"), (error: any) => {
+      assert.ok(Buffer.byteLength(error.stderr ?? "") <= 51200);
+      assert.ok(Buffer.byteLength(error.stdout ?? "") <= 51200);
+      return true;
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guest grep/find scripts preserve bounded behavior and Pi recursive globs", async () => {
+  const root = await mkdtemp(`${tmpdir()}/gondolin-guest-tools-`);
+  try {
+    await writeFile(`${root}/a.ts`, "hit\ncontext\n");
+    await writeFile(`${root}/a.spec.ts`, "hit\n");
+    await writeFile(`${root}/long.ts`, `${"hit ".repeat(200)}\n`);
+    await writeFile(`${root}/ignored.ts`, "hit\n");
+    await execFile("git", ["init", "-q"], { cwd: root });
+    await writeFile(`${root}/.gitignore`, "ignored.ts\n");
+    await writeFile(`${root}/src-a.spec.ts`, "hit\n");
+    await writeFile(`${root}/src/a.spec.ts`, "hit\n").catch(async () => { await execFile("mkdir", ["-p", `${root}/src`]); await writeFile(`${root}/src/a.spec.ts`, "hit\n"); });
+    const found = await guestScript(GUEST_FIND, [root, "**/*.ts", "20", "51200"], root);
+    assert.match(found.stdout, /a\.ts/);
+    assert.match(found.stdout, /src\/a\.spec\.ts/);
+    assert.doesNotMatch(found.stdout, /ignored\.ts/);
+    const nested = await guestScript(GUEST_FIND, [root, "src/**/*.spec.ts", "20", "51200"], root);
+    assert.match(nested.stdout, /src\/a\.spec\.ts/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("bash streams in guest and truncates without a host fullOutputPath spill", async () => {
@@ -63,6 +147,17 @@ test("bash tail accumulator stays within hard byte and line caps for multi-megab
   assert.match(tail.content, /line-31/);
 });
 
+test("guest search validates bounded stdout and stderr", async () => {
+  const oversized = "x".repeat(50 * 1024 + 1);
+  for (const result of [
+    { ok: false, exitCode: 2, stdout: oversized, stderr: "bad" },
+    { ok: false, exitCode: 2, stdout: "", stderr: oversized },
+  ]) {
+    const vm = { exec: async () => result };
+    await assert.rejects(() => executeGuestSearch(vm as never, [], undefined, "empty", "results", 1), /output exceeded limit/);
+  }
+});
+
 test("guest search reports guest-enforced result and byte limits without buffering stdout", async () => {
   const calls: any[] = [];
   const vm = { exec: async (args: string[], options?: any) => {
@@ -74,6 +169,8 @@ test("guest search reports guest-enforced result and byte limits without bufferi
   assert.match(result.content[0].text, /2 results limit reached/);
   assert.match(result.content[0].text, /50KB limit reached/);
   assert.equal(calls[0].options.signal, undefined);
+  assert.equal(calls[0].options.stdout, undefined);
+  assert.equal(calls[0].options.stderr, undefined);
 });
 
 test("read asks the guest to bound an oversized file before it reaches host memory", async () => {
@@ -86,6 +183,6 @@ test("read asks the guest to bound an oversized file before it reaches host memo
   const result = await executeGuestRead(vm as never, "/workspace/huge.txt", { offset: 100, limit: 5000 });
   assert.deepEqual(calls[0].args.slice(0, 2), ["/bin/bash", "-lc"]);
   assert.match(calls[0].args[2], /head|dd/);
-  assert.match(calls[0].args[2], /tail/);
+  assert.match(calls[0].args[2], /awk/);
   assert.ok(Buffer.byteLength(result.content[0].text) <= 52 * 1024);
 });

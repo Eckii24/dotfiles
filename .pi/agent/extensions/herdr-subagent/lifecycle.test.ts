@@ -76,6 +76,12 @@ test("abort during get, literal send, or Enter returns structured aborted result
 	}
 });
 
+test("abortable requests remove listeners after repeated settled polling", async () => {
+ const f = fake([{ state: "idle", paneId: "p" }, { state: "done", paneId: "p" }], { final: false }); let active = 0; const signal = new AbortController().signal; const add = signal.addEventListener.bind(signal), remove = signal.removeEventListener.bind(signal);
+ (signal as any).addEventListener = (...args: any[]) => { active++; return add(...args); }; (signal as any).removeEventListener = (...args: any[]) => { active--; return remove(...args); };
+ expect((await turn(f, { signal })).status).toBe("timed_out"); expect(active).toBe(0);
+});
+
 test("retained done requires separate live Pi/session validation", async () => {
 	const f = fake([{ state: "done", paneId: "p" }]);
 	const retained = { sessionId: "s", path: "/s", root: "/", source: "herdr:pi" as const, kind: "path" as const, bytes: 1 };

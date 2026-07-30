@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { mutatePolicy, type MutationKind, type MutationPaths, type MutationRequest } from "./handlers";
 import type { SandboxPolicy } from "./policy";
 
@@ -41,7 +42,15 @@ const parseMutation = (name: string, args: string, ctx: CommandContext, deps: De
   const tokens = tokenize(args);
   const action = tokens.shift();
   const value = tokens.shift();
-  if ((action !== "add" && action !== "remove") || !value) throw new Error(`usage: /${name} add|remove VALUE [options]`);
+  if ((action !== "add" && action !== "remove") || !value) {
+    const usage = name.startsWith("sandbox-mount-")
+      ? `usage: /${name} add HOST [--guest GUEST] [--required] [--scope global|project]; /${name} remove HOST_OR_GUEST [--scope global|project]`
+      : `usage: /${name} add|remove VALUE [--scope global|project]`;
+    throw new Error(usage);
+  }
+  if (name.startsWith("sandbox-mount-") && !isAbsolute(value)) {
+    throw new Error("mount host path must be absolute; Pi does not expand ~ or variables");
+  }
   let scope: "global" | "project" = ctx.isProjectTrusted() ? "project" : "global";
   let guestPath: string | undefined;
   let required = false;
@@ -53,7 +62,7 @@ const parseMutation = (name: string, args: string, ctx: CommandContext, deps: De
       scope = selected;
     } else if (option === "--guest" && name.startsWith("sandbox-mount-")) {
       guestPath = tokens.shift();
-      if (!guestPath) throw new Error("--guest requires an absolute path");
+      if (!guestPath || !isAbsolute(guestPath)) throw new Error("--guest requires an absolute path");
     } else if (option === "--required" && name.startsWith("sandbox-mount-")) required = true;
     else throw new Error(`unknown option: ${option}`);
   }
@@ -69,7 +78,9 @@ const parseMutation = (name: string, args: string, ctx: CommandContext, deps: De
 export function registerPolicyCommands(api: PiCommandApi, deps?: Dependencies): void {
   for (const name of POLICY_COMMANDS) {
     api.registerCommand(name, {
-      description: name === "sandbox-policy" ? "Show the effective sandbox policy (read-only)" : "Mutate user-approved sandbox policy",
+      description: name === "sandbox-policy" ? "Show the effective sandbox policy (read-only)"
+        : name.startsWith("sandbox-mount-") ? "Add/remove mount policy; active next Pi session/restart"
+          : "Mutate user-approved sandbox policy",
       async handler(args, ctx) {
         requireInteractiveIdle(ctx);
         if (!deps) throw new Error(`${name} requires policy command dependencies`);

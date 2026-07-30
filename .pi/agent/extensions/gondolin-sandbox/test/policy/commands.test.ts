@@ -35,13 +35,28 @@ describe("user-only command surface", () => {
     });
     const trusted = makeContext(true);
     trusted.ctx.ui.notify = (message: string) => { events.push(`notice:${message}`); trusted.notices.push(message); };
-    await commands.get("sandbox-mount-ro").handler("add /host --guest /guest --required", trusted.ctx);
-    expect(events[0]).toBe("notice:scope=project");
-    expect(events[1]).toBe("write:project");
+    await commands.get("sandbox-mount-ro").handler('add "/host reference" --guest "/guest reference" --required --scope global', trusted.ctx);
+    expect(events[0]).toBe("notice:scope=global");
+    expect(events[1]).toBe("write:global");
 
     const untrusted = makeContext(false);
     await commands.get("sandbox-network-deny").handler("remove blocked.example.com --scope global", untrusted.ctx);
     expect(untrusted.notices[0]).toBe("scope=global");
+  });
+
+  test("mount grammar is explicit, absolute, and accepts exact host or guest removal", async () => {
+    const commands = new Map<string, any>();
+    let mutation: any;
+    registerPolicyCommands({ registerCommand: (name, descriptor) => commands.set(name, descriptor) }, {
+      pathsForScope: () => ({ settingsPath: "s", approvalsPath: "a", lockPath: "l", projectId: "p" }),
+      mutate: async (request) => { mutation = request; return { scope: "global", message: "done" }; }, readPolicy: async () => ({}),
+    });
+    await expect(commands.get("sandbox-mount-ro").handler("/host /guest", makeContext().ctx)).rejects.toThrow("remove HOST_OR_GUEST");
+    await expect(commands.get("sandbox-mount-ro").handler("add ~/docs", makeContext().ctx)).rejects.toThrow("must be absolute");
+    await expect(commands.get("sandbox-mount-ro").handler("add /host --guest relative", makeContext().ctx)).rejects.toThrow("--guest requires an absolute path");
+    await commands.get("sandbox-mount-ro").handler("remove /host", makeContext().ctx);
+    expect(mutation.value).toBe("/host");
+    expect(commands.get("sandbox-mount-ro").description).toContain("next Pi session/restart");
   });
 
   test("enforces interactive TUI and idle state before mutation", async () => {

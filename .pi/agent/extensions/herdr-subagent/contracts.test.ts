@@ -32,6 +32,8 @@ test("normalizes a strict single request and applies defaults", () => {
 });
 
 test("schema descriptions warn about parallel writer cwd conflicts", () => {
+	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("Omitted profile tools use Pi defaults and are writers");
+	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("bash");
 	expect(HerdrSubagentParamsSchema.properties.tasks.description).toContain("distinct canonical cwd");
 	expect(HerdrSubagentParamsSchema.properties.chain.description).toContain("writers sharing one cwd");
 	expect(HerdrSubagentParamsSchema.properties.allowSharedWorkspaceWrites.description).toContain("explicit user acceptance");

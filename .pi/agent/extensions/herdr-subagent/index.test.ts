@@ -15,7 +15,7 @@ const ids = () => ({ rootRunId: "root", leafRunId: "leaf", turnId: "turn" });
 const profile = (source: "user" | "project" = "user", tools: string[] = []) => ({ name: "scout", description: "desc", systemPrompt: "SECRET PROFILE BODY", source, filePath: "/profile.md", tools });
 const preflight = async () => ({ socketPath: "/socket", workspaceId: "workspace", callerPaneId: "caller", nestingDepth: 0, protocol: 1, capabilities: {} as any, piExecutable: "/bin/pi" });
 
-function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string> } = {}) {
+function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string>; cleanupTopology?: (input: any) => Promise<string[]> } = {}) {
 	const events = options.events ?? [];
 	const client = { dispose: () => events.push("dispose") } as any;
 	const launch = { executable: "/bin/pi", name: "scout", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => { events.push("ready-cleanup"); }, cleanupAfterFailure: async () => { events.push("failure-cleanup"); } };
@@ -30,7 +30,7 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 		createLaunch: async () => launch as any,
 		createTopology: async (input: any) => options.createTopology ? options.createTopology(input, topology) : (topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)), topology),
 		addTopologyLeaf: options.addTopologyLeaf ?? (async ({ result }: any) => { const pane = `pane-${result.group.ownedPaneIds.size + 1}`; result.group.ownedPaneIds.add(pane); return pane; }),
-		cleanupTopology: async () => { events.push("topology-cleanup"); return []; },
+		cleanupTopology: options.cleanupTopology ?? (async ({ result }: any) => { events.push("topology-cleanup"); result.group.ownedPaneIds.clear(); return []; }),
 		acceptLeaf: () => {},
 		runLifecycle: (async (_port: any, _sessions: any, input: any) => {
 			received = input; receivedInputs.push(input);
@@ -48,9 +48,13 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	const guidance = formatSubagentPrompt([
 		{ ...profile("user", ["read", "edit"]), name: "worker", description: "Makes changes." },
 		{ ...profile("user", ["read", "bash"]), name: "scout", description: "Maps code." },
+		{ name: "default", description: "Uses Pi defaults.", systemPrompt: "body", source: "user", filePath: "/default.md" },
 	] as any);
-	expect(guidance).toContain("worker [declared writer: edit/write]");
-	expect(guidance).toContain("scout [no declared edit/write tools]");
+	expect(guidance).toContain("worker [writer: edit/write/bash]");
+	expect(guidance).toContain("scout [writer: edit/write/bash]");
+	expect(guidance).toContain("default [writer: Pi default tools]");
+	expect(guidance).toContain("Profiles omitting `tools` use Pi defaults and are writers");
+	expect(guidance).toContain("Profiles declaring `edit`, `write`, or `bash` are also writers");
 	expect(guidance).toContain("omitted `cwd` values all resolve to caller cwd");
 	expect(guidance).toContain("use `chain`");
 	expect(formatSubagentPrompt([])).toContain("Parallel writers must use distinct existing canonical `cwd` values");
@@ -58,7 +62,8 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	const tools: any[] = [];
 	herdrExtension({ on: () => {}, registerTool: (tool: any) => { tools.push(tool); } } as any);
 	const description = tools.find(tool => tool.name === "subagent")?.description;
-	expect(description).toContain("profiles declaring edit/write are writers");
+	expect(description).toContain("profiles omitting tools use Pi defaults and are writers");
+	expect(description).toContain("profiles declaring edit/write/bash are also writers");
 	expect(description).toContain("Same omitted cwd means same caller cwd");
 	expect(description).toContain("use chain for same-cwd writers");
 	expect(formatSubagentPrompt([])).toContain("Retained follow-up");
@@ -111,9 +116,42 @@ test("keepOpen retains terminal topology and blocked retains pane", async () => 
 	expect(kept.content[0].text).toContain("Control retained run: root=root status=succeeded"); expect(kept.content[0].text).toContain("scout: leaf=leaf status=succeeded");
 	expect(kept.content[0].text).not.toContain("pane-1"); expect(kept.content[0].text).not.toContain("/trusted/session.jsonl"); expect(kept.content[0].text).not.toContain("[herdr:");
 	expect(keep.runtime.registry.get("root")?.status).toBe("succeeded"); expect(keep.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: undefined, activeMarker: undefined });
+	const timed = vertical({ status: "timed_out" }); const timedResult = await timed.runtime.execute(params({ keepOpen: true }), context);
+	expect(timedResult.content[0].text).toContain("Control retained run: root=root status=timed_out"); expect(timedResult.content[0].text).toContain("leaf=leaf status=timed_out"); expect(timedResult.content[0].text).toContain("collect for terminal status");
 	const blocked = vertical({ status: "blocked" }); const result = await blocked.runtime.execute(params(), context);
 	expect(result.details.status).toBe("blocked"); expect(result.content[0].text).toContain("Control retained run: root=root status=blocked"); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
 	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });
+});
+
+test("failed owned-pane cleanup retains local authority for shutdown retry", async () => {
+	const f = vertical({ cleanupTopology: async () => ["WARNING: failed to close owned pane pane-1."] });
+	const result = await f.runtime.execute(params(), context);
+	expect(result.details.warnings).toContain("WARNING: failed to close owned pane pane-1.");
+	expect(f.runtime.registry.get("root")?.leaves[0]).toMatchObject({ paneId: "pane-1", status: "succeeded" });
+});
+
+test("retained controls omit never-launched queued chain leaves", async () => {
+	const f = vertical({ status: "blocked" });
+	const result = await f.runtime.execute({ group: "chain", chain: [{ name: "first", agent: "scout", task: "block" }, { name: "queued", agent: "scout", task: "later" }] }, context);
+	expect(result.content[0].text).toContain("first: leaf=leaf status=blocked");
+	expect(result.content[0].text).not.toContain("queued: leaf=");
+	expect(result.details.children[1]).toMatchObject({ name: "queued", status: "queued", paneId: "" });
+	expect(f.runtime.registry.get("root")?.leaves).toHaveLength(1);
+});
+
+test("shutdown returns immediately empty; releases only roots whose owned panes all close", async () => {
+ let preflights = 0; const empty = createHerdrSubagentRuntime({ preflight: async () => { preflights++; return await preflight(); } }); await empty.shutdown(); expect(preflights).toBe(0);
+ const registry = new RunRegistry(); const released: string[] = []; registry.register({ rootRunId: "good", workspaceId: "w", tabId: "tg", tabLabel: "g", status: "working", keepOpen: true, leaves: [{ leafRunId: "a", paneId: "a", status: "working" }, { leafRunId: "b", paneId: "b", status: "working" }, { leafRunId: "queued", paneId: "", status: "queued" }] }); registry.register({ rootRunId: "bad", workspaceId: "w", tabId: "tb", tabLabel: "b", status: "working", keepOpen: true, leaves: [{ leafRunId: "c", paneId: "c", status: "working" }] }); registry.setRelease("good", async () => { released.push("good"); }); registry.setRelease("bad", async () => { released.push("bad"); });
+ const closed: string[] = []; const runtime = createHerdrSubagentRuntime({ registry, preflight, createClient: () => ({ closePane: async (id: string) => { closed.push(id); if (id === "c") throw new Error("no"); }, closeTab: async () => {}, dispose: () => {} }) as any }); await runtime.shutdown();
+ expect(closed).toEqual(["a", "b", "c"]); expect(released).toEqual(["good"]); expect(registry.get("good")).toBeUndefined(); expect(registry.get("bad")).toBeDefined();
+});
+
+test("shutdown snapshots ownership before and at tab close, and leaves tabs on snapshot failure", async () => {
+ const registry = new RunRegistry(); const released: string[] = []; for (const rootRunId of ["preexisting", "arriving", "unknown"]) { registry.register({ rootRunId, workspaceId: "w", tabId: rootRunId, tabLabel: rootRunId, status: "working", keepOpen: true, leaves: [{ leafRunId: rootRunId, paneId: `${rootRunId}-pane`, status: "working" }] }); registry.setRelease(rootRunId, async () => { released.push(rootRunId); }); }
+ const closed: string[] = []; const tabs: string[] = []; let snapshots = 0;
+ const runtime = createHerdrSubagentRuntime({ registry, preflight, createClient: () => ({ closePane: async (id: string) => { closed.push(id); }, closeTab: async (id: string) => { tabs.push(id); }, snapshot: async () => { if (++snapshots === 1) return { snapshot: { panes: [{ pane_id: "foreign", tab_id: "preexisting" }] } }; if (snapshots === 2) return { snapshot: { panes: [{ pane_id: "arriving-pane", tab_id: "arriving" }] } }; if (snapshots === 3) return { snapshot: { panes: [{ pane_id: "foreign", tab_id: "arriving" }] } }; throw new Error("snapshot unavailable"); }, dispose: () => {} }) as any });
+ await runtime.shutdown();
+ expect(closed).toEqual(["preexisting-pane", "arriving-pane", "unknown-pane"]); expect(tabs).toEqual([]); expect(released.sort()).toEqual(["arriving", "preexisting", "unknown"]); expect(registry.rootsSnapshot()).toEqual([]);
 });
 
 test("launched lifecycle failure and abort return structured terminal results and clean up", async () => {
@@ -171,7 +209,7 @@ test("parallel blocked returns before deferred sibling and disposes client only 
 		return await new Promise(resolve => { releaseSibling = () => resolve({ status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "later", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }); });
 	} });
 	const result = await f.runtime.execute({ group: "parallel", tasks: [{ name: "blocked", agent: "scout", task: "block" }, { name: "sibling", agent: "scout", task: "later" }] }, context);
-	expect(started).toEqual(["block", "later"]); expect(result.details.children.map((child: any) => child.status)).toEqual(["blocked", "working"]); expect(f.events).not.toContain("dispose");
+	expect(started).toEqual(["block", "later"]); expect(result.details.children.map((child: any) => child.status)).toEqual(["blocked", "working"]); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(result.content[0].text).toContain("sibling: leaf="); expect(f.events).not.toContain("dispose");
 	releaseSibling();
 	for (let turn = 0; turn < 20 && !f.events.includes("dispose"); turn++) await Promise.resolve();
 	expect(f.runtime.registry.get("root")?.leaves.map(leaf => leaf.status)).toEqual(["blocked", "succeeded"]); expect(f.events).toContain("dispose");
@@ -215,7 +253,7 @@ test("oversize escaped pane.send_text request fails before lifecycle delivery", 
 	const task = "\\".repeat(Math.floor((DEFAULT_MAX_PAYLOAD_BYTES - overhead) / 2) + 1);
 	const f = vertical();
 	await expect(f.runtime.execute(params({ task }), context)).rejects.toMatchObject({ code: "task_delivery_failed" });
-	expect(f.receivedInputs).toEqual([]);
+	expect(f.receivedInputs).toEqual([]); expect(f.runtime.registry.get("root")).toBeUndefined();
 });
 
 test("later chain add failure releases provisional writer lease for immediate other-coordinator acquisition", async () => {

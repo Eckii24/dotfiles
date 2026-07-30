@@ -58,8 +58,9 @@ test("concurrent allocators cannot claim final slot across coordinators", async 
 	} finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("bash-only scouts are not declared writers; classification is not sandboxing", () => {
-	expect(isDeclaredWriter(["bash"])).toBeFalse(); expect(isDeclaredWriter(["edit"])).toBeTrue(); expect(isDeclaredWriter(["write"])).toBeTrue();
+test("default tools plus bash, edit, and write declarations are conservatively writer-classified", () => {
+	expect(isDeclaredWriter(undefined)).toBeTrue(); expect(isDeclaredWriter(["bash"])).toBeTrue(); expect(isDeclaredWriter(["edit"])).toBeTrue(); expect(isDeclaredWriter(["write"])).toBeTrue();
+	expect(isDeclaredWriter(["read", "grep", "find", "ls"])).toBeFalse();
 });
 
 test("symlink aliases collide on canonical cwd, override warns, and release permits reacquire", async () => {
