@@ -228,6 +228,7 @@ export function checkRead(
       requiresConfirmation: true,
       reason: `Path matches confirmRead pattern: ${matched}`,
       matchedPattern: matched,
+      confirmationKind: "confirm-read",
     };
   }
 
@@ -257,6 +258,7 @@ export function checkWrite(
         requiresConfirmation: true,
         reason: `Path matches confirmWrite pattern: ${denyMatch}`,
         matchedPattern: denyMatch,
+        confirmationKind: "confirm-write",
       };
     }
   }
@@ -269,6 +271,7 @@ export function checkWrite(
         allowed: false,
         requiresConfirmation: true,
         reason: "allowWrite is empty — no paths are allowlisted",
+        confirmationKind: "allow-write",
       };
     }
 
@@ -284,6 +287,7 @@ export function checkWrite(
         allowed: false,
         requiresConfirmation: true,
         reason: "Path not in allowWrite list",
+        confirmationKind: "allow-write",
       };
     }
   }

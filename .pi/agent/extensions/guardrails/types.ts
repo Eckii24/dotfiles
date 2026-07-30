@@ -49,6 +49,8 @@ export interface PathCheckResult {
   reason: string;
   /** The matched pattern that triggered the check */
   matchedPattern?: string;
+  /** Policy which required confirmation, when applicable */
+  confirmationKind?: "confirm-read" | "confirm-write" | "allow-write";
 }
 
 /** A single command extracted from a bash command string */

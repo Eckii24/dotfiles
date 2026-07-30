@@ -1,5 +1,7 @@
 export class SessionAllowList {
   private allowedCommands = new Set<string>();
+  private allowedReadScopes = new Set<string>();
+  private allowedWriteScopes = new Set<string>();
 
   private key(scope: string, command: string): string {
     return `${scope}\u0000${command}`;
@@ -25,6 +27,26 @@ export class SessionAllowList {
     return true;
   }
 
+  isReadAllowed(scope: string): boolean {
+    return this.allowedReadScopes.has(scope);
+  }
+
+  allowRead(scope: string): boolean {
+    if (this.allowedReadScopes.has(scope)) return false;
+    this.allowedReadScopes.add(scope);
+    return true;
+  }
+
+  isWriteAllowed(scope: string): boolean {
+    return this.allowedWriteScopes.has(scope);
+  }
+
+  allowWrite(scope: string): boolean {
+    if (this.allowedWriteScopes.has(scope)) return false;
+    this.allowedWriteScopes.add(scope);
+    return true;
+  }
+
   commandsForScope(scope: string): string[] {
     return [...this.allowedCommands]
       .map((key) => this.parseKey(key))
@@ -34,9 +56,23 @@ export class SessionAllowList {
 
   clear(): void {
     this.allowedCommands.clear();
+    this.allowedReadScopes.clear();
+    this.allowedWriteScopes.clear();
+  }
+
+  get commandSize(): number {
+    return this.allowedCommands.size;
+  }
+
+  get readScopeSize(): number {
+    return this.allowedReadScopes.size;
+  }
+
+  get writeScopeSize(): number {
+    return this.allowedWriteScopes.size;
   }
 
   get size(): number {
-    return this.allowedCommands.size;
+    return this.commandSize + this.readScopeSize + this.writeScopeSize;
   }
 }

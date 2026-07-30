@@ -16,10 +16,10 @@
 //
 // Confirmation behavior:
 // - Matching `confirmRead`, `confirmWrite`, or blocked `allowWrite` rules triggers a confirmation dialog.
-// - Bash violations offer three choices:
-//   - Allow once (y/Enter)
-//   - Allow for session (a) — skips future prompts for the same exact command in the same cwd scope
-//   - Deny (n/Esc)
+// - Confirmed reads and writes, plus bash violations, offer three choices:
+//   - Allow once
+//   - Allow for session — reads/writes apply to the effective cwd; bash applies to the exact command
+//   - Deny
 // - If no confirmation is given before timeout, the operation is blocked.
 // - Default timeout is 300000 ms (5 minutes), configurable via `timeout`.
 //
@@ -55,9 +55,10 @@
 //   `paths.confirmWrite`.
 //
 // Session allow-list:
-// - When user chooses "Allow for session" on a bash command, the exact command string
-//   is remembered for the current session together with its cwd scope.
-// - Future identical commands in the same scope skip the confirmation prompt entirely.
+// - Bash approvals remember the exact command in its cwd scope.
+// - Read approvals remember their effective cwd scope.
+// - Write approvals remember their effective cwd scope only for allowWrite misses;
+//   confirmWrite always still requires confirmation.
 // - The allow-list is cleared when the session ends.
 //
 // Config sources (merged, later entries take precedence):
@@ -140,9 +141,10 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
 import { wrapTextWithAnsi } from "@mariozechner/pi-tui";
+import { isAbsolute, relative, sep } from "node:path";
 import { getConfigSourceInfo, loadConfig } from "./config.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
-import { checkRead, checkWrite } from "./path-guard.js";
+import { checkRead, checkWrite, resolvePath } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
 import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
@@ -171,6 +173,11 @@ function configSourceLabel(cwd: string): string {
 function scopeLabel(cwd: string): string {
   const effectiveCwd = getEffectiveCwd(cwd);
   return effectiveCwd === cwd ? effectiveCwd : `${effectiveCwd} (git root)`;
+}
+
+function isPathInScope(filePath: string, cwd: string, scope: string): boolean {
+  const pathFromScope = relative(scope, resolvePath(filePath, cwd));
+  return pathFromScope === "" || (pathFromScope !== ".." && !pathFromScope.startsWith(`..${sep}`) && !isAbsolute(pathFromScope));
 }
 
 // ─── Confirmation result type ───
@@ -299,6 +306,35 @@ async function confirmBashViolation(
   return "deny";
 }
 
+async function confirmPathAccess(
+  title: string,
+  action: "read" | "write",
+  filePath: string,
+  reason: string,
+  ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1],
+  timeout: number,
+  allowSession = true,
+): Promise<ConfirmResult> {
+  const choice = await ctx.ui.select(
+    [
+      `🛡️ Guardrails — ${title}`,
+      "",
+      `${action === "read" ? "Reading" : "Writing"} this file requires confirmation:`,
+      `  ${filePath}`,
+      "",
+      `Reason: ${reason}`,
+      "",
+      "Choose an action:",
+    ].join("\n"),
+    allowSession ? ["Allow once", "Allow for session", "Deny"] : ["Allow once", "Deny"],
+    { timeout },
+  );
+
+  if (choice === "Allow once") return "allow";
+  if (choice === "Allow for session") return "allow-session";
+  return "deny";
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerFlag("no-guardrails", {
     description: "Disable Guardrails for this session",
@@ -357,8 +393,17 @@ export default function (pi: ExtensionAPI) {
       if (typeof entry.data !== "object" || entry.data === null) continue;
 
       const data = entry.data as { action?: unknown; effectiveCwd?: unknown; command?: unknown };
-      if (typeof data.action !== "string" || typeof data.effectiveCwd !== "string" || typeof data.command !== "string") continue;
+      if (typeof data.action !== "string" || typeof data.effectiveCwd !== "string") continue;
 
+      if (data.action === "read-allowed-session") {
+        sessionAllow.allowRead(data.effectiveCwd);
+        continue;
+      }
+      if (data.action === "write-allowed-session") {
+        sessionAllow.allowWrite(data.effectiveCwd);
+        continue;
+      }
+      if (typeof data.command !== "string") continue;
       const key = `${data.effectiveCwd}\u0000${data.command}`;
       if (data.action.endsWith("allowed-session")) {
         restored.set(key, { scope: data.effectiveCwd, command: data.command });
@@ -370,7 +415,7 @@ export default function (pi: ExtensionAPI) {
     for (const { scope, command } of restored.values()) {
       sessionAllow.allowCommand(scope, command);
     }
-    return restored.size;
+    return sessionAllow.size;
   }
 
   function restoreSessionPreflightApprovals(ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1]): number {
@@ -438,7 +483,7 @@ export default function (pi: ExtensionAPI) {
     lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
     lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
     if (restoredAllows > 0 || restoredPreflightApprovals > 0) {
-      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} exact allow(s), ${restoredPreflightApprovals} preflight approval(s)`));
+      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} session allow(s), ${restoredPreflightApprovals} preflight approval(s)`));
     }
 
     recordDecision(ctx, "session-start", {
@@ -472,6 +517,12 @@ export default function (pi: ExtensionAPI) {
       const result = checkRead(filePath, ctx.cwd, currentConfig, { patternCwd });
 
       if (!result.allowed && result.requiresConfirmation) {
+        const sessionScope = getEffectiveCwd(ctx.cwd);
+        const pathInScope = isPathInScope(filePath, ctx.cwd, sessionScope);
+        if (sessionAllow.isReadAllowed(sessionScope) && pathInScope) {
+          recordDecision(ctx, "read-allowed-session-reuse", { toolName: "read", path: filePath, reason: result.reason });
+          return undefined;
+        }
         if (!ctx.hasUI) {
           recordDecision(ctx, "read-blocked-no-ui", { toolName: "read", path: filePath, reason: result.reason });
           return { block: true, reason: `[Guardrails] Read blocked (no UI): ${result.reason}` };
@@ -479,24 +530,27 @@ export default function (pi: ExtensionAPI) {
 
         pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — read confirmation needed" });
 
-        const confirmed = await (async () => {
+        const confirmResult = await (async () => {
           try {
-            return await ctx.ui.confirm(
-              "🛡️ Guardrails — Read Confirmation",
-              `Reading this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this read?`,
-              { timeout }
-            );
+            return await confirmPathAccess("Read Confirmation", "read", filePath, result.reason, ctx, timeout, pathInScope);
           } finally {
             pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
           }
         })();
 
-        if (!confirmed) {
+        if (confirmResult === "deny") {
           recordDecision(ctx, "read-denied", { toolName: "read", path: filePath, reason: result.reason });
           return {
             block: true,
             reason: `[Guardrails] Read denied by user or timed out after ${Math.round(timeout / 1000)}s: ${result.reason}`,
           };
+        }
+
+        if (confirmResult === "allow-session") {
+          sessionAllow.allowRead(sessionScope);
+          ctx.ui.notify(`🛡️ Reads allowed for this repo for session (${sessionAllow.readScopeSize} scope${sessionAllow.readScopeSize === 1 ? "" : "s"})`, "info");
+          recordDecision(ctx, "read-allowed-session", { toolName: "read", path: filePath, reason: result.reason });
+          return undefined;
         }
 
         recordDecision(ctx, "read-allowed-once", { toolName: "read", path: filePath, reason: result.reason });
@@ -510,6 +564,12 @@ export default function (pi: ExtensionAPI) {
 
       if (!result.allowed) {
         if (result.requiresConfirmation) {
+          const sessionScope = getEffectiveCwd(ctx.cwd);
+          const pathInScope = isPathInScope(filePath, ctx.cwd, sessionScope);
+          if (result.confirmationKind === "allow-write" && sessionAllow.isWriteAllowed(sessionScope) && pathInScope) {
+            recordDecision(ctx, "write-allowed-session-reuse", { toolName: event.toolName, path: filePath, reason: result.reason });
+            return undefined;
+          }
           if (!ctx.hasUI) {
             recordDecision(ctx, "write-blocked-no-ui", { toolName: event.toolName, path: filePath, reason: result.reason });
             return { block: true, reason: `[Guardrails] Write blocked (no UI): ${result.reason}` };
@@ -517,24 +577,27 @@ export default function (pi: ExtensionAPI) {
 
           pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Guardrails — write confirmation needed" });
 
-          const confirmed = await (async () => {
+          const confirmResult = await (async () => {
             try {
-              return await ctx.ui.confirm(
-                "🛡️ Guardrails — Write Confirmation",
-                `Writing to this file requires confirmation:\n\n  ${filePath}\n\nReason: ${result.reason}\n\nAllow this write?`,
-                { timeout }
-              );
+              return await confirmPathAccess("Write Confirmation", "write", filePath, result.reason, ctx, timeout, result.confirmationKind === "allow-write" && pathInScope);
             } finally {
               pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
             }
           })();
 
-          if (!confirmed) {
+          if (confirmResult === "deny") {
             recordDecision(ctx, "write-denied", { toolName: event.toolName, path: filePath, reason: result.reason });
             return {
               block: true,
               reason: `[Guardrails] Write denied by user or timed out after ${Math.round(timeout / 1000)}s: ${result.reason}`,
             };
+          }
+
+          if (confirmResult === "allow-session" && result.confirmationKind === "allow-write") {
+            sessionAllow.allowWrite(sessionScope);
+            ctx.ui.notify(`🛡️ Writes allowed for this repo for session (${sessionAllow.writeScopeSize} scope${sessionAllow.writeScopeSize === 1 ? "" : "s"})`, "info");
+            recordDecision(ctx, "write-allowed-session", { toolName: event.toolName, path: filePath, reason: result.reason });
+            return undefined;
           }
 
           recordDecision(ctx, "write-allowed-once", { toolName: event.toolName, path: filePath, reason: result.reason });
@@ -781,7 +844,9 @@ export default function (pi: ExtensionAPI) {
         `Config source: ${configSourceLabel(ctx.cwd)}`,
         `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
         `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
-        `Session exact allows: ${sessionAllow.size}`,
+        `Session command allows: ${sessionAllow.commandSize}`,
+        `Session read scopes: ${sessionAllow.readScopeSize}`,
+        `Session write scopes: ${sessionAllow.writeScopeSize}`,
         `Session preflight approvals: ${sessionPreflightApprovals.size}`,
         "",
         "─── Paths ───",

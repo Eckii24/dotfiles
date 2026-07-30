@@ -38,12 +38,30 @@ describe("SessionAllowList", () => {
     expect(allow.size).toBe(1);
   });
 
-  it("clears session approvals", () => {
+  it("scopes read and write approvals independently", () => {
+    const allow = new SessionAllowList();
+    allow.allowRead("/repo-a");
+    allow.allowWrite("/repo-a");
+
+    expect(allow.isReadAllowed("/repo-a")).toBe(true);
+    expect(allow.isWriteAllowed("/repo-a")).toBe(true);
+    expect(allow.isReadAllowed("/repo-b")).toBe(false);
+    expect(allow.isWriteAllowed("/repo-b")).toBe(false);
+    expect(allow.commandSize).toBe(0);
+    expect(allow.readScopeSize).toBe(1);
+    expect(allow.writeScopeSize).toBe(1);
+  });
+
+  it("clears command and path session approvals", () => {
     const allow = new SessionAllowList();
     allow.allowCommand("/repo-a", "pwd");
+    allow.allowRead("/repo-a");
+    allow.allowWrite("/repo-a");
     allow.clear();
 
     expect(allow.isAllowed("/repo-a", "pwd")).toBe(false);
+    expect(allow.isReadAllowed("/repo-a")).toBe(false);
+    expect(allow.isWriteAllowed("/repo-a")).toBe(false);
     expect(allow.size).toBe(0);
   });
 });
