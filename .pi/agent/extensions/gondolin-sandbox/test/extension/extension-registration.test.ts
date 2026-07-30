@@ -7,7 +7,7 @@ import { createGondolinSandboxExtension } from "../../index.ts";
 type Handler = (event: any, ctx: any) => any;
 
 function harness(options: {
-  flag?: boolean; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string;
+  flag?: boolean; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string; toolNames?: string[];
   ensureDefaultImage?: (image: string) => Promise<string>;
 } = {}) {
   const tools = new Map<string, any>();
@@ -34,7 +34,9 @@ function harness(options: {
     registerCommand() {},
     on(name: string, handler: Handler) { handlers.set(name, handler); },
     getAllTools() {
-      return [...tools.values()].map((tool) => ({ ...tool, sourceInfo: { path: options.sourcePath ?? path.resolve(import.meta.dirname, "../..", "index.ts") } }));
+      return [...tools.values()]
+        .filter((tool) => !options.toolNames || options.toolNames.includes(tool.name))
+        .map((tool) => ({ ...tool, sourceInfo: { path: options.sourcePath ?? path.resolve(import.meta.dirname, "../..", "index.ts") } }));
     },
   };
   const ctx = (mode = "tui") => ({
@@ -139,6 +141,19 @@ test("active RPC mode fails closed and shuts down before commands", async () => 
   const result = await pi.tools.get("bash").execute("id", { command: "touch /host/sentinel" });
   assert.match(result.content[0].text, /RPC mode is unsupported/);
   assert.equal(result.isError, true);
+});
+
+test("scout-like tool subset starts without adding absent mutation tools", async () => {
+  let starts = 0;
+  const pi = harness({
+    flag: true,
+    toolNames: ["read", "grep", "find", "ls", "bash"],
+    vm: { id: "vm-scout", start: async () => { starts++; }, close: async () => {} },
+  });
+  assert.deepEqual(pi.api.getAllTools().map((tool: any) => tool.name).sort(), ["bash", "find", "grep", "ls", "read"]);
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.equal(starts, 1);
+  assert.ok(!pi.statuses.some((status) => /ownership collision/i.test(status)));
 });
 
 test("tool collision latches a boundary failure", async () => {

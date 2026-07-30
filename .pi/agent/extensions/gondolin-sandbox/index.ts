@@ -527,7 +527,8 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       }
       const ownership = new Map(pi.getAllTools().map((tool) => [tool.name, normalizedSourcePath(tool.sourceInfo.path, cwd)]));
       const ownPath = normalizedSourcePath(import.meta.filename, cwd);
-      const collisions = ROUTED_TOOLS.filter((name) => ownership.get(name) !== ownPath);
+      // Profile-restricted tools are absent; only present foreign owners collide.
+      const collisions = ROUTED_TOOLS.filter((name) => ownership.has(name) && ownership.get(name) !== ownPath);
       if (collisions.length) {
         latchFailure(`tool ownership collision: ${collisions.join(", ")}`, ctx);
         return;
