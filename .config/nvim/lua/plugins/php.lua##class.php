@@ -165,7 +165,7 @@ return {
         providers = {
           ["blade-nav"] = {
             name = "blade-nav",
-            module = "blade-nav.blink",
+            module = "blade-nav.integrations.blink",
           },
           laravel = {
             name = "laravel",
