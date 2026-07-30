@@ -13,6 +13,7 @@
       "linux-virt",
       "rng-tools",
       "bash",
+      "coreutils",
       "ca-certificates",
       "curl",
       "e2fsprogs",

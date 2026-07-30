@@ -4,4 +4,4 @@ Dormant unless `--sandbox` or exact `PI_SANDBOX=gondolin`. Active TUI/print/json
 
 Commands: `/sandbox-status`, `/sandbox-policy`, `/sandbox-mount-ro`, `/sandbox-mount-rw`, `/sandbox-network-allow`, `/sandbox-network-deny`. Policy writes only occur through interactive idle TUI commands; project policy requires Pi trust and full-section approval.
 
-Default image: `pi-agent-base:0.12.0`; build notes in `images/`.
+Default image: `pi-agent-base:0.12.0`. On first sandbox startup, extension builds host-native bundled image, imports it into Gondolin local image store, then starts it. First build needs Docker and network access for Alpine packages plus verified RTK release. Custom policy images are never built by extension. Build/status failures show exact reason in footer and `/sandbox-status`.

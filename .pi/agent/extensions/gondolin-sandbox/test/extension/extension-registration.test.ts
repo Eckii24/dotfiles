@@ -6,10 +6,16 @@ import { createGondolinSandboxExtension } from "../../index.ts";
 
 type Handler = (event: any, ctx: any) => any;
 
-function harness(options: { flag?: boolean; env?: NodeJS.ProcessEnv; vm?: any; sourcePath?: string } = {}) {
+function harness(options: {
+  flag?: boolean; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string;
+  ensureDefaultImage?: (image: string) => Promise<string>;
+} = {}) {
   const tools = new Map<string, any>();
   const handlers = new Map<string, Handler>();
   const flags: string[] = [];
+  const notices: string[] = [];
+  const statuses: string[] = [];
+  let imageEnsures = 0;
   let getFlagCalls = 0;
   let shutdowns = 0;
   const vm = options.vm ?? {
@@ -18,7 +24,8 @@ function harness(options: { flag?: boolean; env?: NodeJS.ProcessEnv; vm?: any; s
     exec: async () => ({ ok: true, exitCode: 0, stdout: "", stderr: "", stdoutBuffer: Buffer.alloc(0) }),
   };
   const extension = createGondolinSandboxExtension({
-    cwd: "/host/repo", env: options.env ?? {}, createVm: async () => vm,
+    cwd: "/host/repo", env: options.env ?? {}, image: options.image, createVm: async () => vm,
+    ensureDefaultImage: options.ensureDefaultImage ?? (async () => { imageEnsures++; return "/images/pi-agent-base"; }),
   });
   const api = {
     registerFlag(name: string) { flags.push(name); },
@@ -32,10 +39,17 @@ function harness(options: { flag?: boolean; env?: NodeJS.ProcessEnv; vm?: any; s
   };
   const ctx = (mode = "tui") => ({
   mode, cwd: "/host/repo", hasUI: true, isIdle: () => true, isProjectTrusted: () => false, shutdown() { shutdowns++; },
-    ui: { setStatus() {}, notify() {} },
+    ui: {
+      setStatus(_key: string, value: string) { statuses.push(value); },
+      notify(message: string) { notices.push(message); },
+    },
   });
   extension(api as never);
-  return { api, tools, handlers, flags, vm, ctx, get getFlagCalls() { return getFlagCalls; }, get shutdowns() { return shutdowns; } };
+  return {
+    api, tools, handlers, flags, vm, ctx, notices, statuses,
+    get imageEnsures() { return imageEnsures; },
+    get getFlagCalls() { return getFlagCalls; }, get shutdowns() { return shutdowns; },
+  };
 }
 
 test("factory registers dormant wrappers before CLI values exist", () => {
@@ -51,6 +65,43 @@ test("session_start latches the real --sandbox flag and starts exactly one VM", 
   await pi.handlers.get("session_start")!({}, pi.ctx());
   assert.equal(pi.getFlagCalls, 1);
   assert.equal(starts, 1);
+});
+
+test("running parent propagates the sandbox marker to inherited child environments", async (t) => {
+  const before = process.env.PI_SANDBOX;
+  t.after(() => {
+    if (before === undefined) delete process.env.PI_SANDBOX;
+    else process.env.PI_SANDBOX = before;
+  });
+  delete process.env.PI_SANDBOX;
+  const pi = harness({ flag: true });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.equal(process.env.PI_SANDBOX, "gondolin");
+  await pi.handlers.get("session_shutdown")!({}, pi.ctx());
+  assert.equal(process.env.PI_SANDBOX, undefined);
+});
+
+test("default image is provisioned before VM startup", async () => {
+  const pi = harness({ flag: true });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.equal(pi.imageEnsures, 1);
+  assert.ok(pi.statuses.includes("SANDBOX building bundled image (first run)"));
+});
+
+test("custom image skips bundled image provisioning", async () => {
+  const pi = harness({ flag: true, image: "custom:latest" });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.equal(pi.imageEnsures, 0);
+});
+
+test("image setup failure reports its exact reason", async () => {
+  const pi = harness({
+    flag: true,
+    ensureDefaultImage: async () => { throw new Error("docker unavailable"); },
+  });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.ok(pi.statuses.some((value) => value.includes("image setup failed: docker unavailable")));
+  assert.ok(pi.notices.some((value) => value.includes("image setup failed: docker unavailable")));
 });
 
 test("session shutdown closes a VM whose startup is still pending", async () => {

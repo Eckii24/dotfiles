@@ -1,5 +1,6 @@
 import * as path from "node:path";
-import { realpath } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -19,13 +20,26 @@ import {
   type EditOperations,
   type WriteOperations,
 } from "@earendil-works/pi-coding-agent";
-import { createHttpHooks, ReadonlyProvider, RealFSProvider, VM, type VMOptions } from "@earendil-works/gondolin";
+import {
+  buildAssets,
+  createHttpHooks,
+  importImageFromDirectory,
+  parseBuildConfig,
+  ReadonlyProvider,
+  RealFSProvider,
+  resolveImageSelector,
+  setImageRef,
+  VM,
+  type VMOptions,
+} from "@earendil-works/gondolin";
 import { GUEST_WORKSPACE, SandboxRuntime, isSandboxRequested, mapHostPath, type SandboxMount } from "./core.ts";
 import { registerPolicyCommands } from "./policy/commands.ts";
 import { loadApprovedEffectivePolicy } from "./policy/loader.ts";
 import { isNetworkAllowed, type SandboxPolicy } from "./policy/policy.ts";
 
 const DEFAULT_IMAGE = "pi-agent-base:0.12.0";
+const DEFAULT_IMAGE_ARCH = process.arch === "arm64" ? "aarch64" : "x86_64";
+const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-base.build.json");
 const BACKEND = process.env.GONDOLIN_VMM || "qemu";
 const NETWORK_POLICY = "deny-all";
 const ROUTED_TOOLS = ["read", "write", "edit", "bash", "grep", "find", "ls"] as const;
@@ -40,6 +54,7 @@ type ExtensionDeps = {
   env?: NodeJS.ProcessEnv;
   image?: string;
   createVm?: () => Promise<VmLike>;
+  ensureDefaultImage?: (image: string) => Promise<string>;
 };
 
 /** Translate already validated/canonicalized policy into the only VM inputs used at runtime. */
@@ -115,6 +130,46 @@ function normalizedSourcePath(input: string, cwd: string): string {
 export function isOneShotMode(argv: readonly string[] = process.argv): boolean {
   return argv.includes("--print") || argv.includes("-p") || argv.includes("--mode=json")
     || argv.some((value, index) => value === "--mode" && argv[index + 1] === "json");
+}
+
+/** Resolve host-native bundled image or build and import it into Gondolin's local store once. */
+export async function ensureDefaultSandboxImage(image: string): Promise<string> {
+  try {
+    const resolved = resolveImageSelector(image, DEFAULT_IMAGE_ARCH);
+    if (resolved.arch === DEFAULT_IMAGE_ARCH) return resolved.assetDir;
+    // A local ref may fall back to another architecture; build native instead.
+  } catch {
+    // Missing local image: build the bundled, verified config below.
+  }
+
+  const outputDir = await mkdtemp(path.join(tmpdir(), "pi-gondolin-image-"));
+  try {
+    const config = parseBuildConfig(await readFile(DEFAULT_IMAGE_CONFIG, "utf8"));
+    config.arch = DEFAULT_IMAGE_ARCH;
+    // RTK 0.43.0 publishes no aarch64 musl release. Build it in native Alpine
+    // instead of injecting an incompatible GNU binary into the guest.
+    if (DEFAULT_IMAGE_ARCH === "aarch64") {
+      config.alpine!.rootfsPackages = [
+        ...(config.alpine!.rootfsPackages ?? []), "build-base", "cargo", "rust", "musl-dev",
+      ];
+      config.postBuild = {
+        ...config.postBuild,
+        commands: [
+          "set -eu; mkdir -p /dev; mknod -m 666 /dev/null c 1 3 2>/dev/null || true; git clone --depth 1 --branch v0.43.0 https://github.com/rtk-ai/rtk.git /tmp/rtk-src; cd /tmp/rtk-src; cargo build --release --locked; install -m 0755 target/release/rtk /usr/local/bin/rtk; /usr/local/bin/rtk --version; rm -rf /tmp/rtk-src",
+        ],
+      };
+    }
+    const result = await buildAssets(config, {
+      outputDir,
+      configDir: path.dirname(DEFAULT_IMAGE_CONFIG),
+      verbose: true,
+    });
+    const imported = importImageFromDirectory(result.outputDir);
+    setImageRef(image, imported.buildId, imported.arch);
+    return imported.assetDir;
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
 }
 
 /** A byte-backed rolling tail whose retained state never exceeds either cap. */
@@ -311,6 +366,8 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     const env = deps.env ?? process.env;
     const agentDir = path.join(env.HOME ?? process.env.HOME ?? "/home/matthias", ".pi", "agent");
     const image = deps.image ?? env.GONDOLIN_DEFAULT_IMAGE ?? DEFAULT_IMAGE;
+    let vmImage = image;
+    const ensureDefaultImage = deps.ensureDefaultImage ?? ensureDefaultSandboxImage;
     let canonicalCwd = cwd;
     let mounts: SandboxMount[] = [{ hostPath: cwd, guestPath: GUEST_WORKSPACE, readOnly: false }];
     const local = {
@@ -321,6 +378,10 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     let failedReason = "sandbox activation has not been latched at session_start";
     let currentVm: VmLike | undefined;
     let lastContext: ExtensionContext | undefined;
+    // Pi child tabs inherit process.env but not parent extension CLI flags.
+    // Set exact marker only after this VM starts, then restore it on shutdown.
+    let inheritedSandboxMarker: string | undefined;
+    let setSandboxMarker = false;
     let effectivePolicy: SandboxPolicy = {};
     const readPolicy = async (trusted: boolean): Promise<SandboxPolicy> => {
       const projectPath = trusted ? path.join(cwd, ".pi", "settings.json") : path.join(cwd, ".pi", "settings.json.disabled");
@@ -330,14 +391,16 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     };
 
     const createVm = deps.createVm ?? (async () => VM.create(
-      buildVmOptions(effectivePolicy, canonicalCwd, image, BACKEND as "qemu" | "krun"),
+      buildVmOptions(effectivePolicy, canonicalCwd, vmImage, BACKEND as "qemu" | "krun"),
     ));
     const runtime = new SandboxRuntime(createVm);
 
     const latchFailure = (reason: string, ctx?: ExtensionContext) => {
       if (activation !== "failed") failedReason = reason;
       activation = "failed";
-      (ctx ?? lastContext)?.ui.setStatus("sandbox", `SANDBOX gondolin/${BACKEND} FAILED`);
+      const message = `SANDBOX gondolin/${BACKEND} FAILED: ${failedReason}`;
+      (ctx ?? lastContext)?.ui.setStatus("sandbox", message);
+      (ctx ?? lastContext)?.ui.notify(`Sandbox startup failed: ${failedReason}`, "error");
     };
     const ensure = async (ctx?: ExtensionContext): Promise<VmLike | undefined> => {
       if (ctx) lastContext = ctx;
@@ -370,8 +433,8 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     pi.registerCommand("sandbox-status", {
       description: "Show Gondolin sandbox activation and effective policy",
       async handler(_args, ctx) {
-        const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (rw)`).join(", ");
-        ctx.ui.notify(`SANDBOX ${activation}\nimage=${image}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${NETWORK_POLICY}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
+        const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
+        ctx.ui.notify(`SANDBOX ${activation}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${NETWORK_POLICY}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
       },
     });
     registerPolicyCommands(pi, {
@@ -469,12 +532,32 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         latchFailure(`tool ownership collision: ${collisions.join(", ")}`, ctx);
         return;
       }
+      try {
+        if (!effectivePolicy.image && image === DEFAULT_IMAGE) {
+          ctx.ui.setStatus("sandbox", "SANDBOX building bundled image (first run)");
+          vmImage = await ensureDefaultImage(image);
+        }
+      } catch (error) {
+        latchFailure(`image setup failed: ${errorMessage(error)}`, ctx);
+        return;
+      }
       ctx.ui.setStatus("sandbox", `SANDBOX gondolin/${BACKEND} starting`);
-      await ensure(ctx);
+      if (await ensure(ctx)) {
+        // Subagents are independent Pi processes. They inherit environment, not
+        // extension flags, so propagate activation only from a running parent.
+        inheritedSandboxMarker = process.env.PI_SANDBOX;
+        process.env.PI_SANDBOX = "gondolin";
+        setSandboxMarker = true;
+      }
     });
     const oneShot = isOneShotMode();
     pi.on("session_shutdown", async () => {
       currentVm = undefined;
+      if (setSandboxMarker) {
+        if (inheritedSandboxMarker === undefined) delete process.env.PI_SANDBOX;
+        else process.env.PI_SANDBOX = inheritedSandboxMarker;
+        setSandboxMarker = false;
+      }
       if (oneShot) {
         // Pi print mode awaits this handler before it disposes its own session/runtime.
         // Start VM cleanup but do not join it here: Gondolin IPC teardown needs that disposal.
