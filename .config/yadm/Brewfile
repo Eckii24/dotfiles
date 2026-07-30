@@ -47,6 +47,8 @@ brew "pnpm"
 brew "pre-commit"
 # Terminal slideshow tool
 brew "presenterm"
+# Generic machine emulator and virtualizer
+brew "qemu"
 # Tools for and transforming and inspecting PDF files
 brew "qpdf"
 # Pack repository contents into a single AI-friendly file
