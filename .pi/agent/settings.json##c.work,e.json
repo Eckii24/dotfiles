@@ -9,6 +9,11 @@
     "large": "claude-opus-4.8"
   },
   "chatModel": "gpt-5.4-mini",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 65536,
+    "keepRecentTokens": 12000
+  },
   "enableInstallTelemetry": false,
   "packages": [],
   "npmCommand": [

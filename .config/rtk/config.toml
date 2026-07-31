@@ -78,8 +78,8 @@ transparent_prefixes = []
 
 [limits]
 # Protect the context against runaway searches.
-grep_max_results = 120
-grep_max_per_file = 20
+grep_max_results = 60
+grep_max_per_file = 10
 
 # Slightly more context than RTK's defaults for larger repositories.
 status_max_files = 20
