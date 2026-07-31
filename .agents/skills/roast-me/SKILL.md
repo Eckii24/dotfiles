@@ -1,6 +1,6 @@
 ---
 name: roast-me
-description: "Sharp professional roast-style critique for code, architecture, docs, UI, specs, plans, prompts, or ideas when user asks for brutal feedback."
+description: "Sharp professional roast-style critique for code, architecture, docs, UI, specs, plans, prompts, or ideas when user asks for brutal feedback. Not for actionable line-level code review (use code-review-excellence) or interactive plan interrogation (use grill-me)."
 ---
 
 # Roast Me
@@ -55,66 +55,11 @@ Don't spend 80% nitpicking if the concept itself is broken.
 
 ### 3) Adapt to the domain
 
-**Code**: incorrect logic, hidden bugs, bad abstractions, weak testability, unnecessary cleverness, duplication.
-
-**Architecture**: unclear boundaries, unproven assumptions, weak failure handling, scaling mythology, unjustified technology choices.
-
-**Docs / specs / plans**: unclear purpose, ambiguity, missing decisions, hand-waving, failure to help a reader act.
-
-**Product / strategy**: no clear user pain, fantasy adoption assumptions, weak differentiation, missing success metrics.
-
-**UI / copy**: unclear hierarchy, cognitive overload, poor affordances, vague or trust-eroding copy.
+Match flaw-hunting to the artifact type (code logic/testability, architecture boundaries/assumptions, docs clarity/decisions, product validation/metrics, UI hierarchy/affordances). Full per-domain checklist: `references/output-templates.md`.
 
 ## Output format
 
-### If context is incomplete
-
-```md
-## Questions before the roast
-- [targeted question]
-- [targeted question]
-
-## Provisional read
-[Short statement of what already looks weak, clearly marked as provisional.]
-```
-
-### If context is sufficient
-
-```md
-## Quick verdict
-[Blunt 1-3 sentence summary. Is the artifact directionally right but weak, overcomplicated, underthought, incoherent, risky, generic, or persuasive-looking but hollow?]
-
-## Biggest problems
-### 1. [Problem]
-- What's wrong
-- Why it matters
-- What it breaks
-
-### 2. [Problem]
-...
-
-### 3. [Problem]
-...
-
-## Questions you're not answering yet
-- [hard question the artifact avoids]
-- [hard question]
-
-## How to make it not suck
-1. [highest-leverage fix]
-2. [next fix]
-3. [next fix]
-
-## Alternative approaches *(if credible alternatives exist)*
-### Option A — [approach]
-- What changes, why it may be better, main tradeoff
-
-### Option B — [approach]
-- What changes, why it may be better, main tradeoff
-
-## What is actually working *(only genuinely earned positives)*
-- [sound instinct worth preserving]
-```
+Use two shapes: **incomplete context** → clarifying questions + provisional read. **Sufficient context** → quick verdict, biggest problems ranked, unanswered hard questions, prioritized fixes, credible alternatives, genuinely earned positives. Exact markdown scaffolding for both: `references/output-templates.md` (read before drafting the response).
 
 ## Calibration
 

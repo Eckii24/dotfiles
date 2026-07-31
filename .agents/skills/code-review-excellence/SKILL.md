@@ -1,6 +1,6 @@
 ---
 name: code-review-excellence
-description: "Review code changes for correctness, security, performance, and maintainability. Use when reviewing pull requests, implementation output, or auditing code quality."
+description: "Review code changes for correctness, security, performance, and maintainability. Use when reviewing pull requests, implementation output, or auditing code quality. Not for brutal-tone critique (use roast-me) or interviewing to resolve open plan questions (use grill-me)."
 ---
 
 # Code Review

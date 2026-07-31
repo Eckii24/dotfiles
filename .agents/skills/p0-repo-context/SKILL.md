@@ -129,20 +129,7 @@ In your response, include:
 - the answer to the user's question
 - any ambiguity or confidence caveats
 
-Example response shape:
-
-```md
-I inspected `example-service` at `<resolved-repo-path>`.
-
-Files checked:
-- `README.md`
-- `src/ExampleService/Program.cs`
-- `src/ExampleService/DependencyRegistration.cs`
-
-Finding:
-- The dependency is responsible for ...
-- The relevant implementation entry point is ...
-```
+For a concrete report template, see `references/examples.md`.
 
 ## Guardrails
 
@@ -162,31 +149,4 @@ This skill assumes the environment is already configured for the repo CLI, espec
 
 If those are missing, surface that clearly instead of guessing.
 
-## Examples
-
-**Example 1**  
-User: "This repo depends on `Company.Payments.Core`. Can you inspect the source repo and tell me where retries are configured?"
-
-What to do:
-- search for likely repo names from `Company.Payments.Core`
-- resolve the exact repo
-- get its local path
-- inspect the retry-related code and config
-- answer with file paths
-
-**Example 2**  
-User: "Please check the repo behind this internal dependency and explain what API it exposes."
-
-What to do:
-- identify the dependency name from the current repo
-- resolve the related repo via the repo CLI
-- inspect the API surface in source and docs
-- answer with evidence
-
-**Example 3**  
-User: "Look at `~/Development/Repos/shared-auth-lib` and tell me how token validation works."
-
-What to do:
-- skip repo discovery
-- inspect that local repo directly
-- summarize the token validation flow with exact file references
+For worked example scenarios, see `references/examples.md` (optional, illustrative only).

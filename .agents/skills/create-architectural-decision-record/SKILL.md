@@ -1,6 +1,6 @@
 ---
 name: create-architectural-decision-record
-description: Create a concise ADR for a durable, consequential architectural decision.
+description: Create a concise ADR for a durable, consequential architectural decision. Use when a significant, hard-to-reverse technical decision needs recording with context, alternatives, and consequences. Not for routine or easily reversible choices.
 ---
 
 # Create Architectural Decision Record

@@ -1,6 +1,6 @@
 ---
 name: project-memory
-description: Manage tracked feature work with `.ai/current-work.md`, handoffs, and archive rules.
+description: Manage tracked feature work with `.ai/current-work.md`, handoffs, and archive rules. Use when initializing, updating, handing off, or archiving multi-session tracked work. Not for one-off tasks needing no persistent state.
 compatibility:
   tools: bash, read, write, edit
 ---

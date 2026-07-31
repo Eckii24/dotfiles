@@ -4,7 +4,7 @@ Read before finalizing a new or materially revised skill.
 
 ## Routing
 
-- [ ] `name` matches directory and uses lowercase kebab-case.
+- [ ] `name` uses lowercase kebab-case (1-64 chars, no leading/trailing or consecutive hyphens). Pi does not require it to match the parent directory; matching is fine but not needed for shared `~/.agents/skills` dirs.
 - [ ] Description states capability, concrete trigger intents, and material near misses.
 - [ ] Two to three trigger requests would select this skill from description alone.
 - [ ] Two to three near misses select an identified alternative instead.

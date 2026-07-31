@@ -1,6 +1,6 @@
 ---
 name: implementation-workflow
-description: Implement a bounded code change from a request, spec, or implementation plan. Use when executing implementation work and choosing between quick, bounded, and tracked modes.
+description: Implement a bounded code change from a request, spec, or implementation plan. Use when executing implementation work and choosing between quick, bounded, and tracked modes. Not for producing a spec (use to-spec) or an implementation plan (use to-plan) before coding.
 ---
 
 # Implementation Workflow
