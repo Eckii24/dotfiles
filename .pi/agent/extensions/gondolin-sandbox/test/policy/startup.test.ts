@@ -49,6 +49,9 @@ describe("session startup policy", () => {
       "sandbox-mount-ro": JSON.stringify([{ hostPath: one, guestPath: "/same" }]),
       "sandbox-mount-rw": JSON.stringify([{ hostPath: two, guestPath: "/same" }]),
     })).rejects.toThrow("guest-path conflict");
+    await expect(parseStartupPolicyFlags({
+      "sandbox-mount-rw": JSON.stringify([{ hostPath: one, guestPath: "/workspace" }]),
+    })).rejects.toThrow("mount guest-path reserved: /workspace");
   });
 
   test("strictly validates bounded inherited overlays", async () => {

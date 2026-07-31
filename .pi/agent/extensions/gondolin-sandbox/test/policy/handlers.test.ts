@@ -113,6 +113,13 @@ describe("pure policy mutation handlers", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(before);
   });
 
+  test("rejects an add with --guest /workspace before any write", async () => {
+    const before = await readFile(settingsPath, "utf8");
+    await expect(mutatePolicy({ kind: "mount-ro", action: "add", value: hostDir, guestPath: "/workspace", scope: "global", paths: paths() }))
+      .rejects.toThrow("mount guest-path reserved: /workspace");
+    expect(await readFile(settingsPath, "utf8")).toBe(before);
+  });
+
   test("global writes update only the exact one-hop in-agent yadm target and preserve the symlink", async () => {
     const agentDir = join(root, "agent");
     await mkdir(agentDir);

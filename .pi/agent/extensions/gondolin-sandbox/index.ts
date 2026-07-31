@@ -362,12 +362,15 @@ function renderGuestSearch(stdout: unknown, empty: string, noun: string, limit: 
     shown: Number.parseInt(shownText, 10), resultLimited: resultText === "1", byteLimited: byteText === "1",
   };
   if (!Number.isSafeInteger(meta.shown)) throw new Error("search failed: invalid guest metadata");
-  let output = source.slice(newline + 1).trimEnd();
-  if (!output) return text(empty);
+  // Guest appends exactly one record-separator newline; strip only that one so
+  // legitimate trailing/interior spaces on matched lines survive.
+  let output = source.slice(newline + 1);
+  if (output.endsWith("\n")) output = output.slice(0, -1);
   const notices: string[] = [];
   if (meta.resultLimited) notices.push(`${limit} ${noun} limit reached. Use limit=${limit * 2} for more`);
   if (meta.byteLimited) notices.push(`${SEARCH_MAX_BYTES / 1024}KB limit reached. Refine search`);
-  if (notices.length) output += `\n\n[${notices.join(". ")}]`;
+  if (!output && !notices.length) return text(empty);
+  if (notices.length) output += `${output ? "\n\n" : ""}[${notices.join(". ")}]`;
   return text(output, notices.length ? { matchLimitReached: meta.resultLimited ? limit : undefined, resultLimitReached: meta.resultLimited ? limit : undefined, truncation: meta.byteLimited ? { truncated: true, maxBytes: SEARCH_MAX_BYTES } : undefined } : undefined);
 }
 

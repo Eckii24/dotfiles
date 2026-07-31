@@ -1,5 +1,6 @@
 import { lstat, mkdir, open, readFile, readlink, realpath, rename, rm } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { GUEST_WORKSPACE } from "../core";
 import { normalizeAbsolute, normalizeMount, mergePolicies, type Mount } from "./policy";
 import { fingerprintSandbox, verifyProjectApproval } from "./approvals";
 import { validateHostPattern, validateSandbox } from "./loader";
@@ -93,6 +94,7 @@ const mutateMounts = async (sandbox: JsonObject, request: MutationRequest): Prom
   if (request.action === "add") {
     const canonicalHost = await realpath(request.value);
     const candidate = normalizeMount({ hostPath: canonicalHost, guestPath: request.guestPath ?? canonicalHost, required: request.required ?? false });
+    if (candidate.guestPath === GUEST_WORKSPACE) throw new Error(`mount guest-path reserved: ${GUEST_WORKSPACE}`);
     const allModes = [sandbox.mounts.readOnly ?? [], sandbox.mounts.readWrite ?? []] as Mount[][];
     for (const existing of allModes.flat()) {
       if (normalizeMount(existing).guestPath === candidate.guestPath) throw new Error(`mount guest-path conflict: ${candidate.guestPath}`);

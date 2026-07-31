@@ -117,7 +117,8 @@ test("keepOpen retains terminal topology and blocked retains pane", async () => 
 	expect(kept.content[0].text).not.toContain("pane-1"); expect(kept.content[0].text).not.toContain("/trusted/session.jsonl"); expect(kept.content[0].text).not.toContain("[herdr:");
 	expect(keep.runtime.registry.get("root")?.status).toBe("succeeded"); expect(keep.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: undefined, activeMarker: undefined });
 	const timed = vertical({ status: "timed_out" }); const timedResult = await timed.runtime.execute(params({ keepOpen: true }), context);
-	expect(timedResult.content[0].text).toContain("Control retained run: root=root status=timed_out"); expect(timedResult.content[0].text).toContain("leaf=leaf status=timed_out"); expect(timedResult.content[0].text).toContain("collect for terminal status");
+	// A timed_out leaf keeps its pane open under keepOpen but is not succeeded/blocked, so it drops out of the compact control-handle list (README: only succeeded keepOpen or blocked leaves are advertised).
+	expect(timedResult.content[0].text).not.toContain("Control retained run:"); expect(timedResult.content[0].text).toContain("timed_out");
 	const blocked = vertical({ status: "blocked" }); const result = await blocked.runtime.execute(params(), context);
 	expect(result.details.status).toBe("blocked"); expect(result.content[0].text).toContain("Control retained run: root=root status=blocked"); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
 	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });
@@ -209,7 +210,8 @@ test("parallel blocked returns before deferred sibling and disposes client only 
 		return await new Promise(resolve => { releaseSibling = () => resolve({ status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "later", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } }); });
 	} });
 	const result = await f.runtime.execute({ group: "parallel", tasks: [{ name: "blocked", agent: "scout", task: "block" }, { name: "sibling", agent: "scout", task: "later" }] }, context);
-	expect(started).toEqual(["block", "later"]); expect(result.details.children.map((child: any) => child.status)).toEqual(["blocked", "working"]); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(result.content[0].text).toContain("sibling: leaf="); expect(f.events).not.toContain("dispose");
+	// The still-working sibling is not blocked or succeeded, so it is not advertised as a control handle yet (README: only successful keepOpen or blocked leaves are).
+	expect(started).toEqual(["block", "later"]); expect(result.details.children.map((child: any) => child.status)).toEqual(["blocked", "working"]); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(result.content[0].text).not.toContain("sibling: leaf="); expect(f.events).not.toContain("dispose");
 	releaseSibling();
 	for (let turn = 0; turn < 20 && !f.events.includes("dispose"); turn++) await Promise.resolve();
 	expect(f.runtime.registry.get("root")?.leaves.map(leaf => leaf.status)).toEqual(["blocked", "succeeded"]); expect(f.events).toContain("dispose");
@@ -221,6 +223,26 @@ test("parallel blocked background cleanup retains bound writer leases", async ()
 	await f.runtime.execute({ group: "parallel", allowSharedWorkspaceWrites: true, tasks: [{ agent: "scout", task: "block" }, { agent: "scout", task: "later" }] }, context);
 	releaseSibling(); await new Promise(resolve => setTimeout(resolve, 0));
 	expect(releases).toEqual([]);
+});
+
+test("keepOpen keeps every pane open but releases write leases for non-succeeded leaves", async () => {
+	const releases: any[] = [];
+	const capacity = { acquireWriteLease: async (input: any) => ({ cwd: input.cwd, rootRunId: input.rootRunId, acquired: true }), releaseWriteLease: async (lease: any) => { releases.push(lease); } };
+	const f = vertical({
+		tools: ["edit"], capacity,
+		createTopology: (input, topology) => { topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)); input.leaves.forEach((leaf: any) => topology.leases.set(leaf.leafRunId, leaf.lease)); return topology; },
+		lifecycle: async input => {
+			await input.onReady();
+			const task = input.task.replace(/ \[herdr:task-sentinel:v1:[^\]]+\]$/, "");
+			if (task === "fail") return { status: "failed", delivered: true, enterSent: true, state: "done", reason: "boom" };
+			return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "ok", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } };
+		},
+	});
+	const result = await f.runtime.execute({ group: "parallel", allowSharedWorkspaceWrites: true, keepOpen: true, tasks: [{ name: "good", agent: "scout", task: "ok" }, { name: "bad", agent: "scout", task: "fail" }] }, context);
+	expect(result.details.status).toBe("failed"); expect(result.details.children.map((c: any) => c.status)).toEqual(["succeeded", "failed"]);
+	expect(f.events).not.toContain("topology-cleanup"); // both panes stay open under keepOpen, even the failed one
+	expect(releases).toHaveLength(1); // only the failed leaf's write lease is released
+	expect(result.content[0].text).toContain("good: leaf="); expect(result.content[0].text).not.toContain("bad: leaf="); // retainedControls lists only the succeeded leaf
 });
 
 test("chain registers every queued leaf before launch, then starts later pane after success", async () => {

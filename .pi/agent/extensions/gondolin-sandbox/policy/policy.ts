@@ -1,3 +1,5 @@
+import { GUEST_WORKSPACE } from "../core";
+
 export type Mount = {
   hostPath: string;
   guestPath: string;
@@ -63,6 +65,7 @@ export function mergePolicies(globalPolicy: SandboxPolicy, projectPolicy: Sandbo
   const guestPaths = new Map<string, { hostPath: string; mode: "ro" | "rw" }>();
   for (const [mode, mounts] of [["ro", normalizedRo], ["rw", normalizedRw]] as const) {
     for (const mount of mounts) {
+      if (mount.guestPath === GUEST_WORKSPACE) throw new PolicyError(`mount guest-path reserved: ${GUEST_WORKSPACE}`);
       const prior = guestPaths.get(mount.guestPath);
       if (prior && (prior.hostPath !== mount.hostPath || prior.mode !== mode)) {
         throw new PolicyError(`mount guest-path conflict: ${mount.guestPath}`);

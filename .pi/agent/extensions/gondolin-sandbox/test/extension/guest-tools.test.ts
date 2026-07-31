@@ -173,6 +173,25 @@ test("guest search reports guest-enforced result and byte limits without bufferi
   assert.equal(calls[0].options.stderr, undefined);
 });
 
+test("guest search preserves trailing spaces on matched lines instead of trimming them", async () => {
+  const vm = { exec: async () => ({ ok: true, exitCode: 0, stdout: "__GONDOLIN_SEARCH_META__\t1\t0\t0\na.ts:1:hit   \n", stderr: "" }) };
+  const result = await executeGuestSearch(vm as never, [], undefined, "empty", "results", 10);
+  assert.equal(result.content[0].text, "a.ts:1:hit   ");
+});
+
+test("guest search reports the byte-limit notice instead of the empty sentinel when the body is empty", async () => {
+  const vm = { exec: async () => ({ ok: true, exitCode: 0, stdout: "__GONDOLIN_SEARCH_META__\t0\t0\t1\n", stderr: "" }) };
+  const result = await executeGuestSearch(vm as never, [], undefined, "empty", "results", 10);
+  assert.equal(result.content[0].text, "[50KB limit reached. Refine search]");
+  assert.equal(result.details?.truncation?.truncated, true);
+});
+
+test("guest search still returns the empty sentinel when body and limits are both absent", async () => {
+  const vm = { exec: async () => ({ ok: true, exitCode: 0, stdout: "__GONDOLIN_SEARCH_META__\t0\t0\t0\n", stderr: "" }) };
+  const result = await executeGuestSearch(vm as never, [], undefined, "empty", "results", 10);
+  assert.equal(result.content[0].text, "empty");
+});
+
 test("read asks the guest to bound an oversized file before it reaches host memory", async () => {
   const calls: any[] = [];
   const bounded = `5000\n${"x".repeat(50 * 1024)}\n`;

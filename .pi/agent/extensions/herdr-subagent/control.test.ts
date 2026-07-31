@@ -38,6 +38,18 @@ test("ambiguous, missing, and foreign controls fail closed", async () => {
  await expect(f.runtime.execute({ action: "abort", rootRunId: "root", leafRunId: "missing" })).rejects.toMatchObject({ code: "unknown_or_foreign_run" });
 });
 
+test("abort bounds Ctrl-C interrupt plus grace to about one second even when the RPC never resolves", async () => {
+ let interruptCalled = false;
+ const f = basic();
+ f.client.interruptOwnedPane = async () => { interruptCalled = true; return new Promise(() => {}); };
+ const started = Date.now();
+ const value = await f.runtime.execute({ action: "abort", rootRunId: "root" });
+ const elapsed = Date.now() - started;
+ expect(interruptCalled).toBe(true);
+ expect(value.details).toMatchObject({ abortCandidateSent: true, gracefulAbortProven: false });
+ expect(elapsed).toBeGreaterThanOrEqual(900); expect(elapsed).toBeLessThan(1400);
+});
+
 test("follow_up uses authoritative current agent/session, retains leaf, and supports serial native finals", async () => {
  const f = await retained();
  try {
@@ -78,6 +90,17 @@ test("atomic follow_up claim rejects concurrent delivery", async () => {
   await lifecycleEntered;
   await expect(f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "duplicate" })).rejects.toMatchObject({ code: "ambiguous_turn" }); expect(f.lifecycleCalls).toBe(1);
   release(); await first;
+ } finally { release(); await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("follow_up reports a structured failure instead of crashing when the run is closed mid-turn", async () => {
+ let release!: () => void; let entered!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); const lifecycleEntered = new Promise<void>(resolve => { entered = resolve; }); const f = await retained(undefined, gate, entered);
+ try {
+  const exec = f.runtime.execute({ action: "follow_up", rootRunId: "root", leafRunId: "leaf", message: "next" });
+  await lifecycleEntered;
+  f.registry.close("root"); // simulate a concurrent close/shutdown deleting the retained run mid-turn
+  release();
+  await expect(exec).rejects.toMatchObject({ code: "unknown_or_foreign_run" });
  } finally { release(); await rm(f.root, { recursive: true, force: true }); }
 });
 
@@ -124,6 +147,12 @@ test("collect fixed clock times out, suppresses duplicate updates, and observes 
  const f = basic([{ leafRunId: "leaf", paneId: "pane", status: "blocked" }]); let sleeps = 0; const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...(f as any).client, getAgent: async () => active("pane", "blocked") }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions", now: () => 0, sleeper: { sleep: async () => { sleeps++; } } });
  const updates: any[] = []; const value = await runtime.execute({ action: "collect", rootRunId: "root", timeoutSeconds: 1 }, undefined, update => updates.push(update)); expect(value.details).toMatchObject({ pending: true, state: "blocked" }); expect(sleeps).toBe(4); expect(updates).toHaveLength(1);
  const controller = new AbortController(); controller.abort(); await expect(runtime.execute({ action: "collect", rootRunId: "root" }, controller.signal)).rejects.toMatchObject({ code: "child_aborted" });
+});
+
+test("collect reports a structured failure instead of crashing when the run closes mid-poll", async () => {
+ const f = basic([{ leafRunId: "leaf", paneId: "pane", status: "blocked" }]);
+ const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...(f as any).client, getAgent: async () => active("pane", "blocked") }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions", now: () => 0, sleeper: { sleep: async () => { f.registry.close("root"); } } });
+ await expect(runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "leaf", timeoutSeconds: 1 })).rejects.toMatchObject({ code: "unknown_or_foreign_run" });
 });
 
 test("close re-snapshots and leaves a tab open when a foreign pane arrives", async () => {

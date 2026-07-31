@@ -309,7 +309,7 @@ Bei parallelem Start werden alle vorbereiteten Leafs gestartet. Liefert ein Leaf
 |---|---|
 | Setup-/Startfehler | eigene Panes, Bootstrap-Pane, Prompt-Dateien, Leases, Reservierung best effort zurückrollen |
 | Erfolg/Fehler/Timeout, `keepOpen=false` | eigene Panes schließen; Tab nur ohne fremde Pane schließen; Leases/Reservierung freigeben |
-| `keepOpen=true` | erfolgreiche Panes und Authority für späteres `follow_up` bleiben erhalten |
+| `keepOpen=true` | alle Panes bleiben zur Inspektion sichtbar; nicht erfolgreiche Leafs verlieren ihre Schreib-Lease; nur erfolgreiche Leafs behalten Lease und Authority für späteres `follow_up` |
 | `blocked` | Gruppe bleibt unabhängig von `keepOpen` für manuelle Auflösung/`collect` erhalten |
 | fremde Pane im Tab | Tab bleibt offen, Warnung |
 | Ownership-Snapshot nicht prüfbar | Tab bleibt offen, Warnung |

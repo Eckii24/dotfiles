@@ -46,13 +46,15 @@ export function createHerdrSubagentControlRuntime(deps: ControlDeps) {
      agentId: leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId, timeoutMs: (input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000, clock: { now }, sleeper: { sleep: ms => delay(ms, signal) }, retainedDone: trusted, signal,
     });
     updateFollowUp(deps.registry, root.rootRunId, leaf.leafRunId, turnId, delivery.marker, life);
-    const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!;
+    const updatedRoot = deps.registry.get(root.rootRunId); const updated = updatedRoot && deps.registry.getLeaf(root.rootRunId, leaf.leafRunId);
+    if (!updatedRoot || !updated) throw failure("unknown_or_foreign_run", "Retained run was closed during follow-up.");
     return wrap({ ...result(input.action, updatedRoot, [updated]), turnId, state: life.state, ...(life.result && !life.result.pending ? { finalOutput: life.result.output, stopReason: life.result.stopReason } : {}), ...(life.reason ? { reason: life.reason } : {}) });
    }
    if (input.action === "collect") return wrap(await collect(client, deps, root, leaves, input, signal, onUpdate));
    if (input.action === "abort") {
-    const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot); await client.interruptOwnedPane(leaf.paneId);
-    await new Promise(resolve => setTimeout(resolve, Math.min((input.timeoutSeconds ?? 1) * 1000, 1000)));
+    const leaf = leaves[0]!; await live(client, root, leaf, false, deps.sessionRoot);
+    const graceMs = Math.min((input.timeoutSeconds ?? 1) * 1000, 1000);
+    await Promise.race([client.interruptOwnedPane(leaf.paneId).catch(() => undefined), delay(graceMs, signal)]).catch(() => undefined);
     const warnings = await closeOwned(client, deps.registry, root, [leaf]);
     return wrap({ ...result(input.action, root, [leaf]), abortCandidateSent: true, gracefulAbortProven: false, warnings });
    }
@@ -131,7 +133,8 @@ async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHa
  const pause = async () => { const ms = Math.min(250, Math.max(1, remaining)); remaining -= ms; await (deps.sleeper?.sleep(ms, signal) ?? delay(ms, signal)); };
  for (;;) {
   if (signal?.aborted) throw failure("child_aborted", "Collection aborted.");
-  const currentRoot = deps.registry.get(root.rootRunId)!; const leaf = deps.registry.getLeaf(root.rootRunId, leafId)!;
+  const currentRoot = deps.registry.get(root.rootRunId); const leaf = currentRoot && deps.registry.getLeaf(root.rootRunId, leafId);
+  if (!currentRoot || !leaf) throw failure("unknown_or_foreign_run", "Retained run was closed during collection.");
   if (leaf.terminal || isTerminalStatus(leaf.status)) {
    const terminalStatus = leaf.terminal?.status ?? leaf.status;
    const output: any = { ...result("collect", currentRoot, [leaf]), terminalStatus, ...(leaf.terminal?.output ? { finalOutput: leaf.terminal.output } : {}), ...(leaf.terminal?.stopReason ? { stopReason: leaf.terminal.stopReason } : {}) };
@@ -160,7 +163,9 @@ async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHa
   const harvested = (anchor as any).pending ? undefined : await harvestTurn(trusted, leaf.activeMarker, anchor as any, { state: liveState });
   if (harvested && !(harvested as any).pending) {
    const h: any = harvested; deps.registry.updateLeaf(root.rootRunId, leaf.leafRunId, { status: h.status, activeTurnId: undefined, activeMarker: undefined, session: { source: "herdr:pi", path: trusted.path, sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId }, terminal: { status: h.status, ...(h.output ? { output: h.output } : {}), ...(h.stopReason ? { stopReason: h.stopReason } : {}), sessionId: h.sessionId, anchorEntryId: h.anchorEntryId, finalEntryId: h.finalEntryId } });
-   deps.registry.recomputeRoot(root.rootRunId); const updatedRoot = deps.registry.get(root.rootRunId)!; const updated = deps.registry.getLeaf(root.rootRunId, leaf.leafRunId)!; const output: any = { ...result("collect", updatedRoot, [updated]), terminalStatus: h.status, finalOutput: h.output, stopReason: h.stopReason };
+   deps.registry.recomputeRoot(root.rootRunId); const updatedRoot = deps.registry.get(root.rootRunId); const updated = updatedRoot && deps.registry.getLeaf(root.rootRunId, leaf.leafRunId);
+   if (!updatedRoot || !updated) throw failure("unknown_or_foreign_run", "Retained run was closed during collection.");
+   const output: any = { ...result("collect", updatedRoot, [updated]), terminalStatus: h.status, finalOutput: h.output, stopReason: h.stopReason };
    if (input.closeAfterCollect) output.warnings = await closeOwned(client, deps.registry, updatedRoot, [updated]); return output;
   }
   const pending = { ...result("collect", currentRoot, [leaf]), state: liveState, pending: true }; update(pending);

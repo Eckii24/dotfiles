@@ -47,6 +47,18 @@ describe("scoped policy merge", () => {
     )).toThrow("mount guest-path conflict: /same");
   });
 
+  test("reserves /workspace unconditionally regardless of mode or conflict", () => {
+    expect(() => mergePolicies(
+      { mounts: { readOnly: [mount("/host/a", "/workspace")] } },
+      {},
+    )).toThrow("mount guest-path reserved: /workspace");
+
+    expect(() => mergePolicies(
+      {},
+      { mounts: { readWrite: [mount("/host/a", "/workspace")] } },
+    )).toThrow("mount guest-path reserved: /workspace");
+  });
+
   test("merges identical mounts once with required true winning", () => {
     const effective = mergePolicies(
       { mounts: { readOnly: [{ hostPath: "/host/a", guestPath: "/same", required: false }] } },

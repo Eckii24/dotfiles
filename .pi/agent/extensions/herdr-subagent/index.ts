@@ -179,6 +179,14 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			if (!input.keepOpen && status !== "blocked") {
 				result.warnings.push(...await (deps.cleanupTopology ?? cleanupTopology)({ client, capacity, result: topology }));
 				if (topology.group.ownedPaneIds.size === 0) registry.close(ids.rootRunId);
+			} else if (input.keepOpen && status !== "blocked") {
+				// All panes stay open for inspection; only non-succeeded leaves give up their write lease.
+				for (const entry of prepared) if (entry.leaf.status !== "succeeded") {
+					const lease = topology.leases.get(entry.ids.leafRunId);
+					if (!lease) continue;
+					try { await capacity.releaseWriteLease(lease); topology.leases.delete(entry.ids.leafRunId); }
+					catch { result.warnings.push(`WARNING: failed to release write lease for leaf ${entry.ids.leafRunId}.`); }
+				}
 			}
 			const formatted = formatResult(result, retainedControls(registry, result)); onUpdate?.(formatted); return formatted;
 		} catch (error) {
@@ -207,7 +215,7 @@ export function validatePaneTextPayload(paneId: string, text: string) {
 function retainedControls(registry: RunRegistry, result: HerdrSubagentResult) {
 	const root = registry.get(result.rootRunId); if (!root) return undefined;
 	const names = new Map(result.children.map(child => [child.leafRunId, child.name]));
-	const retained = root.status === "blocked" || root.keepOpen ? root.leaves.filter(leaf => leaf.paneId && leaf.status !== "queued") : [];
+	const retained = root.leaves.filter(leaf => leaf.paneId && (leaf.status === "blocked" || (root.keepOpen && leaf.status === "succeeded")));
 	const leaves = retained.map(leaf => ({ leafRunId: leaf.leafRunId, name: names.get(leaf.leafRunId), status: leaf.status }));
 	return leaves.length ? { rootRunId: root.rootRunId, status: root.status, leaves } : undefined;
 }
