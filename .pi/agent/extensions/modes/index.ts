@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { formatSkillsForPrompt, getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { formatSkillsForPrompt, getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadModes, replaceSkillIndex, selectModeSkills, type ModeDefinition } from "./definitions.js";
 import { resolveModelReference } from "../shared/model-reference.js";
 

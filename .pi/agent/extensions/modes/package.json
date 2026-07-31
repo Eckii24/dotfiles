@@ -1,8 +1,0 @@
-{
-  "name": "pi-modes-extension",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "yaml": "2.8.2"
-  }
-}

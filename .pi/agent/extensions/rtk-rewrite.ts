@@ -45,7 +45,7 @@
 import {
 	isToolCallEventType,
 	type ExtensionAPI,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import { isGondolinSandboxRequested } from "./shared/sandbox-intent.ts";
 

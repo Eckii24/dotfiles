@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getAgentDir, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { buildMonthlyUsageSummary, formatDetailedMonthlyUsageReport, formatMonthlyUsageReport } from "./report.js";
 
 const FLAG_NAME = "usage";

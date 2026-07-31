@@ -1,6 +1,6 @@
 # Herdr Subagent Extension – technischer Überblick
 
-> Implementierungsstand dieses Verzeichnisses. Stand: Pi `0.80.6`, Herdr `0.7.5`, Herdr-Protokoll `17`, Ergebnisprotokoll `1`.
+> Implementierungsstand dieses Verzeichnisses. Stand: Pi `0.83.0`, Herdr `0.7.5`, Herdr-Protokoll `17`, Ergebnisprotokoll `1`.
 
 Extension erzeugt sichtbare, interaktive Pi-Unteragenten in Herdr. Sie registriert genau zwei Pi-Tools:
 

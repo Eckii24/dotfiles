@@ -26,15 +26,15 @@ import type {
 	ExtensionCommandContext,
 	ExtensionContext,
 	Theme,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import {
 	CURSOR_MARKER,
 	type Focusable,
 	matchesKey,
 	truncateToWidth,
 	visibleWidth,
-} from "@mariozechner/pi-tui";
-import { buildEvaluatorArgs } from "./goal/evaluator-cli.js";
+} from "@earendil-works/pi-tui";
+import { buildEvaluatorArgs } from "./evaluator-cli.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 

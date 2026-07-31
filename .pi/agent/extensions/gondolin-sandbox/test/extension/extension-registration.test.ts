@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import * as path from "node:path";
 import { realpathSync } from "node:fs";
 import test from "node:test";
-import { loadExtensions } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { createGondolinSandboxExtension } from "../../index.ts";
 import { SANDBOX_SESSION_POLICY_ENV } from "../../policy/startup.ts";
+
+const piEntryUrl = import.meta.resolve("@earendil-works/pi-coding-agent");
+const { loadExtensions } = await import(new URL("./core/extensions/loader.js", piEntryUrl).href);
 
 type Handler = (event: any, ctx: any) => any;
 
@@ -270,7 +272,7 @@ test("relative loader ownership paths normalize to the extension entrypoint", as
   assert.doesNotMatch(result.content[0].text, /ownership collision/i);
 });
 
-test("Pi 0.80.6 loader sourceInfo.path preserves the configured relative path", async () => {
+test("installed Pi loader sourceInfo.path preserves the configured relative path", async () => {
   const extensionDir = path.resolve(import.meta.dirname, "../..");
   const loaded = await loadExtensions(["./index.ts"], extensionDir);
   assert.deepEqual(loaded.errors, []);
