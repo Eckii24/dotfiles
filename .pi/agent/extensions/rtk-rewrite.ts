@@ -1,89 +1,140 @@
 /**
- * RTK Rewrite Extension
+ * RTK Rewrite Extension for Pi
  *
- * Intercepts bash tool calls and rewrites supported commands through RTK
- * (Rust Token Killer) for 60-90% token savings on command output.
+ * Intercepts Pi `bash` tool calls and delegates command rewriting to
+ * `rtk rewrite`. RTK remains the single source of truth for:
  *
- * Uses `rtk rewrite` as the single source of truth for what gets rewritten,
- * so this extension automatically supports all commands RTK handles without
- * maintaining a separate command list.
+ * - supported commands,
+ * - shell parsing,
+ * - compound commands and pipelines,
+ * - environment-variable prefixes,
+ * - permission classification,
+ * - exclusions from the RTK config.
  *
- * Exit codes from `rtk rewrite`:
- *   0 — fully rewritten (use rewritten command)
- *   3 — partially rewritten (use rewritten command, e.g. pipes/chains)
- *   1 — no rewrite available (pass through unchanged)
+ * The extension deliberately contains no separate command allowlist or
+ * rewrite heuristics. Unsupported or unsafe shell constructs are passed
+ * through unchanged by RTK.
+ *
+ * Exit-code contract of `rtk rewrite`:
+ *
+ *   0 — rewrite available and RTK permission verdict is `allow`
+ *   1 — no rewrite available; execute the original command
+ *   2 — RTK deny rule matched; leave the original command to Pi
+ *   3 — rewrite available, but permission verdict is `ask` or default
+ *
+ * Exit codes 0 and 3 both provide the rewritten command on stdout.
+ * Mutating the tool input does not bypass Pi's own permission handling.
+ *
+ * Gondolin:
+ *
+ * When Gondolin sandboxing is requested, the host-side rewrite is skipped.
+ * RTK and its configuration must then exist inside the Gondolin guest.
+ *
+ * Failure policy:
+ *
+ * The extension always fails open. Missing RTK, timeouts, cancellation,
+ * unsupported commands, or unexpected errors never block the original
+ * Pi bash command.
+ *
+ * Requirements:
+ *
+ * - `rtk` available on PATH
+ * - RTK with support for `rtk rewrite`
  */
 
-import { execFileSync, execSync } from "node:child_process";
-import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+	isToolCallEventType,
+	type ExtensionAPI,
+} from "@mariozechner/pi-coding-agent";
+
 import { isGondolinSandboxRequested } from "./shared/sandbox-intent.ts";
 
-let rtkAvailable: boolean | null = null;
+const REWRITE_TIMEOUT_MS = 2_000;
 
-function checkRtk(): boolean {
-	if (rtkAvailable !== null) return rtkAvailable;
+export default async function rtkRewrite(pi: ExtensionAPI) {
+	/*
+	 * Probe RTK once when the extension is loaded.
+	 *
+	 * pi.exec avoids a synchronous child process and does not add the
+	 * probe output to the agent context.
+	 */
 	try {
-		execSync("rtk --version", { stdio: "pipe", timeout: 3000 });
-		rtkAvailable = true;
-	} catch {
-		rtkAvailable = false;
-	}
-	return rtkAvailable;
-}
-
-function tryRewrite(command: string): string | null {
-	try {
-		const result = execFileSync("rtk", ["rewrite", command], {
-			stdio: ["pipe", "pipe", "pipe"],
-			timeout: 3000,
-			env: { ...process.env, NO_COLOR: "1" },
+		const version = await pi.exec("rtk", ["--version"], {
+			timeout: REWRITE_TIMEOUT_MS,
 		});
-		const rewritten = result.toString().trim();
-		return rewritten || null;
-	} catch (err: any) {
-		// Exit code 3 = partial rewrite (pipes/chains) — still use output
-		if (err.status === 3 && err.stdout) {
-			const rewritten = err.stdout.toString().trim();
-			return rewritten || null;
+
+		if (version.code !== 0) {
+			console.warn(
+				"[rtk] Binary not found on PATH; rewrite extension disabled",
+			);
+			return;
 		}
-		// Exit code 1 = no rewrite available
-		return null;
+	} catch (error) {
+		console.warn(
+			"[rtk] Version probe failed; rewrite extension disabled",
+			error,
+		);
+		return;
 	}
-}
 
-/**
- * Commands that should never be rewritten even if RTK supports them.
- * These are used for side-effects where we need exact output, or are
- * interactive / control-flow commands.
- */
-function shouldSkip(command: string): boolean {
-	const trimmed = command.trim();
+	pi.on("tool_call", async (event, ctx) => {
+		try {
+			/*
+			 * Gondolin owns command execution and RTK inside the guest.
+			 * A host-side rewrite could otherwise execute an RTK helper
+			 * outside the intended sandbox boundary.
+			 */
+			if (isGondolinSandboxRequested()) return;
 
-	// Skip multiline scripts (heredocs, complex scripts)
-	if (trimmed.includes("\n") && trimmed.split("\n").length > 3) return true;
+			if (!isToolCallEventType("bash", event)) return;
 
-	// Skip if command starts with rtk already
-	if (trimmed.startsWith("rtk ")) return true;
+			const command = event.input.command;
+			if (typeof command !== "string" || command.trim() === "") return;
 
-	// Skip variable assignments, functions, control flow
-	if (/^(export |[A-Z_]+=|function |if |for |while |case )/.test(trimmed)) return true;
+			/*
+			 * Process-wide escape hatch.
+			 *
+			 * Per-command prefixes such as:
+			 *
+			 *   RTK_DISABLED=1 dotnet test
+			 *
+			 * are recognized directly by `rtk rewrite`.
+			 */
+			if (process.env.RTK_DISABLED === "1") return;
 
-	return false;
-}
+			const result = await pi.exec(
+				"rtk",
+				["rewrite", command],
+				{
+					timeout: REWRITE_TIMEOUT_MS,
+					signal: ctx.signal,
+				},
+			);
 
-export default function rtkRewrite(pi: ExtensionAPI, ctx: ExtensionContext) {
-	pi.on("tool_call", async (event) => {
-		// Gondolin owns RTK guest-side so no host helper process handles sandboxed commands.
-		if (isGondolinSandboxRequested()) return;
-		if (!isToolCallEventType("bash", event)) return;
-		if (!checkRtk()) return;
+			if (result.killed) return;
 
-		const command = event.input.command;
-		if (!command || shouldSkip(command)) return;
+			/*
+			 * Exit 0: rewrite + allow
+			 * Exit 3: rewrite + ask/default
+			 *
+			 * Exit 1 and 2 leave the original command untouched.
+			 */
+			if (result.code !== 0 && result.code !== 3) return;
 
-		const rewritten = tryRewrite(command);
-		if (rewritten && rewritten !== command) {
-			event.input.command = rewritten;
+			const rewritten = result.stdout.trim();
+
+			if (rewritten && rewritten !== command) {
+				event.input.command = rewritten;
+			}
+		} catch (error) {
+			/*
+			 * RTK is an optimization layer. It must never become a
+			 * dependency for executing the original command.
+			 */
+			console.warn(
+				"[rtk] Rewrite failed; using original command",
+				error,
+			);
 		}
 	});
 }

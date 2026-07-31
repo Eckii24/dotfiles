@@ -1,0 +1,89 @@
+[tracking]
+enabled = true
+history_days = 90
+
+[display]
+colors = true
+emoji = false
+max_width = 140
+
+[filters]
+ignore_dirs = [
+  ".git",
+  "bin",
+  "obj",
+  "TestResults",
+  "artifacts",
+  "coverage",
+  "node_modules",
+  "target",
+  "dist",
+  "__pycache__",
+  ".venv",
+  "vendor"
+]
+
+ignore_files = [
+  ".DS_Store",
+  "*.lock",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.dll",
+  "*.pdb",
+  "*.binlog"
+]
+
+[tee]
+enabled = true
+mode = "failures"
+max_files = 30
+max_file_size = 1048576
+[telemetry]
+enabled = false
+
+[hooks]
+exclude_commands = [
+  # Exact source and configuration reads should remain unmodified.
+  "cat",
+  "head",
+  "tail",
+
+  # Interactive or control-flow-heavy Git operations.
+  "git rebase",
+  "git cherry-pick",
+  "git bisect",
+
+  # Interactive commands inside an existing container or pod.
+  "docker exec",
+  "kubectl exec",
+
+  # Preserve exact HTTP response bodies and download behavior.
+  "^curl\\b",
+  "^wget\\b"
+]
+
+# Add only exact, stable wrapper prefixes when required.
+#
+# Example:
+#
+# transparent_prefixes = [
+#   "direnv exec .",
+#   "docker exec my-fixed-container"
+# ]
+transparent_prefixes = []
+
+[limits]
+# Protect the context against runaway searches.
+grep_max_results = 120
+grep_max_per_file = 20
+
+# Slightly more context than RTK's defaults for larger repositories.
+status_max_files = 20
+status_max_untracked = 10
+
+# Maximum output when a parser falls back to generic passthrough.
+passthrough_max_chars = 2000
