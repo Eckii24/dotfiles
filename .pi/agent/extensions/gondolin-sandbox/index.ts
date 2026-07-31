@@ -35,12 +35,19 @@ import {
 import { GUEST_WORKSPACE, SandboxRuntime, isSandboxRequested, mapHostPath, type SandboxMount } from "./core.ts";
 import { registerPolicyCommands } from "./policy/commands.ts";
 import { loadApprovedEffectivePolicy } from "./policy/loader.ts";
-import { isNetworkAllowed, type SandboxPolicy } from "./policy/policy.ts";
+import { isNetworkAllowed, mergePolicies, type SandboxPolicy } from "./policy/policy.ts";
+import {
+  SANDBOX_SESSION_POLICY_ENV,
+  STARTUP_POLICY_FLAGS,
+  hasStartupPolicyFlags,
+  parseSerializedSessionPolicy,
+  parseStartupPolicyFlags,
+  serializeSessionPolicy,
+} from "./policy/startup.ts";
 
 const DEFAULT_IMAGE = "pi-agent-base:0.12.0";
 const DEFAULT_IMAGE_ARCH = process.arch === "arm64" ? "aarch64" : "x86_64";
 const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-base.build.json");
-const NETWORK_POLICY = "deny-all";
 const SEARCH_MAX_BYTES = DEFAULT_MAX_BYTES;
 const SEARCH_META = "__GONDOLIN_SEARCH_META__";
 const VALID_BACKENDS = new Set(["qemu", "krun"]);
@@ -498,6 +505,9 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     // Set exact marker only after this VM starts, then restore it on shutdown.
     let inheritedSandboxMarker: string | undefined;
     let setSandboxMarker = false;
+    let inheritedSessionPolicy: string | undefined;
+    let setSessionPolicy = false;
+    let sessionPolicyText: string | undefined;
     let effectivePolicy: SandboxPolicy = {};
     let backend: "qemu" | "krun" = "qemu";
     const readPolicy = async (trusted: boolean): Promise<SandboxPolicy> => {
@@ -547,11 +557,17 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       type: "boolean", default: false,
       description: "Run Pi built-in execution surfaces in a Gondolin micro-VM",
     });
+    for (const name of STARTUP_POLICY_FLAGS) pi.registerFlag(name, {
+      type: "string",
+      description: name.startsWith("sandbox-mount-")
+        ? "Session-only mount: absolute host path or JSON array; requires --sandbox"
+        : "Session-only network rule or JSON string array; requires --sandbox",
+    });
     pi.registerCommand("sandbox-status", {
       description: "Show Gondolin sandbox activation and effective policy",
       async handler(_args, ctx) {
         const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
-        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${NETWORK_POLICY}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
+        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
       },
     });
     registerPolicyCommands(pi, {
@@ -613,7 +629,14 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     pi.on("session_start", async (_event, ctx) => {
       lastContext = ctx;
       if (activation !== "unlatched") return;
-      if (!isSandboxRequested(pi.getFlag("sandbox"), env)) {
+      const sandboxFlag = pi.getFlag("sandbox");
+      const startupFlagValues = Object.fromEntries(STARTUP_POLICY_FLAGS.map((name) => [name, pi.getFlag(name)]));
+      const startupFlagsSupplied = hasStartupPolicyFlags(startupFlagValues);
+      if (!isSandboxRequested(sandboxFlag, env)) {
+        if (startupFlagsSupplied) {
+          latchFailure("startup mount/network flags require explicit --sandbox", ctx);
+          return;
+        }
         activation = "inactive";
         ctx.ui.setStatus("sandbox", "SANDBOX inactive");
         return;
@@ -627,8 +650,13 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       try {
         // Production VM mounts must use canonical host paths. Test/injected VM factories
         // own their mount semantics and may intentionally use synthetic paths.
+        if (startupFlagsSupplied && sandboxFlag !== true) throw new Error("startup mount/network flags require explicit --sandbox");
         if (!deps.createVm) canonicalCwd = await realpath(cwd);
-        effectivePolicy = await readPolicy(ctx.isProjectTrusted());
+        const inheritedOverlay = await parseSerializedSessionPolicy(env[SANDBOX_SESSION_POLICY_ENV]);
+        const cliOverlay = await parseStartupPolicyFlags(startupFlagValues);
+        const sessionOverlay = mergePolicies(inheritedOverlay, cliOverlay);
+        effectivePolicy = mergePolicies(await readPolicy(ctx.isProjectTrusted()), sessionOverlay);
+        sessionPolicyText = serializeSessionPolicy(sessionOverlay);
         backend = resolveBackend(effectivePolicy, env);
         mounts = policyMounts(effectivePolicy, canonicalCwd);
       } catch (error) {
@@ -655,10 +683,16 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       ctx.ui.setStatus("sandbox", `SANDBOX gondolin/${backend} starting`);
       if (await ensure(ctx)) {
         // Subagents are independent Pi processes. They inherit environment, not
-        // extension flags, so propagate activation only from a running parent.
+        // extension flags, so propagate activation and validated session policy only
+        // from a successfully running parent.
         inheritedSandboxMarker = process.env.PI_SANDBOX;
         process.env.PI_SANDBOX = "gondolin";
         setSandboxMarker = true;
+        if (sessionPolicyText !== undefined) {
+          inheritedSessionPolicy = process.env[SANDBOX_SESSION_POLICY_ENV];
+          process.env[SANDBOX_SESSION_POLICY_ENV] = sessionPolicyText;
+          setSessionPolicy = true;
+        }
       }
     });
     const oneShot = isOneShotMode();
@@ -668,6 +702,11 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         if (inheritedSandboxMarker === undefined) delete process.env.PI_SANDBOX;
         else process.env.PI_SANDBOX = inheritedSandboxMarker;
         setSandboxMarker = false;
+      }
+      if (setSessionPolicy) {
+        if (inheritedSessionPolicy === undefined) delete process.env[SANDBOX_SESSION_POLICY_ENV];
+        else process.env[SANDBOX_SESSION_POLICY_ENV] = inheritedSessionPolicy;
+        setSessionPolicy = false;
       }
       if (oneShot) {
         // Pi print mode awaits this handler before it disposes its own session/runtime.

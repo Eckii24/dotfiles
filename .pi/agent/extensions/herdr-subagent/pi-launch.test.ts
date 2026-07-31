@@ -13,6 +13,8 @@ import {
 	PI_HERDR_ROOT_RUN_ID,
 	PI_HERDR_SUBAGENT_CHILD,
 	PI_SANDBOX,
+	PI_SANDBOX_SESSION_POLICY,
+	MAX_SANDBOX_SESSION_POLICY_BYTES,
 	PI_SUBAGENT,
 	createPiLaunchDescriptor,
 } from "./pi-launch.js";
@@ -70,25 +72,26 @@ test("marks Herdr children as standard subagents so global dirty-repo-guard skip
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test("propagates gondolin sandbox intent to direct and nested child descriptors without inheriting arbitrary env", async () => {
+test("propagates gondolin sandbox intent and bounded session policy to direct and nested children without logging values", async () => {
 	const value = fixtureRoot();
 	try {
+		const policy = JSON.stringify({ network: { deny: ["blocked.example.com"] } });
 		const direct = await createPiLaunchDescriptor(input(value.cwd), {
 			runtimeRoot: value.runtime,
-			env: { [PI_SANDBOX]: "gondolin", SECRET: "must-not-inherit" },
+			env: { [PI_SANDBOX]: "gondolin", [PI_SANDBOX_SESSION_POLICY]: policy, SECRET: "must-not-inherit" },
 		});
-		expect(direct.env).toHaveProperty(PI_SANDBOX, "gondolin");
+		expect(direct.env).toMatchObject({ [PI_SANDBOX]: "gondolin", [PI_SANDBOX_SESSION_POLICY]: policy });
 		expect(direct.env).not.toHaveProperty("SECRET");
-		expect(direct.log.envNames).toContain(PI_SANDBOX);
-		expect(JSON.stringify(direct.log)).not.toContain("gondolin");
+		expect(direct.log.envNames).toContain(PI_SANDBOX); expect(direct.log.envNames).toContain(PI_SANDBOX_SESSION_POLICY);
+		expect(JSON.stringify(direct.log)).not.toContain("gondolin"); expect(JSON.stringify(direct.log)).not.toContain("blocked.example.com");
 
 		const nested = await createPiLaunchDescriptor(input(value.cwd, { nestingDepth: 1 }), {
 			runtimeRoot: value.runtime,
 			env: direct.env,
 		});
-		expect(nested.env).toHaveProperty(PI_SANDBOX, "gondolin");
-		expect(nested.log.envNames).toContain(PI_SANDBOX);
-		expect(JSON.stringify(nested.log)).not.toContain("gondolin");
+		expect(nested.env).toMatchObject({ [PI_SANDBOX]: "gondolin", [PI_SANDBOX_SESSION_POLICY]: policy });
+		expect(nested.log.envNames).toContain(PI_SANDBOX_SESSION_POLICY);
+		expect(JSON.stringify(nested.log)).not.toContain("blocked.example.com");
 
 		await direct.cleanupAfterFailure();
 		await nested.cleanupAfterFailure();
@@ -98,11 +101,20 @@ test("propagates gondolin sandbox intent to direct and nested child descriptors 
 test("does not propagate absent or invalid sandbox markers", async () => {
 	const value = fixtureRoot();
 	try {
-		for (const env of [{}, { [PI_SANDBOX]: "other" }]) {
+		for (const env of [{}, { [PI_SANDBOX]: "other", [PI_SANDBOX_SESSION_POLICY]: "not-json" }]) {
 			const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env });
-			expect(launch.env).not.toHaveProperty(PI_SANDBOX);
+			expect(launch.env).not.toHaveProperty(PI_SANDBOX); expect(launch.env).not.toHaveProperty(PI_SANDBOX_SESSION_POLICY);
 			expect(launch.log.envNames).not.toContain(PI_SANDBOX);
 			await launch.cleanupAfterFailure();
+		}
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("fails closed on malformed, unsupported, or oversized inherited Gondolin session policy", async () => {
+	const value = fixtureRoot();
+	try {
+		for (const policy of ["not-json", JSON.stringify({ backend: "qemu" }), "x".repeat(MAX_SANDBOX_SESSION_POLICY_BYTES + 1)]) {
+			await expect(createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { [PI_SANDBOX]: "gondolin", [PI_SANDBOX_SESSION_POLICY]: policy } })).rejects.toMatchObject({ code: "invalid_execution_mode" });
 		}
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });

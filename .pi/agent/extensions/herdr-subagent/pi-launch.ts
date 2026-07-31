@@ -16,6 +16,8 @@ export const PI_HERDR_SUBAGENT_CHILD = "PI_HERDR_SUBAGENT_CHILD";
 /** Standard marker consumed by child-aware global extensions such as dirty-repo-guard. */
 export const PI_SUBAGENT = "PI_SUBAGENT";
 export const PI_SANDBOX = "PI_SANDBOX";
+export const PI_SANDBOX_SESSION_POLICY = "PI_SANDBOX_SESSION_POLICY_V1";
+export const MAX_SANDBOX_SESSION_POLICY_BYTES = 64 * 1024;
 
 export type PiLaunchInput = {
 	piExecutable: string;
@@ -61,6 +63,8 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	const executable = await resolveExecutable(input.piExecutable, dependencies);
 	const cwd = await canonicalDirectory(input.cwd, dependencies);
 	const inheritedEnv = dependencies.env ?? process.env;
+	const inheritedSessionPolicy = inheritedEnv.PI_SANDBOX === "gondolin" ? inheritedEnv[PI_SANDBOX_SESSION_POLICY] : undefined;
+	if (inheritedSessionPolicy !== undefined) assertSandboxSessionPolicy(inheritedSessionPolicy);
 	const childDepth = input.nestingDepth + 1;
 	if (!Number.isInteger(input.nestingDepth) || input.nestingDepth < 0 || childDepth > MAX_NESTING_DEPTH) {
 		throw new PreconditionsError("nesting_depth_exceeded", `Pi child nesting may not exceed ${MAX_NESTING_DEPTH}.`);
@@ -93,7 +97,10 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	// Every Pi child becomes a potential nested caller; its parent is this launched root,
 	// not this root's parent (which would skip one ownership level).
 	env[PI_HERDR_PARENT_ROOT_RUN_ID] = requiredId(input.rootRunId, "rootRunId");
-	if (inheritedEnv.PI_SANDBOX === "gondolin") env[PI_SANDBOX] = "gondolin";
+	if (inheritedEnv.PI_SANDBOX === "gondolin") {
+		env[PI_SANDBOX] = "gondolin";
+		if (inheritedSessionPolicy !== undefined) env[PI_SANDBOX_SESSION_POLICY] = inheritedSessionPolicy;
+	}
 	// Nested coordinators must share the caller's capacity runtime directory.
 	const inheritedRuntime = inheritedEnv.XDG_RUNTIME_DIR;
 	if (inheritedRuntime && isAbsolute(inheritedRuntime)) env.XDG_RUNTIME_DIR = inheritedRuntime;
@@ -102,6 +109,34 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		cleanupAfterReady: cleanup, cleanupAfterFailure: cleanup,
 		log: { executable, argv: [...argv], cwd, envNames: Object.keys(env).sort(), name },
 	};
+}
+
+function assertSandboxSessionPolicy(raw: string) {
+	if (Buffer.byteLength(raw, "utf8") > MAX_SANDBOX_SESSION_POLICY_BYTES) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin session policy exceeds 64KB.");
+	let parsed: unknown;
+	try { parsed = JSON.parse(raw); } catch { throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin session policy is invalid JSON."); }
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin session policy must be an object.");
+	const policy = parsed as Record<string, unknown>; const policyKeys = new Set(["mounts", "network"]);
+	if (Object.keys(policy).some(key => !policyKeys.has(key))) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin session policy contains unsupported fields.");
+	if (policy.mounts !== undefined) {
+		if (!policy.mounts || typeof policy.mounts !== "object" || Array.isArray(policy.mounts)) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin mounts must be an object.");
+		const mounts = policy.mounts as Record<string, unknown>; const mountKeys = new Set(["readOnly", "readWrite"]);
+		if (Object.keys(mounts).some(key => !mountKeys.has(key))) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin mounts contain unsupported fields.");
+		for (const key of mountKeys) if (mounts[key] !== undefined) {
+			if (!Array.isArray(mounts[key])) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin mount lists must be arrays.");
+			for (const rawMount of mounts[key]) {
+				if (!rawMount || typeof rawMount !== "object" || Array.isArray(rawMount)) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin mount entry must be an object.");
+				const mount = rawMount as Record<string, unknown>; const entryKeys = new Set(["hostPath", "guestPath", "required"]);
+				if (Object.keys(mount).some(field => !entryKeys.has(field)) || typeof mount.hostPath !== "string" || typeof mount.guestPath !== "string" || !isAbsolute(mount.hostPath) || !isAbsolute(mount.guestPath) || (mount.required !== undefined && typeof mount.required !== "boolean")) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin mount entry is invalid.");
+			}
+		}
+	}
+	if (policy.network !== undefined) {
+		if (!policy.network || typeof policy.network !== "object" || Array.isArray(policy.network)) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin network policy must be an object.");
+		const network = policy.network as Record<string, unknown>; const networkKeys = new Set(["allow", "deny"]);
+		if (Object.keys(network).some(key => !networkKeys.has(key))) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin network policy contains unsupported fields.");
+		for (const key of networkKeys) if (network[key] !== undefined && (!Array.isArray(network[key]) || network[key].some(value => typeof value !== "string"))) throw new PreconditionsError("invalid_execution_mode", "Inherited Gondolin network rules must be string arrays.");
+	}
 }
 
 async function resolveExecutable(path: string, dependencies: LaunchDependencies): Promise<string> {

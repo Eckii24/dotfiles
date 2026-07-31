@@ -7,7 +7,12 @@ const makeContext = (trusted = true, overrides: Record<string, unknown> = {}) =>
     notices,
     ctx: {
       mode: "tui", hasUI: true, isIdle: () => true, isProjectTrusted: () => trusted,
-      ui: { notify: (message: string) => { notices.push(message); } },
+      ui: {
+        notify: (message: string) => { notices.push(message); },
+        select: async () => undefined,
+        input: async () => undefined,
+        confirm: async () => false,
+      },
       ...overrides,
     },
   };
@@ -57,6 +62,39 @@ describe("user-only command surface", () => {
     await commands.get("sandbox-mount-ro").handler("remove /host", makeContext().ctx);
     expect(mutation.value).toBe("/host");
     expect(commands.get("sandbox-mount-ro").description).toContain("next Pi session/restart");
+  });
+
+  test("no-arg mount/network commands use guided forms; cancellation writes nothing", async () => {
+    const commands = new Map<string, any>(); const mutations: any[] = [];
+    registerPolicyCommands({ registerCommand: (name, descriptor) => commands.set(name, descriptor) }, {
+      pathsForScope: (scope) => ({ settingsPath: `${scope}.json`, approvalsPath: "a", lockPath: "l", projectId: "p" }),
+      mutate: async (request) => { mutations.push(request); return { scope: request.scope, message: "done" }; }, readPolicy: async () => ({}),
+    });
+    const mount = makeContext(true); const mountSelect = ["add", "global"]; const mountInput = ["/host", "/guest"]; const mountConfirm = [true, true];
+    mount.ctx.ui.select = async () => mountSelect.shift(); mount.ctx.ui.input = async () => mountInput.shift(); mount.ctx.ui.confirm = async () => mountConfirm.shift() ?? false;
+    await commands.get("sandbox-mount-rw").handler("", mount.ctx);
+    expect(mutations[0]).toMatchObject({ kind: "mount-rw", action: "add", value: "/host", guestPath: "/guest", required: true, scope: "global" });
+    expect(mount.notices).toEqual(["scope=global", "done"]);
+
+    const network = makeContext(true); const networkSelect = ["remove", "project"]; const networkInput = ["blocked.example.com"]; const networkConfirm = [true];
+    network.ctx.ui.select = async () => networkSelect.shift(); network.ctx.ui.input = async () => networkInput.shift(); network.ctx.ui.confirm = async () => networkConfirm.shift() ?? false;
+    await commands.get("sandbox-network-deny").handler("   ", network.ctx);
+    expect(mutations[1]).toMatchObject({ kind: "network-deny", action: "remove", value: "blocked.example.com", scope: "project" });
+
+    const cancelled = makeContext();
+    await commands.get("sandbox-mount-ro").handler("", cancelled.ctx);
+    expect(mutations).toHaveLength(2); expect(cancelled.notices).toEqual(["Sandbox policy change cancelled"]);
+  });
+
+  test("nonblank arguments bypass form prompts", async () => {
+    const commands = new Map<string, any>(); let mutation: any;
+    registerPolicyCommands({ registerCommand: (name, descriptor) => commands.set(name, descriptor) }, {
+      pathsForScope: () => ({ settingsPath: "s", approvalsPath: "a", lockPath: "l", projectId: "p" }),
+      mutate: async (request) => { mutation = request; return { scope: request.scope, message: "done" }; }, readPolicy: async () => ({}),
+    });
+    const context = makeContext(false); context.ctx.ui.select = async () => { throw new Error("form must not open"); };
+    await commands.get("sandbox-network-allow").handler("add api.example.com --scope global", context.ctx);
+    expect(mutation).toMatchObject({ action: "add", value: "api.example.com", scope: "global" });
   });
 
   test("enforces interactive TUI and idle state before mutation", async () => {

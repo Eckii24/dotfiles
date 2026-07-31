@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import * as path from "node:path";
+import { realpathSync } from "node:fs";
 import test from "node:test";
 import { loadExtensions } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { createGondolinSandboxExtension } from "../../index.ts";
+import { SANDBOX_SESSION_POLICY_ENV } from "../../policy/startup.ts";
 
 type Handler = (event: any, ctx: any) => any;
 
 function harness(options: {
-  flag?: boolean; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string; toolNames?: string[];
+  flag?: boolean; flagValues?: Record<string, unknown>; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string; toolNames?: string[];
   ensureDefaultImage?: (image: string) => Promise<string>;
 } = {}) {
   const tools = new Map<string, any>();
   const handlers = new Map<string, Handler>();
+  const commands = new Map<string, any>();
   const flags: string[] = [];
   const notices: string[] = [];
   const statuses: string[] = [];
@@ -29,9 +32,9 @@ function harness(options: {
   });
   const api = {
     registerFlag(name: string) { flags.push(name); },
-    getFlag() { getFlagCalls++; return options.flag; },
+    getFlag(name: string) { getFlagCalls++; return Object.prototype.hasOwnProperty.call(options.flagValues ?? {}, name) ? options.flagValues?.[name] : name === "sandbox" ? options.flag : undefined; },
     registerTool(tool: any) { tools.set(tool.name, tool); },
-    registerCommand() {},
+    registerCommand(name: string, descriptor: any) { commands.set(name, descriptor); },
     on(name: string, handler: Handler) { handlers.set(name, handler); },
     getAllTools() {
       return [...tools.values()]
@@ -44,11 +47,14 @@ function harness(options: {
     ui: {
       setStatus(_key: string, value: string) { statuses.push(value); },
       notify(message: string) { notices.push(message); },
+      select: async () => undefined,
+      input: async () => undefined,
+      confirm: async () => false,
     },
   });
   extension(api as never);
   return {
-    api, tools, handlers, flags, vm, ctx, notices, statuses,
+    api, tools, handlers, commands, flags, vm, ctx, notices, statuses,
     get imageEnsures() { return imageEnsures; },
     get getFlagCalls() { return getFlagCalls; }, get shutdowns() { return shutdowns; },
   };
@@ -58,15 +64,48 @@ test("factory registers dormant wrappers before CLI values exist", () => {
   const pi = harness({ flag: false });
   assert.equal(pi.getFlagCalls, 0);
   assert.deepEqual([...pi.tools.keys()].sort(), ["bash", "edit", "find", "grep", "ls", "read", "write"]);
-  assert.deepEqual(pi.flags, ["sandbox"]);
+  assert.deepEqual(pi.flags, ["sandbox", "sandbox-mount-ro", "sandbox-mount-rw", "sandbox-network-allow", "sandbox-network-deny"]);
 });
 
 test("session_start latches the real --sandbox flag and starts exactly one VM", async () => {
   let starts = 0;
   const pi = harness({ flag: true, vm: { id: "vm-realflag", start: async () => { starts++; }, close: async () => {} } });
   await pi.handlers.get("session_start")!({}, pi.ctx());
-  assert.equal(pi.getFlagCalls, 1);
+  assert.equal(pi.getFlagCalls, 5);
   assert.equal(starts, 1);
+});
+
+test("startup policy flags require explicit --sandbox and fail closed", async () => {
+  const pi = harness({ flag: false, flagValues: { "sandbox-network-allow": "api.example.com" } });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.ok(pi.statuses.some((value) => value.includes("startup mount/network flags require explicit --sandbox")));
+  const result = await pi.tools.get("bash").execute("id", { command: "pwd" });
+  assert.equal(result.isError, true); assert.match(result.content[0].text, /require explicit --sandbox/);
+});
+
+test("session-only CLI policy is effective now, exported after startup, and restored on shutdown", async (t) => {
+  const beforeSandbox = process.env.PI_SANDBOX; const beforePolicy = process.env[SANDBOX_SESSION_POLICY_ENV];
+  t.after(() => {
+    if (beforeSandbox === undefined) delete process.env.PI_SANDBOX; else process.env.PI_SANDBOX = beforeSandbox;
+    if (beforePolicy === undefined) delete process.env[SANDBOX_SESSION_POLICY_ENV]; else process.env[SANDBOX_SESSION_POLICY_ENV] = beforePolicy;
+  });
+  delete process.env.PI_SANDBOX; delete process.env[SANDBOX_SESSION_POLICY_ENV];
+  const pi = harness({ flag: true, flagValues: {
+    "sandbox-mount-ro": "/tmp",
+    "sandbox-network-allow": JSON.stringify(["api.example.com", "*.example.org"]),
+    "sandbox-network-deny": "blocked.example.org",
+  } });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  assert.equal(process.env.PI_SANDBOX, "gondolin");
+  const canonicalTmp = realpathSync("/tmp");
+  assert.deepEqual(JSON.parse(process.env[SANDBOX_SESSION_POLICY_ENV]!), {
+    mounts: { readOnly: [{ hostPath: canonicalTmp, guestPath: canonicalTmp, required: false }] },
+    network: { allow: ["*.example.org", "api.example.com"], deny: ["blocked.example.org"] },
+  });
+  await pi.commands.get("sandbox-status").handler("", pi.ctx());
+  assert.ok(pi.notices.some((value) => value.includes(`${canonicalTmp} -> ${canonicalTmp} (ro)`) && value.includes('network={"allow":["*.example.org","api.example.com"],"deny":["blocked.example.org"]}')));
+  await pi.handlers.get("session_shutdown")!({}, pi.ctx());
+  assert.equal(process.env.PI_SANDBOX, undefined); assert.equal(process.env[SANDBOX_SESSION_POLICY_ENV], undefined);
 });
 
 test("running parent propagates the sandbox marker to inherited child environments", async (t) => {
