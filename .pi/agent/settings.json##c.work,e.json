@@ -1,6 +1,6 @@
 {
-  "lastChangelogVersion": "0.80.6",
   "defaultThinkingLevel": "medium",
+  "lastChangelogVersion": "0.83.0",
   "defaultProvider": "github-copilot",
   "defaultModel": "claude-sonnet-5",
   "modelTiers": {
