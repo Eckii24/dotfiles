@@ -10,7 +10,7 @@ import { createPiLaunchDescriptor, type PiLaunchDescriptor } from "./pi-launch.j
 import { findTurnAnchor, harvestTurn, materializeAndTrustSession, recordAbsentSessionBaseline, validatePiSessionRef, type SessionBaseline } from "./pi-session.js";
 import { checkPreconditions, MAX_NESTING_DEPTH, PreconditionsError, type PreconditionsContext } from "./preconditions.js";
 import { RunRegistry } from "./run-registry.js";
-import { acceptLeaf, addTopologyLeaf, agentStartName, cleanupTopology, createTopology, type TopologyResult } from "./topology.js";
+import { acceptLeaf, addTopologyLeaf, agentStartName, cleanupTopology, createTopology, startTopologyAgent, type TopologyResult } from "./topology.js";
 import { formatResult } from "./result-format.js";
 import { renderSubagentCall, renderSubagentResult } from "./subagent-render.js";
 import { createHerdrSubagentControlRuntime } from "./control.js";
@@ -23,7 +23,7 @@ type Client = HerdrClient & Record<string, any>;
 export type HerdrRuntimeDependencies = {
 	preflight?: () => Promise<PreconditionsContext>; discover?: typeof discoverAgentProfiles; createClient?: (socketPath: string) => Client;
 	createCapacity?: (client: Client) => any; createLaunch?: (input: any) => Promise<PiLaunchDescriptor>; createTopology?: typeof createTopology;
-	addTopologyLeaf?: typeof addTopologyLeaf; cleanupTopology?: typeof cleanupTopology; acceptLeaf?: typeof acceptLeaf;
+	addTopologyLeaf?: typeof addTopologyLeaf; cleanupTopology?: typeof cleanupTopology; acceptLeaf?: typeof acceptLeaf; restartAgent?: typeof startTopologyAgent;
 	runLifecycle?: typeof runLifecycleTurn; ids?: () => { rootRunId: string; leafRunId: string; turnId: string }; now?: () => number;
 	sessionRoot?: string; registry?: RunRegistry; env?: NodeJS.ProcessEnv;
 };
@@ -106,8 +106,16 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 				const delivery = createTaskDelivery(task, entry.ids.turnId);
 				validatePaneTextPayload(entry.leaf.paneId, delivery.prompt);
 				let life: LifecycleResult;
-				try { life = await (deps.runLifecycle ?? runLifecycleTurn)(lifecyclePort(client!, entry.leaf.paneId), sessionPort(deps.sessionRoot ?? sessionRoot), { agentId: entry.leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId: entry.ids.turnId, timeoutMs: input.timeoutSeconds * 1000, clock: { now }, sleeper: { sleep: async ms => await new Promise(resolve => setTimeout(resolve, ms)) }, signal, onReady: async () => { await entry.launch.cleanupAfterReady(); entry.leaf.status = "working"; registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: "working" }); } }); }
-				catch (error) { if (!(error instanceof Error) || !/(?:pane|agent)_not_found/.test(error.message)) throw error; life = { status: "lost", delivered: true, enterSent: true, state: "unknown", reason: "Owned pane disappeared." }; }
+				for (let bootAttempt = 0; ; bootAttempt += 1) {
+					try { life = await (deps.runLifecycle ?? runLifecycleTurn)(lifecyclePort(client!, entry.leaf.paneId), sessionPort(deps.sessionRoot ?? sessionRoot), { agentId: entry.leaf.paneId, task: delivery.prompt, marker: delivery.marker, turnId: entry.ids.turnId, timeoutMs: input.timeoutSeconds * 1000, clock: { now }, sleeper: { sleep: async ms => await new Promise(resolve => setTimeout(resolve, ms)) }, signal, onReady: async () => { await entry.launch.cleanupAfterReady(); entry.leaf.status = "working"; registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: "working" }); } }); }
+					catch (error) { if (!(error instanceof Error) || !/(?:pane|agent)_not_found/.test(error.message)) throw error; life = { status: "lost", delivered: true, enterSent: true, state: "unknown", reason: "Owned pane disappeared during delivery." }; }
+					// Safe retry boundary: no task literal or Enter reached the child.
+					if (life.status !== "lost" || life.delivered || bootAttempt > 0) break;
+					entry.leaf.status = "booting";
+					registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: "booting" });
+					try { await (deps.restartAgent ?? startTopologyAgent)(client!, entry.leaf.paneId, { leafRunId: entry.ids.leafRunId, launch: entry.launch, ...(entry.lease ? { lease: entry.lease } : {}) }); }
+					catch { life = { status: "lost", delivered: false, enterSent: false, state: "unknown", reason: "Child exited during boot; one restart failed." }; break; }
+				}
 				entry.life = life; applyLife(entry.leaf, life); if (life.delivered) (deps.acceptLeaf ?? acceptLeaf)(topology!.group, entry.ids.leafRunId);
 				// A permission-blocked delivered turn remains collectable after a fixed human resolution.
 				const active = life.status === "blocked" && life.delivered;
@@ -234,19 +242,20 @@ export function formatSubagentPrompt(agents: readonly AgentProfile[]): string {
 	return `## Subagents
 Use \`subagent\` only inside managed Pi for interactive child panes.
 Before parallel launch:
-- Profiles omitting \`tools\` use Pi defaults and are writers. Profiles declaring \`edit\`, \`write\`, or \`bash\` are also writers. Parallel writers must use distinct existing canonical \`cwd\` values; omitted \`cwd\` values all resolve to caller cwd.
+- Profiles omitting \`tools\` use Pi defaults and are writers. Profiles declaring \`edit\`, \`write\`, or \`bash\` are also writers. Parallel writers must use distinct existing canonical \`cwd\` values. Omit \`cwd\` unless an exact existing path is known; omitted values resolve to caller cwd.
 - A running, blocked, or retained writer holds its canonical cwd lease until its pane closes. Close it or choose another cwd before launching another writer there.
 - For same-cwd parallel work, choose profiles with explicit read-only tool lists. For same-cwd writer work, use \`chain\`.
 - Set \`allowSharedWorkspaceWrites: true\` only when user explicitly accepts concurrent-write conflict risk.
 Chain \`{previous}\`: prior final is inserted as one-line JSON string content (reversible with \`JSON.parse\`); final \`pane.send_text\` request, including sentinel and JSON encoding, must fit 65536 UTF-8 bytes.
-Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, non-empty newline-free message, and optional timeoutSeconds; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. Resolve blocked leaves visibly, then one bounded \`collect\`; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is a local snapshot, not live proof; never auto-approve child prompts. Use \`close\` to release retained panes.${list}`;
+Task and steer/follow-up CR/LF input is normalized to spaces before literal delivery.
+Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, non-empty message, and optional timeoutSeconds; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. Resolve blocked leaves visibly, then one bounded \`collect\`; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is a local snapshot, not live proof; never auto-approve child prompts. Use \`close\` to release retained panes.${list}`;
 }
 
 export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
 	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; return { systemPrompt: `${event.systemPrompt}\n\n${formatSubagentPrompt(agents)}` }; });
 	pi.on("session_shutdown", async () => { await runtime.shutdown(); });
-	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools use Pi defaults and are writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Same omitted cwd means same caller cwd. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools use Pi defaults and are writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Omit cwd unless an exact existing path is known; omitted cwd uses caller cwd. CR/LF task input is normalized to spaces. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
 	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; it accepts optional timeoutSeconds. Select a leaf when multiple eligible handles exist; native final remains follow_up eligible. Resolve blocked leaves visibly, then one bounded collect; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is local snapshot only; never auto-approve child prompts. Use close to release retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params, signal, onUpdate) => control.execute(params, signal, onUpdate) });
 }

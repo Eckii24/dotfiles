@@ -76,7 +76,7 @@ export async function createTopology(input: { client: TopologyClient; capacity: 
 			// Split succeeds before Pi startup. Record ownership first so a startup
 			// failure rolls this newly created shell pane back safely.
 			group.ownedPaneIds.add(paneId);
-			await startPi(input.client, paneId, leaf);
+			await startTopologyAgent(input.client, paneId, leaf);
 			if (leaf.lease) {
 				const boundLease = await input.capacity.bindWriteLease(leaf.lease, paneId);
 				if (leaf.lease.acquired && !boundLease.acquired) { leases.set(leaf.leafRunId, leaf.lease); throw new TopologyError("Write lease binding failed."); }
@@ -100,7 +100,7 @@ export async function addTopologyLeaf(input: { client: TopologyClient; capacity:
 	if (!input.leaf.leafRunId || group.ownedPaneIds.size >= input.result.reservation.paneCount) throw new TopologyError("A managed group requires 1–4 leaves.");
 	const paneId = resultId(await input.client.splitPane({ direction: "right", targetPaneId: [...group.ownedPaneIds][0], workspaceId: group.workspaceId, cwd: input.leaf.launch.cwd, env: input.leaf.launch.env, focus: false }), "pane");
 	try {
-		await startPi(input.client, paneId, input.leaf);
+		await startTopologyAgent(input.client, paneId, input.leaf);
 		if (input.leaf.lease) {
 			const lease = await input.capacity.bindWriteLease(input.leaf.lease, paneId);
 			if (input.leaf.lease.acquired && !lease.acquired) throw new TopologyError("Write lease binding failed.");
@@ -156,7 +156,7 @@ async function rollback(client: TopologyClient, capacity: TopologyCapacity, rese
 export function agentStartName(leafRunId: string) {
 	return `pi${leafRunId.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
 }
-async function startPi(client: TopologyClient, paneId: string, leaf: TopologyLeaf) {
+export async function startTopologyAgent(client: TopologyClient, paneId: string, leaf: TopologyLeaf) {
 	// Protocol 17 starts an agent inside the tab-created shell. Herdr can report
 	// agent_pane_busy while that shell is still becoming interactive; retry only
 	// that transient server error, never a different launch failure.

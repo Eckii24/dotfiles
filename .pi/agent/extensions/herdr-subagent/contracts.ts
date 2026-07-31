@@ -32,16 +32,16 @@ const ErrorCodeSchema = StringEnum(ERROR_CODES);
 export const HerdrSubagentItemSchema = Type.Object({
 	name: Type.Optional(Type.String()),
 	agent: Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." }),
-	task: Type.String(),
-	cwd: Type.Optional(Type.String({ description: "Existing working directory. Parallel writers require distinct canonical cwd values." })),
+	task: Type.String({ description: "Task text. CR/LF input is normalized to spaces before delivery." }),
+	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd. Parallel writers require distinct canonical cwd values." })),
 }, Strict);
 
 /** Strict wire schema; cross-field mode rules are enforced by normalizeSubagentParams. */
 export const HerdrSubagentParamsSchema = Type.Object({
 	group: Type.String(),
 	agent: Type.Optional(Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." })),
-	task: Type.Optional(Type.String()),
-	cwd: Type.Optional(Type.String()),
+	task: Type.Optional(Type.String({ description: "Task text. CR/LF input is normalized to spaces before delivery." })),
+	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd." })),
 	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every default-tool or declared writer a distinct canonical cwd." })),
 	chain: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Sequential panes; use for multiple writers sharing one cwd." })),
 	agentScope: Type.Optional(AgentScopeSchema),
@@ -56,7 +56,7 @@ export const HerdrSubagentControlParamsSchema = Type.Object({
 	action: ControlActionSchema,
 	rootRunId: Type.String(),
 	leafRunId: Type.Optional(Type.String()),
-	message: Type.Optional(Type.String()),
+	message: Type.Optional(Type.String({ description: "Steer/follow-up text. CR/LF input is normalized to spaces before delivery." })),
 	timeoutSeconds: Type.Optional(Type.Integer({ minimum: MIN_TIMEOUT_SECONDS, maximum: MAX_TIMEOUT_SECONDS })),
 	closeAfterCollect: Type.Optional(Type.Boolean()),
 }, Strict);
@@ -192,9 +192,7 @@ export function sanitizeGroup(value: unknown): string {
 }
 
 function taskText(value: unknown, field: string): string {
-	const normalized = text(value, field);
-	if (/[\r\n]/.test(normalized)) invalid("invalid_execution_mode", `${field} must be newline-free`);
-	return normalized;
+	return text(value, field).replace(/\r\n?|\n/gu, " ").replace(/[\t ]+/gu, " ").trim();
 }
 
 function optionalText(value: unknown, field: string): string | undefined {
@@ -253,7 +251,7 @@ export function normalizeControlParams(raw: unknown): NormalizedControlParams {
 	if (!(CONTROL_ACTIONS as readonly string[]).includes(action)) invalid("unknown_or_foreign_run", "control action is invalid");
 	const rootRunId = text(value.rootRunId, "rootRunId", "unknown_or_foreign_run");
 	const leafRunId = optionalText(value.leafRunId, "leafRunId");
-	const message = optionalText(value.message, "message");
+	const message = value.message === undefined ? undefined : taskText(value.message, "message");
 	const timeoutSeconds = timeout(value.timeoutSeconds);
 	const closeAfterCollect = value.closeAfterCollect === undefined ? undefined : bool(value.closeAfterCollect, "closeAfterCollect", false);
 	if (action === "status") {

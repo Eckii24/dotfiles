@@ -15,7 +15,7 @@ const ids = () => ({ rootRunId: "root", leafRunId: "leaf", turnId: "turn" });
 const profile = (source: "user" | "project" = "user", tools: string[] = []) => ({ name: "scout", description: "desc", systemPrompt: "SECRET PROFILE BODY", source, filePath: "/profile.md", tools });
 const preflight = async () => ({ socketPath: "/socket", workspaceId: "workspace", callerPaneId: "caller", nestingDepth: 0, protocol: 1, capabilities: {} as any, piExecutable: "/bin/pi" });
 
-function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string>; cleanupTopology?: (input: any) => Promise<string[]> } = {}) {
+function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string>; cleanupTopology?: (input: any) => Promise<string[]>; restartAgent?: (client: any, paneId: string, leaf: any) => Promise<void> } = {}) {
 	const events = options.events ?? [];
 	const client = { dispose: () => events.push("dispose") } as any;
 	const launch = { executable: "/bin/pi", name: "scout", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => { events.push("ready-cleanup"); }, cleanupAfterFailure: async () => { events.push("failure-cleanup"); } };
@@ -31,6 +31,7 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 		createTopology: async (input: any) => options.createTopology ? options.createTopology(input, topology) : (topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)), topology),
 		addTopologyLeaf: options.addTopologyLeaf ?? (async ({ result }: any) => { const pane = `pane-${result.group.ownedPaneIds.size + 1}`; result.group.ownedPaneIds.add(pane); return pane; }),
 		cleanupTopology: options.cleanupTopology ?? (async ({ result }: any) => { events.push("topology-cleanup"); result.group.ownedPaneIds.clear(); return []; }),
+		...(options.restartAgent ? { restartAgent: options.restartAgent } : {}),
 		acceptLeaf: () => {},
 		runLifecycle: (async (_port: any, _sessions: any, input: any) => {
 			received = input; receivedInputs.push(input);
@@ -55,7 +56,8 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	expect(guidance).toContain("default [writer: Pi default tools]");
 	expect(guidance).toContain("Profiles omitting `tools` use Pi defaults and are writers");
 	expect(guidance).toContain("Profiles declaring `edit`, `write`, or `bash` are also writers");
-	expect(guidance).toContain("omitted `cwd` values all resolve to caller cwd");
+	expect(guidance).toContain("Omit `cwd` unless an exact existing path is known");
+	expect(guidance).toContain("CR/LF input is normalized to spaces");
 	expect(guidance).toContain("use `chain`");
 	expect(formatSubagentPrompt([])).toContain("Parallel writers must use distinct existing canonical `cwd` values");
 
@@ -64,7 +66,8 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	const description = tools.find(tool => tool.name === "subagent")?.description;
 	expect(description).toContain("profiles omitting tools use Pi defaults and are writers");
 	expect(description).toContain("profiles declaring edit/write/bash are also writers");
-	expect(description).toContain("Same omitted cwd means same caller cwd");
+	expect(description).toContain("omitted cwd uses caller cwd");
+	expect(description).toContain("CR/LF task input is normalized to spaces");
 	expect(description).toContain("use chain for same-cwd writers");
 	expect(formatSubagentPrompt([])).toContain("Retained follow-up");
 	const control = tools.find(tool => tool.name === "subagent_control")?.description;
@@ -153,6 +156,27 @@ test("shutdown snapshots ownership before and at tab close, and leaves tabs on s
  const runtime = createHerdrSubagentRuntime({ registry, preflight, createClient: () => ({ closePane: async (id: string) => { closed.push(id); }, closeTab: async (id: string) => { tabs.push(id); }, snapshot: async () => { if (++snapshots === 1) return { snapshot: { panes: [{ pane_id: "foreign", tab_id: "preexisting" }] } }; if (snapshots === 2) return { snapshot: { panes: [{ pane_id: "arriving-pane", tab_id: "arriving" }] } }; if (snapshots === 3) return { snapshot: { panes: [{ pane_id: "foreign", tab_id: "arriving" }] } }; throw new Error("snapshot unavailable"); }, dispose: () => {} }) as any });
  await runtime.shutdown();
  expect(closed).toEqual(["preexisting-pane", "arriving-pane", "unknown-pane"]); expect(tabs).toEqual([]); expect(released.sort()).toEqual(["arriving", "preexisting", "unknown"]); expect(registry.rootsSnapshot()).toEqual([]);
+});
+
+test("restarts one child that disappears before delivery, never after possible delivery", async () => {
+	let attempts = 0; let restarts = 0;
+	const retried = vertical({
+		restartAgent: async () => { restarts++; },
+		lifecycle: async input => {
+			if (++attempts === 1) return { status: "lost", delivered: false, enterSent: false, state: "unknown", reason: "boot exit" };
+			await input.onReady();
+			return { status: "succeeded", delivered: true, enterSent: true, state: "done", result: { pending: false, status: "succeeded", output: "ok", stopReason: "stop", sessionId: "s", anchorEntryId: "a", finalEntryId: "f" }, session: { source: "herdr:pi", kind: "path", path: "/s", root: "/", bytes: 1 } };
+		},
+	});
+	const result = await retried.runtime.execute(params(), context);
+	expect(restarts).toBe(1); expect(attempts).toBe(2); expect(retried.receivedInputs).toHaveLength(2);
+	expect(result.details).toMatchObject({ status: "succeeded", children: [{ status: "succeeded", finalOutput: "ok" }] });
+
+	let unsafeRestarts = 0;
+	const uncertain = vertical({ restartAgent: async () => { unsafeRestarts++; }, lifecycle: async () => ({ status: "lost", delivered: true, enterSent: false, state: "unknown", reason: "delivery uncertain" }) });
+	const uncertainResult = await uncertain.runtime.execute(params(), context);
+	expect(unsafeRestarts).toBe(0);
+	expect(uncertainResult.details).toMatchObject({ status: "failed", children: [{ status: "lost", error: { code: "pane_lost" } }] });
 });
 
 test("launched lifecycle failure and abort return structured terminal results and clean up", async () => {

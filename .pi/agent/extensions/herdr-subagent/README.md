@@ -171,8 +171,8 @@ Alle öffentlichen Objekte sind strikt: unbekannte Felder schlagen fehl. Text wi
 type Item = {
   name?: string;       // innerhalb tasks/chain eindeutig nach Normalisierung
   agent: string;       // Profilname
-  task: string;        // nicht leer, ohne CR/LF
-  cwd?: string;        // vorhandenes Verzeichnis
+  task: string;        // nicht leer; CR/LF wird vor Zustellung zu Leerzeichen
+  cwd?: string;        // vorhandenes Verzeichnis; ohne Wert gilt Aufrufer-CWD
 };
 
 type Launch = {
@@ -301,6 +301,8 @@ Ablauf pro Turn:
 6. Nach `idle`/`done` sucht sie den nativen User-Eintrag mit genau diesem Sentinel und dann den finalen, davon abstammenden Assistant-Eintrag.
 7. Nur dessen Text und Metadaten ergeben Erfolg. Herdr `idle`/`done` allein ist nie Resultatbeweis.
 
+Verschwindet Child-Pi nach erfolgreichem Herdr-Start, aber **vor** literal Task und Enter, startet die Extension es genau einmal in derselben owned Pane neu. Nach möglicher Zustellung erfolgt nie automatischer Restart oder erneute Task-Zustellung.
+
 Bei parallelem Start werden alle vorbereiteten Leafs gestartet. Liefert ein Leaf `blocked`, meldet der Root zeitnah `blocked`; bereits gestartete Geschwister dürfen im Hintergrund fertig laufen. Bei Chain endet Start der restlichen Schritte beim ersten Nicht-Erfolg.
 
 ### Cleanup und Retention
@@ -375,7 +377,7 @@ type Control = {
   action: "status" | "steer" | "follow_up" | "collect" | "abort" | "close";
   rootRunId: string;
   leafRunId?: string;
-  message?: string;             // für steer/follow_up, nicht leer, ohne CR/LF
+  message?: string;             // für steer/follow_up; CR/LF wird zu Leerzeichen
   timeoutSeconds?: number;      // follow_up/collect/abort, 1..86400
   closeAfterCollect?: boolean;  // nur collect
 };
@@ -423,7 +425,7 @@ flowchart LR
 
 | Schutz | Konkrete Umsetzung |
 |---|---|
-| Eingabevalidierung | unbekannte Felder verboten; genau ein Modus; Bounds 1–4 und 1–86400; Tasks/Messages CR/LF-frei |
+| Eingabevalidierung | unbekannte Felder verboten; genau ein Modus; Bounds 1–4 und 1–86400; Tasks/Messages werden vor Zustellung CR/LF-frei normalisiert |
 | Label-Injection | Gruppe/Panenamen NFKC-normalisiert; ANSI/OSC/C0-Control-Zeichen entfernt; Längen begrenzt |
 | Socket-Trust | aktueller Benutzer, direkter Nicht-Symlink-Socket, Device/Inode-Revalidierung beim Connect und vor Write |
 | Herdr-Protokoll | enger Protocol-16-Client; feste Methodenauswahl; serialisierte Requests; Frame/Payload-Limits; Fehler ohne Frame-Body |
@@ -472,7 +474,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 - Keine Kontrolle fremder/unklarer oder nicht lokal registrierter Runs.
 - Kein Ergebnis aus `idle`/`done` ohne korrelierte native Pi-JSONL.
 - Kein automatisches Neusenden einer Task nach verzögertem Flush/Ereignisverlust.
-- Kein mehrzeiliger `task` oder `message`: Protokoll akzeptiert nur newline-freien literal Text.
+- Kein mehrzeiliger Terminal-Payload: öffentliche `task`-/`message`-Zeilenumbrüche werden sicher zu Leerzeichen normalisiert.
 - Keine Garantie, dass als Nicht-Writer klassifizierte Profile nicht schreiben oder Writer tatsächlich schreiben; Klassifikation ist Koordinationshilfe, keine Sandbox.
 - Kein belegter graceful abort; Ctrl-C ist nur Kandidat.
 
@@ -495,7 +497,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 | `child_boot_timeout` / `turn_timeout` | sichtbare Child-Pane prüfen; ggf. schließen; mit sinnvoll größerem Timeout neu starten. |
 | `task_delivery_failed` / `task_anchor_missing` | Nicht blind erneut senden; Child prüfen/schließen, neuen Run starten. |
 | `child_blocked` | Frage manuell im eigenen Pane lösen, dann `collect`; sonst `close`. |
-| `pane_lost` | Keine Steuerung mehr; neuen Run starten. |
+| `pane_lost` | Boot-Restart war nicht möglich oder Pane verschwand nach möglicher Zustellung; keine automatische Task-Wiederholung, neuen Run starten. |
 | `session_reference_missing` / `session_path_untrusted` / `session_parse_failed` | Output nicht vertrauen; eigene Pane schließen, neuen Run starten. |
 | `ambiguous_turn` | berechtigte `leafRunId` explizit angeben; Ziel nicht raten. |
 | `empty_final_output` / `result_unavailable` | Child offen halten, später `collect`; sonst schließen und neu starten. |

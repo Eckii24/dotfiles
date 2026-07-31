@@ -68,12 +68,11 @@ test("accepts 1–4 parallel or chain items and rejects duplicate normalized nam
 	expect(() => normalizeSubagentParams({ group: "g", tasks: [{ name: " A ", agent: "a", task: "t" }, { name: "A", agent: "b", task: "u" }] })).toThrow(ContractValidationError);
 });
 
-test("rejects CR/LF tasks in single, parallel, and chain modes", () => {
-	for (const value of [
-		{ group: "g", agent: "a", task: "one\ntwo" },
-		{ group: "g", tasks: [{ agent: "a", task: "one\rtwo" }] },
-		{ group: "g", chain: [{ agent: "a", task: "one\ntwo" }] },
-	]) expect(() => normalizeSubagentParams(value)).toThrow("invalid_execution_mode");
+test("normalizes CR/LF task and control input to one delivery line", () => {
+	expect(normalizeSubagentParams({ group: "g", agent: "a", task: " one\n\ttwo " }).task).toBe("one two");
+	expect(normalizeSubagentParams({ group: "g", tasks: [{ agent: "a", task: "one\rtwo" }] }).items?.[0]?.task).toBe("one two");
+	expect(normalizeSubagentParams({ group: "g", chain: [{ agent: "a", task: "one\r\n two" }] }).items?.[0]?.task).toBe("one two");
+	expect(normalizeControlParams({ action: "follow_up", rootRunId: "root", message: " one\n two " })).toEqual({ action: "follow_up", rootRunId: "root", message: "one two" });
 });
 
 test("enforces timeout bounds", () => {

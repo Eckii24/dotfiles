@@ -28,7 +28,7 @@ async function retained(mutate?: (raw: any) => any | Promise<any>, waitForLifecy
 test("status is local; active steer uses exact current agent pane", async () => {
  const f = basic(); const status = await f.runtime.execute({ action: "status", rootRunId: "root" }); expect(status.details.leaves[0].paneId).toBe("pane");
  await f.runtime.execute({ action: "steer", rootRunId: "root", message: "hello" }); expect(f.calls).toEqual(["send:hello", "enter"]);
- await expect(f.runtime.execute({ action: "steer", rootRunId: "root", message: "bad\ninput" })).rejects.toMatchObject({ code: "invalid_execution_mode" });
+ await f.runtime.execute({ action: "steer", rootRunId: "root", message: "bad\ninput" }); expect(f.calls).toEqual(["send:hello", "enter", "send:bad input", "enter"]);
 });
 
 test("ambiguous, missing, and foreign controls fail closed", async () => {
