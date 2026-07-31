@@ -92,6 +92,9 @@
         "diff"
       ],
       "preflightModel": "@small",
+      "preflightRules": [
+        "Executing local tests is fine, even if test code runs arbitrary project code, as long as it does not exfiltrate secrets or mutate unrelated system state."
+      ],
       "confirm": [
         "sudo",
         "chmod",
