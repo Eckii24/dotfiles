@@ -1,5 +1,7 @@
 news.version=3.4.2
 
+hooks.location=$XDG_CONFIG_HOME/task/hooks
+
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
 search.case.sensitive=0
 reserved.lines=3

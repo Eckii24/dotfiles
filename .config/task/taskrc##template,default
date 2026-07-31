@@ -4,6 +4,8 @@ sync.encryption_secret={{env.TASKSERVER_ENCRYPTION_SECRET}}
 sync.server.client_id={{env.TASKSERVER_CLIENT_ID}}
 news.version=3.4.2
 
+hooks.location=$XDG_CONFIG_HOME/task/hooks
+
 verbose=affected,blank,context,edit,header,footnote,label,new-id,news,project,special,sync,recur
 recurrence=0
 search.case.sensitive=0
