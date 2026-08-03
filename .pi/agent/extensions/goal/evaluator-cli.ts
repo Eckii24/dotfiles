@@ -9,5 +9,7 @@ export function buildEvaluatorArgs(evaluatorModel: string, prompt: string): stri
     "--no-session",
     "--thinking",
     "off",
+    "--tools",
+    "read,grep,find,ls",
   ];
 }

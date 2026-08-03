@@ -5,9 +5,9 @@
  * Sets a completion condition, and the agent keeps working across turns until
  * a separate evaluator sub-agent confirms the condition is met.
  *
- * The evaluator is a full sub-agent with tool access that can independently
- * verify the goal condition (run tests, read files, etc.) rather than just
- * trusting the working model's transcript.
+ * The evaluator is a read-only sub-agent with tool access that can independently
+ * verify artifacts and supplied test evidence rather than just trusting the
+ * working model's transcript. It does not run tests itself.
  *
  * Usage:
  *   /goal <condition>   - Set a goal and start working immediately

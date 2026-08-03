@@ -37,7 +37,12 @@ describe("Goal evaluator CLI arguments", () => {
       "--no-session",
       "--thinking",
       "off",
+      "--tools",
+      "read,grep,find,ls",
     ]);
     expect(args).not.toContain("--thinking-level");
+    expect(args).not.toContain("edit");
+    expect(args).not.toContain("write");
+    expect(args).not.toContain("bash");
   });
 });
