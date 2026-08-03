@@ -51,3 +51,6 @@ export DevOpsConfiguration__PersonalAccessToken="op://Employee/AzureDevOps/passw
 
 # Nuget Config
 export NUGET_P0_PASSWORD="op://Employee/Nuget/password"
+
+# GenAI Platform
+export GENAI_PLATFORM_BASE_URL="op://Employee/GenAI Plattform/baseUrl"
