@@ -117,5 +117,19 @@
       ]
     }
   },
-  "theme": "dark"
+  "theme": "dark",
+  "sandbox": {
+    "mounts": {
+      "readOnly": [
+        {
+          "hostPath": "/Users/matthias.eck/Development/Repos",
+          "guestPath": "/repo-path",
+          "required": true
+        }
+      ]
+    },
+    "environment": {
+      "REPO_PATH": "/repo-path"
+    }
+  }
 }
