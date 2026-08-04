@@ -1,9 +1,9 @@
 git:
-  pagers:
+  diffRenderers:
     - colorArg: always
-      pager: delta --dark --paging=never -n -s
+      command: delta --dark --paging=never -n -s
     - colorArg: always
-      pager: delta --dark --paging=never -n -s --color-only
+      command: delta --dark --paging=never -n -s --color-only
 os:
   edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send "q" && nvim --server "$NVIM" --remote-tab {{filename}})'
 customCommands:
