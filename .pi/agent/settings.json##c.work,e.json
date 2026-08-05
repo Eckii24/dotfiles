@@ -1,14 +1,14 @@
 {
   "defaultThinkingLevel": "medium",
   "lastChangelogVersion": "0.83.0",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "claude-sonnet-5",
+  "defaultProvider": "gen-ai-platform",
+  "defaultModel": "gpt-56-terra",
   "modelTiers": {
-    "small": "gpt-5.4-mini",
-    "medium": "claude-sonnet-5",
+    "small": "gen-ai-platform/gpt-56-luna",
+    "medium": "gen-ai-platform/gpt-56-terra",
     "large": "claude-opus-4.8"
   },
-  "chatModel": "gpt-5.4-mini",
+  "chatModel": "gen-ai-platform/gpt-56-luna",
   "compaction": {
     "enabled": true,
     "reserveTokens": 65536,
