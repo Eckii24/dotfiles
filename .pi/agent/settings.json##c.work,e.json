@@ -1,7 +1,7 @@
 {
   "defaultThinkingLevel": "medium",
-  "lastChangelogVersion": "0.83.0",
   "defaultProvider": "gen-ai-platform",
+  "lastChangelogVersion": "0.84.0",
   "defaultModel": "gpt-56-terra",
   "modelTiers": {
     "small": "gen-ai-platform/gpt-56-luna",
@@ -15,6 +15,7 @@
     "keepRecentTokens": 12000
   },
   "enableInstallTelemetry": false,
+  "enableAnalystics": false,
   "packages": [],
   "npmCommand": [
     "bun"
@@ -118,6 +119,7 @@
     }
   },
   "theme": "dark",
+  "tuiMode": "fullscreen",
   "sandbox": {
     "mounts": {
       "readOnly": [
