@@ -1,51 +1,47 @@
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { buildMonthlyUsageSummary, formatDetailedMonthlyUsageReport, formatMonthlyUsageReport } from "./report.js";
+import { aggregate, anomalies } from "./analytics.js";
+import { parseUsageQuery, usageHelp } from "./query.js";
+import { csvReport, jsonReport, textReport } from "./render.js";
+import { readSessionUsage } from "./session-reader.js";
+import { renderTreeTable, usageTree } from "./tree.js";
 
-const FLAG_NAME = "usage";
+function sortRows(rows: ReturnType<typeof aggregate>, sort: string, order: string) { const score=(row: typeof rows[number]) => sort === "cost" ? row.metrics.cost : sort === "turns" ? row.metrics.assistantTurns : sort === "tokens" ? row.metrics.totalTokens : (row.metrics.cacheReadRate ?? -1); const sign=order === "asc" ? 1 : -1; return rows.sort((a,b)=>sign*(score(a)-score(b))||a.key.localeCompare(b.key)); }
 
-type UsageMode = "off" | "daily" | "detailed";
-
-function parseUsageMode(argv: string[]): UsageMode {
-	let mode: UsageMode = "off";
-	for (const arg of argv.slice(2)) {
-		if (arg === `--${FLAG_NAME}`) {
-			mode = "daily";
-			continue;
+async function run(): Promise<void> {
+	const query = parseUsageQuery(process.argv);
+	if (query.help) { process.stdout.write(`${usageHelp()}\n`); return; }
+	const input = await readSessionUsage(join(getAgentDir(), "sessions"));
+	const quality = { scannedFiles: input.scannedFiles, parseErrors: input.parseErrors, readErrors: input.readErrors };
+	let events = input.events;
+	let anomalyTitle = "";
+	if (query.anomalies) {
+		const result = anomalies(aggregate(input.events, input.toolEvents, query.range, "session"));
+		if (result.insufficientSample) {
+			process.stdout.write(`Usage anomalies (${query.range.label})\nInsufficient sample: need at least 4 sessions with cost >= $0.25.\n`);
+			return;
 		}
-		if (!arg.startsWith(`--${FLAG_NAME}=`)) continue;
-		const value = arg.slice(FLAG_NAME.length + 3).trim().toLowerCase();
-		if (["", "1", "true", "yes", "on", "normal", "daily"].includes(value)) mode = "daily";
-		else if (value === "detailed") mode = "detailed";
-		else if (["0", "false", "no", "off"].includes(value)) mode = "off";
+		const anomalousSessionIds = new Set(result.rows.map((row) => row.key));
+		events = events.filter((event) => anomalousSessionIds.has(event.sessionId));
+		anomalyTitle = `Usage anomalies; threshold >= 2× median ($${result.median!.toFixed(4)})`;
 	}
-	return mode;
-}
-
-async function runUsageReport(mode: UsageMode): Promise<void> {
-	const summary = await buildMonthlyUsageSummary({
-		sessionDir: join(getAgentDir(), "sessions"),
-		now: new Date(),
-	});
-	const report = mode === "detailed" ? formatDetailedMonthlyUsageReport(summary) : formatMonthlyUsageReport(summary);
-	process.stdout.write(`${report}\n`);
+	if (query.groupBy.length > 1) {
+		const tree = usageTree(events, query.range.startMs, query.range.endMs, query.groupBy, query.sortBy, query.order);
+		if (query.format === "json") process.stdout.write(`${JSON.stringify({ schemaVersion: 1, range: query.range, groupBy: query.groupBy, anomalies: query.anomalies, dataQuality: quality, tree }, null, 2)}\n`);
+		else if (query.format === "csv") throw new Error("[--usage] CSV supports one --group-by level only.");
+		else process.stdout.write(`${anomalyTitle || "Pi usage"} (${query.range.label})\n${renderTreeTable(tree, query.groupBy, query.limit)}\n`);
+		return;
+	}
+	const group = query.groupBy[0] ?? (query.anomalies ? "session" : "model");
+	const rows = sortRows(aggregate(events, input.toolEvents, query.range, group), query.sortBy, query.order);
+	if (query.format === "json") process.stdout.write(`${jsonReport(group, query.range, rows, quality)}\n`);
+	else if (query.format === "csv") process.stdout.write(`${csvReport(rows)}\n`);
+	else process.stdout.write(`${textReport(anomalyTitle || `Pi usage by ${group}`, rows, query.range, query.limit)}\n`);
 }
 
 export default async function (pi: ExtensionAPI) {
-	pi.registerFlag(FLAG_NAME, {
-		description: "Print current-month usage totals and exit. Use --usage for daily output or --usage=detailed for daily output plus per-day provider/model breakdown",
-		type: "string",
-	});
-
-	const mode = parseUsageMode(process.argv);
-	if (mode === "off") return;
-
-	try {
-		await runUsageReport(mode);
-		process.exit(0);
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		process.stderr.write(`[--${FLAG_NAME}] ${message}\n`);
-		process.exit(1);
-	}
+	for (const [name, type] of [["usage", "string"], ["period", "string"], ["from", "string"], ["to", "string"], ["last", "string"], ["group-by", "string"], ["format", "string"], ["sort", "string"], ["order", "string"], ["limit", "string"], ["anomalies", "boolean"]] as const) pi.registerFlag(name, { description: "Usage analytics selector; use with --usage.", type });
+	if (!process.argv.some((arg) => arg === "--usage" || arg.startsWith("--usage="))) return;
+	try { await run(); process.exit(0); }
+	catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exit(1); }
 }
