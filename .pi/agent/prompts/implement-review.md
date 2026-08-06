@@ -13,7 +13,7 @@ Read and follow:
 3. Build one compact execution packet. Use direct work or at most one narrow scout -> one coherent worker. Do not delegate individual plan bullets, files, or local repairs.
 4. The worker fixes in-scope implementation/type/test failures. A material gate gets one diagnosis, one decision, and one rerun; then stop/escalate.
 5. Validate changed files and eval/test evidence yourself.
-6. Define review focus: requirements/spec fidelity, stated risk, named concern, or full review.
+6. Declare exactly one review focus: `plan/spec`, `correctness`, `security`, `performance`, `tests`, `maintainability`, `architecture`, or `full`. Use `plan/spec` for implementation fidelity; reserve `full` for deliberate broad review.
 7. Build a compact review packet from focus, changed paths/symbols, and eval evidence. Run at most one independent `code-reviewer` pass.
 8. Do not auto-fix review findings. Update `.ai/` only at material phase boundaries, blocker, handoff, or explicit review artifact request.
 

@@ -1,82 +1,96 @@
 ---
 name: code-review-excellence
-description: "Review code changes for correctness, security, performance, and maintainability. Use when reviewing pull requests, implementation output, or auditing code quality. Not for brutal-tone critique (use roast-me) or interviewing to resolve open plan questions (use grill-me)."
+description: "Review a concrete change against an explicit focus: plan/spec fidelity, correctness, security, performance, tests, maintainability, architecture, or full review. Use for PRs, branches, implementation output, and targeted risk reviews. Not for grilling a design or debugging a live failure."
 ---
 
-# Code Review
+# Focused Code Review
 
-Review changes systematically. Prioritize impact. Be specific/actionable; no nitpicks while logic is wrong.
+A review needs a declared question. "Review this" means **full review**; otherwise review only the named concern. Do not bury a performance finding beneath generic style noise.
 
-## Gather context first
+## Input contract
 
-1. Requirements: spec, implementation plan, or PR description.
-2. Changed files and scope.
-3. Test/eval signals from plan or relevant commands.
-4. Neighboring code patterns for conventions/error handling.
+Before reviewing, establish:
 
-If context is missing, note it as a review limitation/finding.
+1. **Fixed point and scope** — commit, branch, merge-base, file range, or explicit artifacts.
+2. **Focus** — one of:
+   - `plan/spec`: required behavior, acceptance criteria, scope creep;
+   - `correctness`: contracts, edge cases, concurrency, failure paths;
+   - `security`: trust boundaries, auth/authz, injection, secrets, unsafe effects;
+   - `performance`: measured or plausible hot paths, N+1, blocking, bounds, allocation/I/O;
+   - `tests`: behavior coverage, regression protection, determinism, test seam;
+   - `maintainability`: naming, locality, unnecessary complexity, duplicate/parallel abstractions;
+   - `architecture`: module boundaries, coupling, ownership, migration/operability;
+   - `full`: all relevant axes, kept separately.
+3. **Evidence packet** — relevant spec/plan, changed paths and symbols, existing evaluation results, and any user-stated risk.
 
-## Review priority
+If the fixed point, focus, or needed source is absent, report that as a review limitation. Do not invent requirements.
 
-1. **Correctness**: requirements met, edge cases, null/empty/boundaries, async/races, error paths, contracts.
-2. **Security**: validation at trust boundaries, injection, auth/authz, secrets/logging.
-3. **Performance**: N+1, hot-path blocking, unbounded results, missing pagination/cache/batching.
-4. **Maintainability**: fits codebase patterns, clear names, justified complexity, no premature/parallel abstractions.
-5. **Tests**: behavior coverage for happy + meaningful edge paths; deterministic; proportional to risk.
+## Review process
 
-## Finding admission gate
-
-Report an issue only when all apply:
-
-- Concrete failure mode or violated requirement.
-- Realistic reachability from the reviewed scope.
-- Practical impact.
-- Existing safeguards considered.
-- A proportionate action is justified now.
-
-Candidate concerns that fail this gate are omitted or stated as a review limitation. `No material findings` is a valid outcome.
+1. Read only the evidence needed for the focus. For `plan/spec`, trace every stated acceptance criterion to code and verification evidence.
+2. Inspect the diff and neighboring code at the required seam.
+3. Run relevant existing checks when practical. For a performance review, do not manufacture certainty from static inspection: distinguish measured regression, credible risk, and unverified concern.
+4. Apply the finding admission gate. Report an issue only when all hold:
+   - concrete failure mode or violated requirement;
+   - realistic reachability from the reviewed scope;
+   - practical impact;
+   - existing safeguards considered;
+   - proportionate action justified now.
+5. In `full` review, keep findings grouped by focus. Do not merge spec fidelity, standards, security, and performance into one undifferentiated list.
 
 ## Severity
 
-- **Blocking**: must fix before merge; correctness/security/data-loss/broken-contract risk.
-- **Important**: should fix; meaningful quality/perf/maintainability/test gap.
-- **Minor**: nice-to-have style/naming/small simplification.
-- **Question**: intent unclear; ask instead of assuming.
+- **Blocking** — must fix before merge: correctness, security, data loss, broken contract, or migration risk.
+- **Important** — should fix: meaningful performance, reliability, maintainability, or test gap.
+- **Minor** — bounded low-risk simplification.
+- **Question** — intent or evidence missing; ask instead of assuming.
 
-## Finding style
-
-Use exact `file:line`, issue, impact, suggested fix. Example:
-
-`src/api/handler.ts:42` — Query is not parameterized, creating SQL injection risk. Use prepared statement.
-
-## Output format
+## Output
 
 ```md
-## Summary
-[1-3 sentences: scope, overall assessment, top risk.]
+## Review Scope
+- Fixed point:
+- Focus:
+- Sources/evidence reviewed:
+- Limitations:
 
-## Blocking Issues
-- `file:line` — [issue]. [impact]. [fix].
+## Findings
+### Blocking
+- `path:line` — [focus] [issue]. [failure mode/impact]. [proportionate fix].
 
-## Important Issues
-- `file:line` — [issue]. [rationale/fix].
+### Important
+- `path:line` — [focus] [issue]. [rationale/fix].
 
-## Minor Issues / Suggestions
-- `file:line` — [suggestion].
+### Minor
+- `path:line` — [focus] [suggestion].
 
-## Questions
-- `file:line` — [unclear point and why it matters].
+### Questions
+- `path:line` — [what is unknown and why it matters].
 
-## Requirements Compliance
-[Met/missing/partial requirements when source exists.]
+## Focus Verdict
+[Pass | Concerns | Blocked] — [short evidence-based conclusion].
 
-## Test & Eval Results
-[command -> pass/fail + short output summary; or not run + why.]
+## Eval Evidence
+- `command` → pass/fail + concise signal; or not run + why.
 
-## Verdict
-[Approve / Approve with minor fixes / Request changes] — [1-2 next actions].
+## Next Action
+[One exact next action. Do not auto-fix.]
 ```
 
-## Plan-aware review
+## Review profiles
 
-When a plan exists, check tasks against actual changes, run eval gates when practical, flag skipped/partial tasks, and note intentional deviations.
+### Plan/spec implementation
+Compare the diff against the source spec/plan separately from code quality. Report missing requirements, partial behavior, scope creep, and unverifiable acceptance criteria before maintainability concerns.
+
+### Performance
+Start from workload and measurement. Inspect bounds, query count, allocations, I/O, contention, retries, and caching. Label static-only claims as risks, not regressions. Require a benchmark/profile before blocking unless the cost is self-evidently catastrophic.
+
+### Full
+Review, in separate sections: plan/spec fidelity, correctness, security, performance, maintainability/architecture, and tests. Skip axes unsupported by the scope rather than padding the report.
+
+## Boundaries
+
+- **Unresolved design:** `grill-me`.
+- **Live failure/root cause:** `debugging`.
+- **Brutal one-shot critique:** `roast-me`.
+- **No concrete change or fixed point:** ask for one; do not perform a vague audit.

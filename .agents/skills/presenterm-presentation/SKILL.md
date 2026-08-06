@@ -7,6 +7,7 @@ compatibility:
     - presenterm
     - weasyprint (optional, for PDF export)
     - mermaid-cli (optional, for Mermaid rendering)
+disable-model-invocation: true
 ---
 
 # Presenterm Presentation

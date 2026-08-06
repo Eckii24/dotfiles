@@ -9,7 +9,7 @@ Read and follow `~/.agents/skills/code-review-excellence/SKILL.md`.
 1. Use this only when the user explicitly wants a formal review.
 2. If tracked work is selected or a relevant `.ai/current-work.md` exists, read and follow `~/.agents/skills/project-memory/SKILL.md`.
 3. If `.ai/current-work.md` exists and is relevant, read it. If stale/completed/unrelated, ignore it.
-4. Define the review focus: requirements/spec fidelity, a stated risk, a named concern, or full review.
+4. Declare exactly one review focus: `plan/spec`, `correctness`, `security`, `performance`, `tests`, `maintainability`, `architecture`, or `full`. A stated risk maps to one of these; do not call every review `full`.
 5. Gather only the compact review context needed for that focus:
    - requirements / acceptance criteria when relevant
    - changed files and key touched symbols

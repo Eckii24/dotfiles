@@ -1,6 +1,7 @@
 ---
 name: to-spec
 description: Turn current context into a concise implementation spec. Use when a user wants to define what to build, capture requirements, or create a bounded technical/product spec before implementation. Not for mapping an unclear or large initiative (use wayfinder), deciding code structure and sequencing (use to-plan), or writing code (use implementation-workflow).
+disable-model-invocation: true
 ---
 
 # To Spec

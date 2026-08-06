@@ -1,6 +1,7 @@
 ---
 name: wayfinder
 description: Map a large or unclear initiative into facts, decisions, open frontier, and next work without writing a spec or implementation plan. Use when scope, architecture, dependencies, or sequencing are still genuinely uncertain before creating a spec. Not for an already-bounded request (use to-spec) or an existing spec (use to-plan).
+disable-model-invocation: true
 ---
 
 # Wayfinder

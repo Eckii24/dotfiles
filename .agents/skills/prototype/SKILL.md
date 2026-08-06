@@ -1,6 +1,7 @@
 ---
 name: prototype
 description: Build throwaway prototypes. Terminal apps for logic/state questions, or toggleable UI variations for design exploration.
+disable-model-invocation: true
 ---
 
 # Prototype

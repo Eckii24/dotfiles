@@ -1,6 +1,7 @@
 ---
 name: roast-me
 description: "Sharp professional roast-style critique for code, architecture, docs, UI, specs, plans, prompts, or ideas when user asks for brutal feedback. Not for actionable line-level code review (use code-review-excellence) or interactive plan interrogation (use grill-me)."
+disable-model-invocation: true
 ---
 
 # Roast Me

@@ -1,6 +1,7 @@
 ---
 name: write-a-skill
 description: Create, revise, or retire a reusable agent skill with accurate routing, progressive disclosure, and verified resources. Use when authoring or materially changing a SKILL.md, its description, references, assets, scripts, or reusable workflow guidance. Do not use for one-off preferences, installing third-party skills, or a non-reusable task.
+disable-model-invocation: true
 ---
 
 # Write a Skill

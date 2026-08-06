@@ -1,6 +1,7 @@
 ---
 name: to-plan
 description: Turn a bounded functional spec into an implementation plan. Use when architecture, code structure, sequencing, migration, and verification must be decided before implementation. Requires an existing bounded spec; not for defining what to build (use to-spec) or executing the plan (use implementation-workflow).
+disable-model-invocation: true
 ---
 
 # To Plan
