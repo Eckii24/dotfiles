@@ -3,7 +3,7 @@ import type { PiLaunchDescriptor } from "./pi-launch.js";
 
 export type TopologyClient = {
 	createTab(params: { workspaceId?: string; cwd?: string; label?: string; env?: Record<string, string>; focus?: boolean }): Promise<unknown>;
-	/** Protocol 17 starts the canonical Pi integration in an existing shell pane. */
+	/** Protocol 19 starts the canonical Pi integration in an existing shell pane. */
 	startAgent(params: { name: string; kind: "pi"; paneId: string; args?: string[] }): Promise<unknown>;
 	splitPane(params: { direction: "right" | "down"; targetPaneId?: string; workspaceId?: string; cwd?: string; env?: Record<string, string>; focus?: boolean }): Promise<unknown>;
 	closePane(paneId: string): Promise<unknown>;
@@ -43,7 +43,7 @@ export function topologyLabel(label: string, id: string, limit = 80): string {
 	return `${clean || "Pi child"} · ${short}`.slice(0, limit);
 }
 
-/** Protocol-17 layout tree. Leaves are stable pane IDs, never screen positions. */
+/** Protocol-19 layout tree. Leaves are stable pane IDs, never screen positions. */
 export function defaultLayout(paneIds: readonly string[]): unknown {
 	if (paneIds.length < 1 || paneIds.length > 4 || paneIds.some(id => !id)) throw new RangeError("layout requires 1–4 pane IDs");
 	const leaf = (paneId: string) => ({ type: "pane", pane_id: paneId });
@@ -65,7 +65,7 @@ export async function createTopology(input: { client: TopologyClient; capacity: 
 	let group: OwnedGroup | undefined;
 	try {
 		const first = input.leaves[0]!;
-		// Protocol 17 tab.create yields the first shell pane. Give it the first child's
+		// Protocol 19 tab.create yields the first shell pane. Give it the first child's
 		// cwd/env, then start Herdr's canonical Pi integration in that same pane.
 		const tabResult = await input.client.createTab({ workspaceId: input.workspaceId, label: reservation.label, cwd: first.launch.cwd, env: first.launch.env, focus: false });
 		const tabId = resultId(tabResult, "tab"); const firstPaneId = resultId(tabResult, "pane");
@@ -157,12 +157,12 @@ export function agentStartName(leafRunId: string) {
 	return `pi${leafRunId.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
 }
 export async function startTopologyAgent(client: TopologyClient, paneId: string, leaf: TopologyLeaf) {
-	// Protocol 17 starts an agent inside the tab-created shell. Herdr can report
+	// Protocol 19 starts an agent inside the tab-created shell. Herdr can report
 	// agent_pane_busy while that shell is still becoming interactive; retry only
 	// that transient server error, never a different launch failure.
 	for (let attempt = 0; ; attempt += 1) {
 		try {
-			// Protocol 17 requires a unique alphanumeric agent name. `kind: pi`
+			// Protocol 19 requires a unique alphanumeric agent name. `kind: pi`
 			// selects the manifest; the stable leaf ID supplies uniqueness.
 			const name = agentStartName(leaf.leafRunId);
 			await client.startAgent({ name, kind: "pi", paneId, args: leaf.launch.argv });

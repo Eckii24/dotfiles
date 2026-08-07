@@ -33,7 +33,7 @@ test("sanitizes meaningful labels with short stable IDs", () => {
 	expect(topologyLabel(" \u001b]secret\u0007  Scout\n", "abcdefgh-123")).toBe("Scout · abcdefgh");
 });
 
-test("uses tab-created shell pane for first child and starts Protocol-17 Pi integration", async () => {
+test("uses tab-created shell pane for first child and starts Protocol-19 Pi integration", async () => {
 	const f = fake(); const result = await createTopology(input(f));
 	expect(result.group).toMatchObject({ tabId: "tab-1", tabLabel: "Plan\u001b[31m alpha · pi-herdr:deadbe" });
 	expect([...result.group.ownedPaneIds]).toEqual(["child-1"]);
@@ -42,7 +42,7 @@ test("uses tab-created shell pane for first child and starts Protocol-17 Pi inte
 	expect(f.calls[2]![1]).toEqual({ name: "pileaf112345678", kind: "pi", paneId: "child-1", args: ["--name", "child-1", "--append-system-prompt", "/runtime/launch-1/prompt.md"] });
 });
 
-test("uses protocol-17 pane/split layout nodes", () => {
+test("uses protocol-19 pane/split layout nodes", () => {
 	expect(defaultLayout(["one", "two", "three"])).toEqual({ type: "split", direction: "right", ratio: 0.5, first: { type: "pane", pane_id: "one" }, second: { type: "split", direction: "down", ratio: 0.5, first: { type: "pane", pane_id: "two" }, second: { type: "pane", pane_id: "three" } } });
 });
 

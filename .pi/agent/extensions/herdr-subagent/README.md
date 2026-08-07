@@ -28,7 +28,7 @@ Keine Shell-Remote-Execution-API. Keine freie Tasteneingabe. Keine Bildschirm- o
 ```mermaid
 flowchart LR
   P[Aufrufer-Pi\nHerdr-Pane] -->|subagent| E[Herdr-Subagent-Extension]
-  E -->|Protocol 17 / Unix socket| H[Herdr]
+  E -->|Protocol 19 / Unix socket| H[Herdr]
   H --> T[neuer, owned Tab]
   T --> C1[Pi Child 1]
   T --> C2[Pi Child 2]
@@ -86,7 +86,7 @@ Vor jeder Topologie-Allokation prüft die Extension:
 
 1. `HERDR_ENV`, Socket-Pfad, Caller-Pane und verschachtelten Kontext.
 2. Socket ist Socket, kein Symlink, Eigentümer aktueller Benutzer.
-3. Protocol-17-Handshake und erforderliche Herdr-Fähigkeiten.
+3. Protocol-19-Handshake und erforderliche Herdr-Fähigkeiten.
 4. Caller-Pane ist in Snapshot vorhanden, hat Workspace und native Pi-Integration.
 5. Pi-Datei ist absolut und ausführbar.
 
@@ -271,7 +271,7 @@ flowchart TB
 - Pane-Namen enthalten Gruppe, Profil und erste acht Zeichen der Leaf-ID; Terminal-Control-Zeichen werden entfernt.
 - Während ein `subagent`-Tool läuft, zeigt dessen Orchestrator-Zeile Gruppe, Modus/Panenanzahl, Item-Name, Profil und eine gekürzte Task. Expansion zeigt die vollständige Task bzw. finale Leaf-Outputs. Modell, Tool-Liste und technische Pane-/Tab-IDs bleiben verborgen: Sie erklären den Run nicht besser als Profil und Gruppe.
 - Layouts: 1 Pane; 2 horizontal; 3 horizontal plus rechter vertikaler Split; 4 zwei vertikale Spalten. Layout-Fehler lassen sichere Standardanordnung bestehen und erzeugen Warnung.
-- Protocol 17 verwendet die von `tab.create` erzeugte Shell direkt für ersten Child; weitere Child-Panes entstehen über `pane.split`.
+- Protocol 19 verwendet die von `tab.create` erzeugte Shell direkt für ersten Child; weitere Child-Panes entstehen über `pane.split`.
 
 ### Task-Zustandsautomat
 
@@ -484,7 +484,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 |---|---|
 | `not_in_herdr` | Pi aus einer Herdr-verwalteten Pane neu starten. |
 | `missing_herdr_socket` / `herdr_socket_unreachable` | Herdr und Pi als gleicher Benutzer neu starten; keinen Symlink-Socket verwenden. |
-| `herdr_protocol_unsupported` | Herdr auf Protocol 17 mit benötigten Fähigkeiten aktualisieren. |
+| `herdr_protocol_unsupported` | Herdr auf Protocol 19 mit benötigten Fähigkeiten aktualisieren. |
 | `calling_pane_not_found` | Pi in live Herdr-Workspace-Pane neu starten. |
 | `pi_integration_missing` | Herdr-Pi-Integration aktivieren; ausführbares Pi konfigurieren; neu starten. |
 | `agent_profile_not_found` / `agent_profile_invalid` | Profil im gewählten Scope anlegen/reparieren. |
