@@ -16,4 +16,8 @@ describe("parseUsageQuery", () => {
 		expect(() => parseUsageQuery(["pi", "--usage=models"])).toThrow("Use --usage");
 		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "session,session"])).toThrow("unique");
 	});
+
+	it("rejects a misspelled group selector instead of silently defaulting to session", () => {
+		expect(() => parseUsageQuery(["pi", "--usage", "--anomalies", "--groupy-by", "project"])).toThrow("--group-by");
+	});
 });
