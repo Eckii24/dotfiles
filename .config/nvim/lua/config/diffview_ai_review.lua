@@ -5,6 +5,7 @@ local api = vim.api
 local review_file = ".ai-review.json"
 local ns = api.nvim_create_namespace("diffview_ai_review_comments")
 local augroup_name = "DiffviewAiReviewComments"
+local show_resolved = false
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "AI Review" })
@@ -69,6 +70,26 @@ local function encode(value)
   return vim.json.encode(value or "")
 end
 
+local function encode_nullable(value)
+  return vim.json.encode(value == nil and vim.NIL or value)
+end
+
+local function nullable_string(value)
+  if value == vim.NIL then
+    return nil
+  end
+
+  return value
+end
+
+local function status(note)
+  return note.status == "resolved" and "resolved" or "open"
+end
+
+local function is_resolved(note)
+  return status(note) == "resolved"
+end
+
 local function write_review_data(path, data)
   data.version = 1
   data.comments = data.comments or {}
@@ -105,6 +126,10 @@ local function write_review_data(path, data)
       '      "line": ' .. tostring(tonumber(note.line) or 1) .. ",",
       '      "side": ' .. encode(note.side or "right") .. ",",
       '      "body": ' .. encode(note.body or "") .. ",",
+      '      "status": ' .. encode(status(note)) .. ",",
+      '      "resolution": ' .. encode_nullable(note.resolution) .. ",",
+      '      "resolved_at": ' .. encode_nullable(note.resolved_at) .. ",",
+      '      "resolved_by": ' .. encode_nullable(note.resolved_by) .. ",",
       '      "created_at": ' .. encode(note.created_at) .. ",",
       '      "updated_at": ' .. encode(note.updated_at),
       "    }" .. comma,
@@ -160,6 +185,7 @@ local function set_highlights()
   api.nvim_set_hl(0, "DiffviewAiReviewMarker", { default = true, link = "DiagnosticInfo" })
   api.nvim_set_hl(0, "DiffviewAiReviewBorder", { default = true, link = "DiagnosticVirtualTextInfo" })
   api.nvim_set_hl(0, "DiffviewAiReviewText", { default = true, link = "Comment" })
+  api.nvim_set_hl(0, "DiffviewAiReviewResolved", { default = true, link = "DiagnosticHint" })
 end
 
 local function side_for_file(file)
@@ -412,7 +438,7 @@ local function render_buffer(bufnr, root, file_path, side)
   end
 
   local comments = vim.tbl_filter(function(note)
-    return comment_matches(note, file_path, side)
+    return comment_matches(note, file_path, side) and (show_resolved or not is_resolved(note))
   end, read_comments(root))
 
   table.sort(comments, function(a, b)
@@ -430,15 +456,29 @@ local function render_buffer(bufnr, root, file_path, side)
     local lnum = tonumber(note.line)
 
     if lnum and lnum >= 1 and lnum <= line_count then
-      api.nvim_buf_set_extmark(bufnr, ns, lnum - 1, 0, {
-        virt_text = { { "  ● AI review", "DiffviewAiReviewMarker" } },
-        virt_text_pos = "eol",
-        virt_lines = comment_virt_lines(note, index, width),
-        virt_lines_above = false,
-        sign_text = "●",
-        sign_hl_group = "DiffviewAiReviewMarker",
-        priority = 200,
-      })
+      if is_resolved(note) then
+        local resolution_text = nullable_string(note.resolution)
+        local resolution = resolution_text and (": " .. truncate_middle(resolution_text, math.max(20, width - 16)))
+          or ""
+
+        api.nvim_buf_set_extmark(bufnr, ns, lnum - 1, 0, {
+          virt_text = { { "  ✓ resolved" .. resolution, "DiffviewAiReviewResolved" } },
+          virt_text_pos = "eol",
+          sign_text = "✓",
+          sign_hl_group = "DiffviewAiReviewResolved",
+          priority = 200,
+        })
+      else
+        api.nvim_buf_set_extmark(bufnr, ns, lnum - 1, 0, {
+          virt_text = { { "  ● AI review", "DiffviewAiReviewMarker" } },
+          virt_text_pos = "eol",
+          virt_lines = comment_virt_lines(note, index, width),
+          virt_lines_above = false,
+          sign_text = "●",
+          sign_hl_group = "DiffviewAiReviewMarker",
+          priority = 200,
+        })
+      end
     end
   end
 end
@@ -640,6 +680,52 @@ function M.add_note()
   local existing = find_comment(data.comments, target)
 
   open_comment_editor(target, existing)
+end
+
+function M.toggle_note()
+  local target = current_target()
+  if not target then
+    return
+  end
+
+  local path = review_path(target.root)
+  local data = read_review_data(target.root)
+  local note = find_comment(data.comments, target)
+
+  if not note then
+    notify("Kein AI-Review-Kommentar auf dieser Zeile.", vim.log.levels.WARN)
+    return
+  end
+
+  local now = os.date("!%Y-%m-%dT%H:%M:%SZ")
+  if is_resolved(note) then
+    note.status = "open"
+    note.resolution = nil
+    note.resolved_at = nil
+    note.resolved_by = nil
+    notify("AI review note wieder geöffnet.")
+  else
+    note.status = "resolved"
+    note.resolution = nullable_string(note.resolution) or "Manuell als erledigt markiert."
+    note.resolved_at = now
+    note.resolved_by = "human"
+    notify("AI review note als erledigt markiert.")
+  end
+
+  note.updated_at = now
+  write_review_data(path, data)
+  render_current_view()
+  render_current_buffer()
+end
+
+function M.toggle_resolved_visibility()
+  show_resolved = not show_resolved
+  notify(
+    show_resolved and "Erledigte AI review notes werden kompakt angezeigt."
+      or "Erledigte AI review notes werden ausgeblendet."
+  )
+  render_current_view()
+  render_current_buffer()
 end
 
 function M.open_notes()

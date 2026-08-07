@@ -110,6 +110,8 @@ return {
             -- AI review workflow
             ["<C-a>"] = ai_review.add_note,
             ["<C-n>"] = ai_review.open_notes,
+            ["<C-t>"] = ai_review.toggle_note,
+            ["<C-v>"] = ai_review.toggle_resolved_visibility,
           },
           file_panel = {
             ["q"] = "<cmd>DiffviewClose<cr>",
@@ -117,6 +119,8 @@ return {
             -- File-Panel: öffnet Hinweis, Inline-Kommentare im Diff-Fenster setzen.
             ["<C-a>"] = ai_review.add_note,
             ["<C-n>"] = ai_review.open_notes,
+            ["<C-t>"] = ai_review.toggle_note,
+            ["<C-v>"] = ai_review.toggle_resolved_visibility,
           },
           file_history_panel = {
             ["q"] = "<cmd>DiffviewClose<cr>",
