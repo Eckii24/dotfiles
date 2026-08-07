@@ -9,6 +9,10 @@
     "large": "claude-opus-4.8"
   },
   "chatModel": "gen-ai-platform/gpt-56-luna",
+  "goal": {
+    "maxTurns": 20,
+    "evaluatorModel": "@small"
+  },
   "compaction": {
     "enabled": true,
     "reserveTokens": 65536,

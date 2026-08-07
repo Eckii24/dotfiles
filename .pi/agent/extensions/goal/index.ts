@@ -51,6 +51,8 @@ const VERDICT_REGEX =
 const SETTINGS_PATH_GLOBAL = path.join(os.homedir(), ".pi", "agent", "settings.json");
 
 const CLEAR_ALIASES = new Set(["clear", "stop", "off", "reset", "none", "cancel"]);
+const PAUSE_ALIASES = new Set(["pause", "hold"]);
+const RESUME_ALIASES = new Set(["resume", "continue"]);
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -229,6 +231,23 @@ function isGoalState(value: unknown): value is GoalState {
 		typeof s.useFreshSession === "boolean" &&
 		typeof s.status === "string"
 	);
+}
+
+export function pauseGoalState(state: GoalState): GoalState {
+	return {
+		...state,
+		status: "paused",
+		lastEvalReason: "Paused by user.",
+	};
+}
+
+export function resumeGoalState(state: GoalState): GoalState {
+	return {
+		...state,
+		status: "active",
+		currentTurn: 1,
+		lastEvalReason: "Resumed by user.",
+	};
 }
 
 // ── Evaluator ────────────────────────────────────────────────────────
@@ -502,6 +521,31 @@ export default function (pi: ExtensionAPI) {
 				(currentState.status === "active" ||
 					currentState.status === "evaluating" ||
 					currentState.status === "paused");
+
+			// /goal pause
+			if (PAUSE_ALIASES.has(trimmed.toLowerCase())) {
+				if (!currentState || currentState.status === "cleared" || currentState.status === "met") {
+					ctx.ui.notify("No active goal to pause", "info");
+					return;
+				}
+				if (currentState.status === "paused") {
+					ctx.ui.notify("Goal is already paused", "info");
+					return;
+				}
+				pauseGoal(pi, ctx, currentState);
+				ctx.ui.notify("Goal paused", "info");
+				return;
+			}
+
+			// /goal resume
+			if (RESUME_ALIASES.has(trimmed.toLowerCase())) {
+				if (!currentState || currentState.status !== "paused") {
+					ctx.ui.notify("No paused goal to resume", "info");
+					return;
+				}
+				await resumeGoal(pi, ctx, currentState);
+				return;
+			}
 
 			// /goal clear
 			if (CLEAR_ALIASES.has(trimmed.toLowerCase())) {
@@ -941,6 +985,59 @@ export default function (pi: ExtensionAPI) {
 		// Kill any running evaluator
 		const globalState = getGlobalState();
 		globalState.abortEvaluation?.();
+	}
+
+	function pauseGoal(
+		pi: ExtensionAPI,
+		ctx: ExtensionContext,
+		state: GoalState,
+	): void {
+		const paused = pauseGoalState(state);
+		pi.appendEntry(GOAL_STATE_ENTRY_TYPE, paused);
+		updateStatus(ctx, paused);
+		setDirtyRepoGuardBypass(pi, state.goalId, false);
+		clearGoalSessionControl(state.goalId);
+		getGlobalState().abortEvaluation?.();
+	}
+
+	async function resumeGoal(
+		pi: ExtensionAPI,
+		ctx: ExtensionCommandContext,
+		state: GoalState,
+	): Promise<void> {
+		const resumed = resumeGoalState(state);
+		setGoalSessionControl(ctx, resumed);
+		pi.appendEntry(GOAL_STATE_ENTRY_TYPE, resumed);
+		updateStatus(ctx, resumed);
+
+		if (resumed.useFreshSession) {
+			const started = await openGoalSessionWithPrompt(
+				pi,
+				ctx,
+				resumed,
+				"Resumed by user.",
+			);
+			if (!started) {
+				const paused = {
+					...resumed,
+					status: "paused" as const,
+					lastEvalReason: "Fresh-session handoff cancelled while resuming.",
+				};
+				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, paused);
+				updateStatus(ctx, paused);
+				clearGoalSessionControl(resumed.goalId);
+			}
+			return;
+		}
+
+		pi.sendUserMessage(
+			buildGoalContinuationPrompt(
+				resumed,
+				"Resumed by user.",
+				"Goal resumed by user.",
+			),
+			{ deliverAs: "followUp" },
+		);
 	}
 
 	function showGoalStatus(ctx: ExtensionContext, state: GoalState): void {
