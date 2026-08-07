@@ -33,7 +33,7 @@ pi --usage=help
 
 `agent` is `main` or `subagent`. Normal reports aggregate both. Put it into the grouping path only when the split matters.
 
-Session titles are Pi-native: `pi --name "Title"` at startup or `/name Title` interactively. Analytics reads the latest persisted native name; unnamed sessions fall back to short id plus project.
+Session titles are Pi-native: `pi --name "Title"` at startup or `/name Title` interactively. Analytics reads the latest persisted native name; unnamed sessions fall back to the full session ID. Every tabular text/CSV report keeps this data-column order: Sessions, Turns, Input, C.Read, C.Write, Output, Reason, Cost, Cache.
 
 ## Metrics and limits
 

@@ -3,7 +3,7 @@ import { renderTreeTable, type TreeNode } from "./tree.js";
 
 describe("renderTreeTable", () => {
 	it("renders a multi-group hierarchy as aligned ASCII table rows", () => {
-		const nodes: TreeNode[] = [{ key: "project-a", label: "project-a", cost: 2, input: 1_000_000, cacheRead: 100_000, cacheWrite: 0, output: 10, reasoning: 0, turns: 1, children: [{ key: "session-a", label: "session-a", cost: 2, input: 1_000_000, cacheRead: 100_000, cacheWrite: 0, output: 10, reasoning: 0, turns: 1, children: [] }] }];
+		const nodes: TreeNode[] = [{ key: "project-a", label: "project-a", cost: 2, input: 1_000_000, cacheRead: 100_000, cacheWrite: 0, output: 10, reasoning: 0, turns: 1, uniqueSessions: 1, cacheReadRate: 0.1, children: [{ key: "session-a", label: "session-a", cost: 2, input: 1_000_000, cacheRead: 100_000, cacheWrite: 0, output: 10, reasoning: 0, turns: 1, uniqueSessions: 1, cacheReadRate: 0.1, children: [] }] }];
 		const report = renderTreeTable(nodes, ["project", "session"], 20);
 		expect(report).toContain("Project");
 		expect(report).toContain("Session");
@@ -12,5 +12,7 @@ describe("renderTreeTable", () => {
 		expect(report).toContain("$2.0000");
 		expect(report).toContain("1.0M");
 		expect(report).toContain("100k");
+		expect(report).not.toContain("undefined");
+		expect(report.split("\n")[0]!.split(/ {2,}/).slice(-9)).toEqual(["Sessions", "Turns", "Input", "C.Read", "C.Write", "Output", "Reason", "Cost", "Cache"]);
 	});
 });
