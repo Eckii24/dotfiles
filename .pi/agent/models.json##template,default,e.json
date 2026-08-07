@@ -176,8 +176,9 @@
           "contextWindow": 272000
         }
       }
-    },
-    "gen-ai-platform": {
+    }
+{% if env.GENAI_PLATFORM_BASE_URL != "" %}
+    , "gen-ai-platform": {
       "baseUrl": "{{env.GENAI_PLATFORM_BASE_URL}}",
       "api": "openai-completions",
       "apiKey": "dummy",
@@ -412,5 +413,6 @@
         }
       ]
     }
+{% endif %}
   }
 }
