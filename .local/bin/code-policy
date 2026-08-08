@@ -1,0 +1,108 @@
+#!/usr/bin/env zsh
+# Stable project-agnostic contract for personal code policy checks.
+set -u
+set -o pipefail
+
+readonly CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/code-policy/sgconfig.yml"
+
+usage() {
+  cat <<'EOF'
+Usage: code-policy <command> [--json]
+
+Commands:
+  changed             Scan files changed from HEAD (staged and unstaged).
+  staged              Scan files staged in the Git index.
+  branch <base>       Scan files changed from the merge-base with <base>.
+  all                 Scan the current directory.
+  test                Run the central ast-grep rule tests.
+
+Options:
+  --json              Emit newline-delimited ast-grep JSON (only valid with changed).
+EOF
+}
+
+require_ast_grep() {
+  if ! command -v ast-grep >/dev/null 2>&1; then
+    print -u2 -- 'code-policy: ast-grep is not on PATH. Install it with Homebrew.'
+    return 127
+  fi
+}
+
+require_git_repository() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    print -u2 -- 'code-policy: run this command inside a Git work tree.'
+    return 2
+  fi
+}
+
+scan() {
+  ast-grep scan --config "$CONFIG" --report-style short "$@"
+}
+
+scan_json() {
+  ast-grep scan --config "$CONFIG" --json=stream "$@"
+}
+
+scan_files() {
+  local mode="$1"
+  shift
+  local diff
+  diff="$(git diff --name-only --diff-filter=ACMR "$@")"
+  [[ -z "$diff" ]] && return 0
+
+  local -a files
+  files=("${(@f)diff}")
+  case "$mode" in
+    short) scan "${files[@]}" ;;
+    json) scan_json "${files[@]}" ;;
+  esac
+}
+
+main() {
+  local command="${1:-}"
+  shift 2>/dev/null || true
+
+  case "$command" in
+    changed)
+      require_ast_grep && require_git_repository || return $?
+      if (( $# == 0 )); then
+        scan_files short HEAD
+      elif (( $# == 1 )) && [[ "$1" == '--json' ]]; then
+        scan_files json HEAD
+      else
+        usage >&2
+        return 2
+      fi
+      ;;
+    staged)
+      require_ast_grep && require_git_repository || return $?
+      (( $# == 0 )) || { usage >&2; return 2; }
+      scan_files short --cached
+      ;;
+    branch)
+      require_ast_grep && require_git_repository || return $?
+      (( $# == 1 )) || { usage >&2; return 2; }
+      scan_files short "${1}...HEAD"
+      ;;
+    all)
+      require_ast_grep || return $?
+      (( $# == 0 )) || { usage >&2; return 2; }
+      scan .
+      ;;
+    test)
+      require_ast_grep || return $?
+      (( $# == 0 )) || { usage >&2; return 2; }
+      ast-grep test --config "$CONFIG"
+      ;;
+    -h|--help|help|'')
+      usage
+      ;;
+    *)
+      print -u2 -- "code-policy: unknown command: $command"
+      usage >&2
+      return 2
+      ;;
+  esac
+}
+
+main "$@"

@@ -3,6 +3,8 @@ tap "jandedobbeleer/oh-my-posh", trusted: true
 tap "oven-sh/bun", trusted: true
 # Clone of cat(1) with syntax highlighting and Git integration
 brew "bat"
+# Structural search and rewrite tool for code-policy
+brew "ast-grep"
 # Version manager for neovim
 brew "bob"
 # Resource monitor. C++ version and continuation of bashtop and bpytop
