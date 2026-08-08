@@ -1,3 +1,6 @@
+#!/usr/bin/env zsh
+# Standalone command; main function provides local scope and return semantics.
+
 function _ado_bulk_edit_log() {
   printf '[ado-bulk-edit] %s\n' "$*"
 }
@@ -450,7 +453,7 @@ function _ado_bulk_edit_change_parent() {
   fi
 }
 
-function ado-bulk-edit() {
+main() {
   emulate -L zsh
   setopt local_options no_aliases
 
@@ -471,3 +474,5 @@ function ado-bulk-edit() {
       ;;
   esac
 }
+
+main "$@"

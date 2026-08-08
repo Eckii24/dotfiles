@@ -1,4 +1,7 @@
-gitsync() {
+#!/usr/bin/env bash
+# Standalone command; main function provides local scope and return semantics.
+
+main() {
   local REPO_PATH
   local CUSTOM_MSG
   
@@ -93,3 +96,5 @@ Files Changed:
     echo "✅ Success! Pull, commit, and push complete."
   )
 }
+
+main "$@"

@@ -1,8 +1,8 @@
-function run-repo(){
-  if [[ $# -eq 0 ]]; then
-    echo "Usage: $0 <command> [args...]"
-    return 1
-  fi
+#!/usr/bin/env bash
+if [[ $# -eq 0 ]]; then
+  echo "Usage: $0 <command> [args...]"
+  exit 1
+fi
 
   COMMAND=("$@")
 
@@ -15,4 +15,3 @@ function run-repo(){
       fi
     fi
   done
-}

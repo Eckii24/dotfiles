@@ -1,4 +1,7 @@
-folder-markdown-pdf-export() {
+#!/usr/bin/env zsh
+# Standalone command; run provides the Zsh-local option scope and invokes main.
+
+run() {
   emulate -L zsh
   setopt local_options local_traps nounset
   trap _cleanup_temp EXIT
@@ -1444,3 +1447,5 @@ main() {
 
 main "$@"
 }
+
+run "$@"

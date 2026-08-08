@@ -1,7 +1,10 @@
+#!/usr/bin/env bash
+# Standalone command; main function provides local scope and return semantics.
+
 # GitHub Copilot Usage
 # Fetches and pretty prints the current GitHub Copilot premium credit usage
 
-copilot-usage() {
+main() {
     local -r FUNCTION_NAME="copilot-usage"
     local -r APPS_JSON_PATH="$HOME/.config/github-copilot/apps.json"
 
@@ -213,3 +216,5 @@ EOF
     echo ""
     return 0
 }
+
+main "$@"

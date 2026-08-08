@@ -1,4 +1,7 @@
-function connect-dev() {
+#!/usr/bin/env zsh
+# Standalone command; main function provides local scope and return semantics.
+
+main() {
 
   if [[ -n "$ZELLIJ_SESSION_NAME" || -n "$TMUX" ]]; then
     vared -p "Terminal multiplexer session detected. Start the container inside the current session? (y/n): " -c answer
@@ -51,3 +54,5 @@ function connect-dev() {
   echo "Executing: $ssh_cmd"
   eval "$ssh_cmd"
 }
+
+main "$@"

@@ -1,4 +1,7 @@
-function start-dev() {
+#!/usr/bin/env bash
+# Standalone command; main function provides local scope and return semantics.
+
+main() {
   # Help function
   function show_help() {
     echo "Usage: start-dev [OPTIONS]"
@@ -196,3 +199,5 @@ function start-dev() {
       echo "Container $container_name started. SSH available on port $ssh_port."
     fi
   }
+
+main "$@"

@@ -1,4 +1,7 @@
-function update-music() {
+#!/usr/bin/env zsh
+# Standalone command; main function provides local scope and return semantics.
+
+main() {
     # Ensure the function uses Zsh features, especially if sourced in a compatibility mode.
     emulate -L zsh
     # For advanced globbing features if needed, though not strictly necessary for this script.
@@ -133,3 +136,4 @@ function update-music() {
     return 0
 }
 
+main "$@"

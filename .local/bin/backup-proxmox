@@ -1,4 +1,4 @@
-function backup-proxmox() {
+#!/usr/bin/env bash
   # Source and destination paths
   SOURCE_PATH="proxmox:/var/lib/vz/dump"
   DESTINATION_PATH="/Users/matthiaseck/Library/Mobile Documents/com~apple~CloudDocs/Backups/proxmox"
@@ -8,4 +8,3 @@ function backup-proxmox() {
 
   # If scp command is successful, delete older files from the destination path
   find "$DESTINATION_PATH" -maxdepth 1 -type f -name 'vzdump-lxc-102*' -mtime +7 -exec rm {} \;
-}

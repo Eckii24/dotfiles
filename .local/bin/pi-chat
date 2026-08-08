@@ -1,5 +1,8 @@
+#!/usr/bin/env zsh
+# Standalone command; main function provides local scope and return semantics.
 
-pi-chat() {
+
+main() {
   local settings_file="$HOME/.pi/agent/settings.json"
   local model="github-copilot/gpt-5-mini"
   local prompt=""
@@ -149,3 +152,5 @@ EOF
 
   command pi -p --no-tools --no-extensions --no-session --no-context-files "${pi_args[@]}" "${passthrough[@]}"
 }
+
+main "$@"

@@ -1,4 +1,7 @@
-function mockoon() {
+#!/usr/bin/env bash
+# Standalone command; main function provides local scope and return semantics.
+
+main() {
   local data_file=""
 
   # Parse command line arguments
@@ -50,3 +53,4 @@ function mockoon() {
   mockoon-cli start --data "$data_file" --watch
 }
 
+main "$@"
