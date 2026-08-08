@@ -1,6 +1,4 @@
 
-alias pi-read='pi --tools read,grep,find,ls'
-
 pi-chat() {
   local settings_file="$HOME/.pi/agent/settings.json"
   local model="github-copilot/gpt-5-mini"

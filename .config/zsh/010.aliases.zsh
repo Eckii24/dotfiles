@@ -18,6 +18,7 @@ alias allsync='wikisync && tasksync'
 # AI related stuff
 alias db='OM nvim +"DBUI"'
 alias ado-deployments='OM ado-deployments'
+alias pi-read='pi --tools read,grep,find,ls'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
