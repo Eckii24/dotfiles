@@ -3,23 +3,23 @@ local function git_ref_exists(ref)
   return vim.v.shell_error == 0 and result[1] ~= nil and result[1] ~= ""
 end
 
-local function default_base_ref()
-  for _, ref in ipairs({ "origin/main", "origin/master", "main", "master" }) do
+local function base_ref(refs)
+  for _, ref in ipairs(refs) do
     if git_ref_exists(ref) then
       return ref
     end
   end
 end
 
-local function open_default_base_diff()
-  local ref = default_base_ref()
+local function open_base_diff(refs, label)
+  local ref = base_ref(refs)
 
   if not ref then
-    vim.notify("No base branch found: origin/main, origin/master, main, master", vim.log.levels.ERROR)
+    vim.notify("No " .. label .. " base branch found", vim.log.levels.ERROR)
     return
   end
 
-  vim.cmd("DiffviewOpen " .. ref)
+  vim.cmd("DiffviewOpen " .. ref .. "...HEAD")
 end
 
 return {
@@ -32,15 +32,33 @@ return {
     cmd = {
       "DiffviewOpen",
       "DiffviewClose",
+      "DiffviewToggle",
       "DiffviewToggleFiles",
       "DiffviewFocusFiles",
       "DiffviewFileHistory",
+      "DiffviewDiffFiles",
+      "DiffviewDiffDirs",
+      "DiffviewMergeFiles",
     },
     keys = {
+      { "<leader>fd", "<cmd>DiffviewToggle<cr>", desc = "Toggle Diffview" },
       { "<leader>gV", desc = "+diffview" },
       { "<leader>gVi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
       { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "Working Tree to Last Commit" },
-      { "<leader>gVm", open_default_base_diff, desc = "Working Tree to main/master" },
+      {
+        "<leader>gVm",
+        function()
+          open_base_diff({ "main", "master" }, "local")
+        end,
+        desc = "Working Tree vs local main/master",
+      },
+      {
+        "<leader>gVM",
+        function()
+          open_base_diff({ "origin/main", "origin/master" }, "remote")
+        end,
+        desc = "Working Tree vs origin/main/master",
+      },
       { "<leader>gVf", "<cmd>DiffviewFileHistory %<cr>", desc = "Current File History" },
       { "<leader>gVf", ":'<,'>DiffviewFileHistory<cr>", mode = "v", desc = "Current File History" },
       { "<leader>gVq", "<cmd>DiffviewClose<cr>", desc = "Quit" },
@@ -102,6 +120,45 @@ return {
       return {
         default_args = {
           DiffviewOpen = { "--imply-local", "--untracked-files=all" },
+        },
+        enhanced_diff_hl = true,
+        diffopt = {
+          algorithm = "histogram",
+        },
+        persist_selections = {
+          enabled = true,
+        },
+        view = {
+          default = {
+            layout = "diff2_horizontal",
+            focus_diff = true,
+          },
+          merge_tool = {
+            layout = "diff4_mixed",
+            disable_diagnostics = true,
+            winbar_info = true,
+          },
+          file_history = {
+            layout = "diff2_vertical",
+          },
+          inline = {
+            style = "unified",
+            deletion_highlight = "hanging",
+            deletion_treesitter = true,
+          },
+          cycle_layouts = {
+            default = { "diff2_horizontal", "diff1_inline", "diff2_vertical" },
+          },
+        },
+        file_panel = {
+          show_branch_name = true,
+          always_show_sections = true,
+          always_show_marks = true,
+          mark_placement = "sign_column",
+        },
+        file_history_panel = {
+          stat_style = "both",
+          date_format = "relative",
         },
         keymaps = {
           view = {
