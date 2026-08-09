@@ -5,7 +5,7 @@ local api = vim.api
 local review_file = ".ai-review.json"
 local ns = api.nvim_create_namespace("diffview_ai_review_comments")
 local augroup_name = "DiffviewAiReviewComments"
-local show_resolved = false
+local show_resolved = true
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "AI Review" })

@@ -98,7 +98,28 @@ return {
     },
     opts = function()
       local ai_review = require("config.diffview_ai_review")
+      local actions = require("diffview.actions")
+      local lib = require("diffview.lib")
       local git_adapter = require("diffview.vcs.adapters.git").GitAdapter
+
+      local function select_entry_focus_diff()
+        local view = lib.get_current_view()
+        if not view or not view.panel:is_open() then
+          return
+        end
+
+        local item = view.panel:get_item_at_cursor()
+        if not item then
+          return
+        end
+
+        if type(item.collapsed) == "boolean" then
+          view.panel:toggle_item_fold(item)
+        else
+          view:set_file(item, true)
+        end
+      end
+
       ai_review.setup()
 
       if not git_adapter._show_untracked_override then
@@ -163,24 +184,31 @@ return {
         keymaps = {
           view = {
             ["q"] = "<cmd>DiffviewClose<cr>",
+            { "n", "g<C-x>", false },
+            { "n", "gX", actions.cycle_layout, { desc = "Cycle through available layouts" } },
 
             -- AI review workflow
-            ["<C-a>"] = ai_review.add_note,
-            ["<C-n>"] = ai_review.open_notes,
-            ["<C-t>"] = ai_review.toggle_note,
-            ["<C-v>"] = ai_review.toggle_resolved_visibility,
+            { "n", "ga", ai_review.add_note, { desc = "Add Review Note" } },
+            { "n", "gA", ai_review.open_notes, { desc = "Open Review Notes" } },
+            { "n", "gm", ai_review.toggle_note, { desc = "Toggle Review Note" } },
+            { "n", "gM", ai_review.toggle_resolved_visibility, { desc = "Toggle Resolved Review Notes" } },
           },
           file_panel = {
             ["q"] = "<cmd>DiffviewClose<cr>",
+            ["<cr>"] = select_entry_focus_diff,
+            { "n", "g<C-x>", false },
+            { "n", "gX", actions.cycle_layout, { desc = "Cycle through available layouts" } },
 
             -- File-Panel: öffnet Hinweis, Inline-Kommentare im Diff-Fenster setzen.
-            ["<C-a>"] = ai_review.add_note,
-            ["<C-n>"] = ai_review.open_notes,
-            ["<C-t>"] = ai_review.toggle_note,
-            ["<C-v>"] = ai_review.toggle_resolved_visibility,
+            { "n", "ga", ai_review.add_note, { desc = "Add Review Note" } },
+            { "n", "gA", ai_review.open_notes, { desc = "Open Review Notes" } },
+            { "n", "gm", ai_review.toggle_note, { desc = "Toggle Review Note" } },
+            { "n", "gM", ai_review.toggle_resolved_visibility, { desc = "Toggle Resolved Review Notes" } },
           },
           file_history_panel = {
             ["q"] = "<cmd>DiffviewClose<cr>",
+            { "n", "g<C-x>", false },
+            { "n", "gX", actions.cycle_layout, { desc = "Cycle through available layouts" } },
           },
         },
       }
