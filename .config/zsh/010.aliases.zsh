@@ -1,3 +1,4 @@
+# General tools
 alias cat='bat'
 alias lg='lazygit'
 alias lzd='lazydocker'
@@ -8,6 +9,7 @@ alias diff='delta -n -s'
 alias rm='trash-put'
 alias mr='mr -d "$HOME"'
 
+# Wiki and task management
 alias wiki='(cd $WIKI_HOME; nvim $WIKI_HOME/index.md)'
 alias daily='(cd $WIKI_HOME; nvim +Obsidian\ today)'
 alias tomorrow='(cd $WIKI_HOME; nvim +Obsidian\ tomorrow)'
@@ -15,10 +17,11 @@ alias wikisync='gitsync $WIKI_HOME'
 alias tasksync='gitsync $TASKDATA'
 alias allsync='wikisync && tasksync'
 
-# AI related stuff
+# Other related stuff
 alias db='OM nvim +"DBUI"'
 alias ado-deployments='OM ado-deployments'
 alias pi-read='pi --tools read,grep,find,ls'
+alias pibox='pi --sandbox'
 
 # debian specific
 alias "map-esc"='setxkbmap -option caps:escape'
