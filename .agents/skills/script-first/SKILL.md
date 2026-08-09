@@ -25,6 +25,12 @@ Examples: TODO inventory, symbol index, test/config coverage report, cross-file 
 
 Do not manufacture a script merely to satisfy this skill.
 
+## Input Selection
+
+- For syntax-structured code matching, use `ast-grep` (`sg`) as the collection primitive; do not approximate AST queries with regex or text search.
+- Use text search for prose, configuration, literals, and filenames.
+- Reduce input with the narrowest suitable collector before Python or stdin processing.
+
 ## Procedure
 
 1. State the narrow question and bounded input scope.
