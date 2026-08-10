@@ -22,6 +22,35 @@ local function open_base_diff(refs, label)
   vim.cmd("DiffviewOpen " .. ref .. "...HEAD")
 end
 
+local function diff_current_windows()
+  local current_win = vim.api.nvim_get_current_win()
+  local windows = {}
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local bufnr = vim.api.nvim_win_get_buf(win)
+    local name = vim.api.nvim_buf_get_name(bufnr)
+
+    if vim.bo[bufnr].buftype == "" and name ~= "" then
+      table.insert(windows, { win = win, name = name })
+    end
+  end
+
+  if #windows ~= 2 then
+    vim.notify("Open exactly two file panes before using <leader>fd", vim.log.levels.ERROR)
+    return
+  end
+
+  local first = windows[1]
+  local second = windows[2]
+  if first.win ~= current_win then
+    first, second = second, first
+  end
+
+  vim.cmd(
+    "DiffviewDiffFiles " .. vim.fn.fnameescape(first.name) .. " " .. vim.fn.fnameescape(second.name)
+  )
+end
+
 return {
   {
     "dlyongemallo/diffview-plus.nvim",
@@ -41,7 +70,7 @@ return {
       "DiffviewMergeFiles",
     },
     keys = {
-      { "<leader>fd", "<cmd>DiffviewToggle<cr>", desc = "Toggle Diffview" },
+      { "<leader>fd", diff_current_windows, desc = "Diff current file panes" },
       { "<leader>gV", desc = "+diffview" },
       { "<leader>gVi", "<cmd>DiffviewOpen<cr>", desc = "HEAD to Current Index" },
       { "<leader>gVl", "<cmd>DiffviewOpen HEAD~1<cr>", desc = "Working Tree to Last Commit" },
