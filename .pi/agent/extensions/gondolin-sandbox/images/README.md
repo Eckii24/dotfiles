@@ -1,38 +1,55 @@
-# pi-agent-base:0.12.0
+# Gondolin guest images
 
-`Dockerfile` builds base image. `work.Dockerfile` builds `pi-agent-work:0.12.0` from it, adding .NET 9 SDK, global tools matching local setup (`csharpier`, `dotnet-outdated-tool`, `dotnet-ef`), Azure CLI, Dapr CLI, and k6.
+Default sandbox image: `pi-agent-work:0.12.0`
 
-Build both images:
+## Build on working machine
 
-```sh
-docker build --platform linux/amd64 -t pi-agent-base:0.12.0 -f images/Dockerfile .
-docker build --platform linux/amd64 -t pi-agent-work:0.12.0 -f images/work.Dockerfile .
-```
-
-Build downloads use certificate verification disabled because build environment currently presents an untrusted TLS chain.
-
-If SSL/TLS breaks on this machine, move image from trusted machine instead:
-
-1. On machine where build works:
+Build base + work images with Gondolin, then tag them in local Gondolin image store:
 
 ```sh
-docker build --platform linux/amd64 -t pi-agent-base:0.12.0 -f images/Dockerfile .
-docker build --platform linux/amd64 -t pi-agent-work:0.12.0 -f images/work.Dockerfile .
-docker save pi-agent-base:0.12.0 pi-agent-work:0.12.0 | gzip > pi-agent-images.tgz
+gondolin build --config images/pi-agent-base.build.json --tag pi-agent-base:0.12.0
+gondolin build --config images/pi-agent-work.build.json --tag pi-agent-work:0.12.0
 ```
 
-2. Copy `pi-agent-images.tgz` to broken machine.
-
-3. On broken machine:
+Check refs:
 
 ```sh
-gunzip -c pi-agent-images.tgz | docker load
+gondolin image ls
 ```
 
-4. Verify:
+## If SSL/TLS breaks on broken machine
+
+Do not use Docker. Transfer Gondolin image store.
+
+### 1) On working machine, export Gondolin image store
 
 ```sh
-docker image ls pi-agent-base:0.12.0 pi-agent-work:0.12.0
+store="${GONDOLIN_IMAGE_STORE:-$HOME/.cache/gondolin/images}"
+tar -C "$(dirname "$store")" -czf gondolin-images.tgz "$(basename "$store")"
 ```
 
-Then retry Pi sandbox startup. If sandbox still tries to rebuild, remove/override network-failing local build inputs and use already-loaded image tags.
+### 2) Copy `gondolin-images.tgz` to broken machine
+
+### 3) On broken machine, restore image store
+
+```sh
+store="${GONDOLIN_IMAGE_STORE:-$HOME/.cache/gondolin/images}"
+mkdir -p "$(dirname "$store")"
+tar -C "$(dirname "$store")" -xzf gondolin-images.tgz
+```
+
+### 4) Verify refs
+
+```sh
+gondolin image ls
+```
+
+### 5) Retry Pi
+
+Sandbox should now resolve the tagged Gondolin image from local store and skip rebuild.
+
+## Notes
+
+- `pi-agent-work:0.12.0` is default sandbox image in extension.
+- `pi-agent-base:0.12.0` stays available if you want leaner image; set `GONDOLIN_DEFAULT_IMAGE=pi-agent-base:0.12.0` to use it.
+- Build still needs network on the working machine that creates the Gondolin store.

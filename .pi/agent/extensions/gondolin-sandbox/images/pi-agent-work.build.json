@@ -31,7 +31,9 @@
       "build-base",
       "cargo",
       "rust",
-      "musl-dev"
+      "musl-dev",
+      "dotnet8-sdk",
+      "dotnet9-sdk"
     ],
     "initramfsPackages": [],
     "krunfwVersion": "v5.2.1"
@@ -44,10 +46,14 @@
       {
         "src": "base-postbuild.sh",
         "dest": "/tmp/base-postbuild.sh"
+      },
+      {
+        "src": "work-postbuild.sh",
+        "dest": "/tmp/work-postbuild.sh"
       }
     ],
     "commands": [
-      "sh /tmp/base-postbuild.sh"
+      "sh /tmp/work-postbuild.sh"
     ]
   }
 }

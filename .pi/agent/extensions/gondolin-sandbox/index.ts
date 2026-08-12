@@ -45,9 +45,9 @@ import {
   serializeSessionPolicy,
 } from "./policy/startup.ts";
 
-const DEFAULT_IMAGE = "pi-agent-base:0.12.0";
+const DEFAULT_IMAGE = "pi-agent-work:0.12.0";
 const DEFAULT_IMAGE_ARCH = process.arch === "arm64" ? "aarch64" : "x86_64";
-const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-base.build.json");
+const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-work.build.json");
 const SEARCH_MAX_BYTES = DEFAULT_MAX_BYTES;
 const SEARCH_META = "__GONDOLIN_SEARCH_META__";
 const VALID_BACKENDS = new Set(["qemu", "krun"]);
@@ -162,19 +162,6 @@ export async function ensureDefaultSandboxImage(image: string): Promise<string> 
   try {
     const config = parseBuildConfig(await readFile(DEFAULT_IMAGE_CONFIG, "utf8"));
     config.arch = DEFAULT_IMAGE_ARCH;
-    // RTK 0.43.0 publishes no aarch64 musl release. Build it in native Alpine
-    // instead of injecting an incompatible GNU binary into the guest.
-    if (DEFAULT_IMAGE_ARCH === "aarch64") {
-      config.alpine!.rootfsPackages = [
-        ...(config.alpine!.rootfsPackages ?? []), "build-base", "cargo", "rust", "musl-dev",
-      ];
-      config.postBuild = {
-        ...config.postBuild,
-        commands: [
-          "set -eu; mkdir -p /dev; mknod -m 666 /dev/null c 1 3 2>/dev/null || true; git clone --depth 1 --branch v0.43.0 https://github.com/rtk-ai/rtk.git /tmp/rtk-src; cd /tmp/rtk-src; cargo build --release --locked; install -m 0755 target/release/rtk /usr/local/bin/rtk; /usr/local/bin/rtk --version; rm -rf /tmp/rtk-src",
-        ],
-      };
-    }
     const result = await buildAssets(config, {
       outputDir,
       configDir: path.dirname(DEFAULT_IMAGE_CONFIG),
