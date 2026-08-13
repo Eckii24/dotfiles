@@ -1,14 +1,26 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { displayPreview, type HerdrLeafResult, type HerdrSubagentResult } from "./contracts.js";
 
+const MAX_RESULT_TEXT = 2_000;
+const MAX_CHILD_OUTPUTS = 4;
+const MAX_CHILD_FAILURES = 4;
+
+function cap(text: string, max: number): string {
+	return text.length <= max ? text : `${text.slice(0, max)}… [truncated]`;
+}
+
 /** Safe local control handles only; never pass pane/session/launch internals here. */
 export type RetainedControlHandles = { rootRunId: string; status: string; leaves: readonly { leafRunId: string; name?: string; status: string }[] };
 
 /** Keeps UI text small; complete native correlation stays in structured details. */
 export function formatResult(result: HerdrSubagentResult, retained?: RetainedControlHandles): AgentToolResult<HerdrSubagentResult> {
-	const outputs = result.children.filter(child => child.finalOutput).map(child => `${child.name}: ${displayPreview(child.finalOutput!, 400)}`);
+	const outputs = result.children
+		.filter(child => child.finalOutput)
+		.slice(0, MAX_CHILD_OUTPUTS)
+		.map(child => `${child.name}: ${displayPreview(child.finalOutput!, 400)}`);
 	const failures = result.children
 		.filter(child => child.error)
+		.slice(0, MAX_CHILD_FAILURES)
 		.map(child => `${child.name}: ${child.status} (${child.error!.code}) — ${displayPreview(child.error!.message, 400)}`);
 	const blocked = result.children.find(child => child.blockedReason);
 	const text = [...outputs, ...failures].length
@@ -23,7 +35,7 @@ export function formatResult(result: HerdrSubagentResult, retained?: RetainedCon
 			? `Use subagent_control follow_up with rootRunId and a succeeded leafRunId; close when done.${terminalLeaves.length ? " Collect terminal siblings by leafRunId when needed." : ""}`
 			: "Use subagent_control collect for terminal status when needed; close retained panes when done.";
 	const controls = retained?.leaves.length ? `\nControl retained run: root=${retained.rootRunId} status=${retained.status}\n${retained.leaves.map(leaf => `- ${leaf.name ?? "leaf"}: leaf=${leaf.leafRunId} status=${leaf.status}`).join("\n")}\n${guidance}` : "";
-	return { content: [{ type: "text", text: `${text}${controls}` }], details: result };
+	return { content: [{ type: "text", text: cap(`${text}${controls}`, MAX_RESULT_TEXT) }], details: result };
 }
 
 export function leafText(leaf: HerdrLeafResult): string {
