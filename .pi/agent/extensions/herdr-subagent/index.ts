@@ -117,8 +117,9 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 					catch { life = { status: "lost", delivered: false, enterSent: false, state: "unknown", reason: "Child exited during boot; one restart failed." }; break; }
 				}
 				entry.life = life; applyLife(entry.leaf, life); if (life.delivered) (deps.acceptLeaf ?? acceptLeaf)(topology!.group, entry.ids.leafRunId);
-				// A permission-blocked delivered turn remains collectable after a fixed human resolution.
-				const active = life.status === "blocked" && life.delivered;
+				// Defensive compatibility for injected/legacy blocked lifecycle results. Native
+				// blocks stay inside runLifecycleTurn until visibly resolved or timed out.
+				const active = life.delivered && (life.status === "blocked" || life.status === "timed_out");
 				registry.updateLeaf(ids.rootRunId, entry.ids.leafRunId, { status: entry.leaf.status, activeTurnId: active ? entry.ids.turnId : undefined, activeMarker: active ? delivery.marker : undefined, ...(entry.leaf.piSession ? { session: { source: "herdr:pi", path: entry.leaf.piSession.path, sessionId: entry.leaf.piSession.sessionId, anchorEntryId: entry.leaf.piSession.anchorEntryId, finalEntryId: entry.leaf.piSession.finalEntryId } } : {}), ...terminalPatch(life) });
 				registry.recomputeRoot(ids.rootRunId);
 				return life;
@@ -184,12 +185,12 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			const status = completed.some(x => x.status === "blocked") ? "blocked" : completed.some(x => x.status === "timed_out") ? "timed_out" : completed.some(x => x.status === "aborted") ? "aborted" : completed.some(x => x.status !== "succeeded") ? "failed" : "succeeded";
 			registry.updateRoot(ids.rootRunId, { status });
 			const result: HerdrSubagentResult = { protocolVersion: 1, rootRunId: ids.rootRunId, ...(preflight.parentRootRunId ? { parentRootRunId: preflight.parentRootRunId } : {}), nestingDepth: preflight.nestingDepth + 1, group: input.group, mode: input.mode, status, workspaceId: preflight.workspaceId, tabId: topology.group.tabId, tabLabel: topology.group.tabLabel, keepOpen: input.keepOpen, startedAt, finishedAt: now(), children: prepared.map(x => x.leaf), warnings: [...topology.warnings, ...(input.mode === "parallel" && input.allowSharedWorkspaceWrites && prepared.filter(x => isDeclaredWriter(x.profile.tools)).length > new Set(prepared.filter(x => isDeclaredWriter(x.profile.tools)).map(x => x.cwd)).size ? ["WARNING: shared workspace writes explicitly allowed; concurrent writers may conflict."] : []), ...prepared.flatMap(x => x.lease?.warning ? [x.lease.warning] : [])] };
-			if (!input.keepOpen && status !== "blocked") {
+			if (!input.keepOpen && status !== "blocked" && status !== "timed_out") {
 				result.warnings.push(...await (deps.cleanupTopology ?? cleanupTopology)({ client, capacity, result: topology }));
 				if (topology.group.ownedPaneIds.size === 0) registry.close(ids.rootRunId);
 			} else if (input.keepOpen && status !== "blocked") {
 				// All panes stay open for inspection; only non-succeeded leaves give up their write lease.
-				for (const entry of prepared) if (entry.leaf.status !== "succeeded") {
+				for (const entry of prepared) if (entry.leaf.status !== "succeeded" && entry.leaf.status !== "timed_out") {
 					const lease = topology.leases.get(entry.ids.leafRunId);
 					if (!lease) continue;
 					try { await capacity.releaseWriteLease(lease); topology.leases.delete(entry.ids.leafRunId); }
@@ -223,7 +224,7 @@ export function validatePaneTextPayload(paneId: string, text: string) {
 function retainedControls(registry: RunRegistry, result: HerdrSubagentResult) {
 	const root = registry.get(result.rootRunId); if (!root) return undefined;
 	const names = new Map(result.children.map(child => [child.leafRunId, child.name]));
-	const retained = root.leaves.filter(leaf => leaf.paneId && (leaf.status === "blocked" || (root.keepOpen && leaf.status === "succeeded")));
+	const retained = root.leaves.filter(leaf => leaf.paneId && (leaf.status === "blocked" || leaf.status === "timed_out" || (root.keepOpen && leaf.status === "succeeded")));
 	const leaves = retained.map(leaf => ({ leafRunId: leaf.leafRunId, name: names.get(leaf.leafRunId), status: leaf.status }));
 	return leaves.length ? { rootRunId: root.rootRunId, status: root.status, leaves } : undefined;
 }
@@ -248,7 +249,7 @@ Before parallel launch:
 - Set \`allowSharedWorkspaceWrites: true\` only when user explicitly accepts concurrent-write conflict risk.
 Chain \`{previous}\`: prior final is inserted as one-line JSON string content (reversible with \`JSON.parse\`); final \`pane.send_text\` request, including sentinel and JSON encoding, must fit 65536 UTF-8 bytes.
 Task and steer/follow-up CR/LF input is normalized to spaces before literal delivery.
-Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, non-empty message, and optional timeoutSeconds; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. Resolve blocked leaves visibly, then one bounded \`collect\`; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is a local snapshot, not live proof; never auto-approve child prompts. Use \`close\` to release retained panes.${list}`;
+Retained follow-up: \`follow_up\` only works for a locally owned \`keepOpen: true\` root with a succeeded trusted idle/done leaf. Pass rootRunId, leafRunId, non-empty message, and optional timeoutSeconds; select leaf whenever a handle is shown (required if multiple eligible). After its native final, same leaf may receive another follow_up; concurrent turns fail closed. When a child is blocked, resolve it visibly in its pane; parent lifecycle remains waiting for its native final. A timed_out child may still be live; use one bounded \`collect\` to reconcile its pane and native final. Never auto-approve child prompts or follow_up a blocked child. Do not use questionnaires, repeated status, or Bash sleep polling. Status is a local snapshot, not live proof. Use \`close\` to release retained panes.${list}`;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -257,7 +258,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => { await runtime.shutdown(); });
 	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools use Pi defaults and are writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Omit cwd unless an exact existing path is known; omitted cwd uses caller cwd. CR/LF task input is normalized to spaces. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
-	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; it accepts optional timeoutSeconds. Select a leaf when multiple eligible handles exist; native final remains follow_up eligible. Resolve blocked leaves visibly, then one bounded collect; never follow_up a blocked leaf. Do not use questionnaires, repeated status, or Bash sleep polling. Status is local snapshot only; never auto-approve child prompts. Use close to release retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params, signal, onUpdate) => control.execute(params, signal, onUpdate) });
+	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; it accepts optional timeoutSeconds. Select a leaf when multiple eligible handles exist; native final remains follow_up eligible. Resolve a blocked child visibly in its pane; parent lifecycle remains waiting for its native final. A timed_out child may still be live; collect reconciles its pane and native final. Never auto-approve child prompts or follow_up a blocked child. Do not use questionnaires, repeated status, or Bash sleep polling. Status is local snapshot only. Use close to release retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params, signal, onUpdate) => control.execute(params, signal, onUpdate) });
 }
 async function canonicalCwd(cwd: string) { const { realpath } = await import("node:fs/promises"); return realpath(cwd); }
 function setupError(error: unknown): Error { if (error instanceof ContractValidationError || error instanceof PreconditionsError || error instanceof HerdrSetupError) return error; return new HerdrSetupError(errorCode(error), error instanceof Error ? error.message : "Herdr subagent setup failed."); }

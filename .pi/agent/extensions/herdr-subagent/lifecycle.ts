@@ -88,11 +88,10 @@ export async function runLifecycleTurn(port: HerdrLifecyclePort, sessions: Sessi
 		if (snapshot === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent);
 		if (!snapshot || snapshot.exists === false) return { status: "lost", state, delivered, enterSent, reason: "Owned pane or agent disappeared." };
 		state = snapshot.state;
-		if (state === "blocked") {
-			// Preserve trusted session identity for retained collect after fixed human resolution.
-			if (delivered && !session && baseline) { const value = await abortable(sessions.materialize(baseline, input.signal), input.signal); if (value === ABORTED) return abort(port, input, state, delivered, enterSent, abortCandidateSent); if (!pending(value)) session = value; }
-			return { status: "blocked", state, delivered, enterSent, ...(session ? { session } : {}), reason: snapshot.blockedReason ?? "Child requires manual resolution." };
-		}
+		// A native Pi block requires visible human resolution in the child pane. Keep
+		// this lifecycle alive: before delivery, wait until the pane is ready; after
+		// delivery, wait for its correlated native final. Never inject an approval or
+		// resend a delivered task.
 
 		// Boot unknown→idle is readiness only. Never interpret startup idle/done as completion.
 		if (!delivered) {

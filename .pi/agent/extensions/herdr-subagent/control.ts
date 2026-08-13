@@ -135,7 +135,9 @@ async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHa
   if (signal?.aborted) throw failure("child_aborted", "Collection aborted.");
   const currentRoot = deps.registry.get(root.rootRunId); const leaf = currentRoot && deps.registry.getLeaf(root.rootRunId, leafId);
   if (!currentRoot || !leaf) throw failure("unknown_or_foreign_run", "Retained run was closed during collection.");
-  if (leaf.terminal || isTerminalStatus(leaf.status)) {
+  // A launch timeout proves only that the parent stopped waiting. If it retained
+  // the delivered-turn marker, reconcile its live pane before reporting timeout.
+  if (leaf.terminal || (isTerminalStatus(leaf.status) && (leaf.status !== "timed_out" || !leaf.activeTurnId || !leaf.activeMarker))) {
    const terminalStatus = leaf.terminal?.status ?? leaf.status;
    const output: any = { ...result("collect", currentRoot, [leaf]), terminalStatus, ...(leaf.terminal?.output ? { finalOutput: leaf.terminal.output } : {}), ...(leaf.terminal?.stopReason ? { stopReason: leaf.terminal.stopReason } : {}) };
    if (input.closeAfterCollect) output.warnings = await closeOwned(client, deps.registry, currentRoot, [leaf]); return output;
@@ -156,9 +158,19 @@ async function collect(client: ControlClient, deps: ControlDeps, root: RunRootHa
    if (clock() >= deadline || remaining <= 0) return pending;
    await pause(); continue;
   }
-  if (!leaf.activeTurnId || !leaf.activeMarker || (leaf.status !== "working" && leaf.status !== "blocked")) throw failure("result_unavailable", "No active turn retained for collection.");
-  const ref = await validatePiSessionRef(agent.agent ?? agent, deps.sessionRoot); if (!leaf.session || ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
-  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 }); if ((trusted as any).pending || trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
+  if (!leaf.activeTurnId || !leaf.activeMarker || (leaf.status !== "working" && leaf.status !== "blocked" && leaf.status !== "timed_out")) throw failure("result_unavailable", "No active turn retained for collection.");
+  const ref = await validatePiSessionRef(agent.agent ?? agent, deps.sessionRoot);
+  if (leaf.session && ref.path !== leaf.session.path) throw failure("session_path_untrusted", "Retained session path changed.");
+  const trusted = await materializeAndTrustSession(ref, { path: ref.path, recordedAt: 0 });
+  if ((trusted as any).pending) {
+   const pending = { ...result("collect", currentRoot, [leaf]), state: liveState, pending: true }; update(pending);
+   if (clock() >= deadline || remaining <= 0) return pending;
+   await pause(); continue;
+  }
+  if (leaf.session?.sessionId && trusted.sessionId !== leaf.session.sessionId) throw failure("session_path_untrusted", "Retained session identity changed.");
+  // A timed-out lifecycle may have expired before JSONL materialized. The live
+  // pane reference now supplies the same trusted identity for late harvesting.
+  if (!leaf.session) deps.registry.updateLeaf(root.rootRunId, leaf.leafRunId, { session: { source: "herdr:pi", path: trusted.path, sessionId: trusted.sessionId } });
   const anchor = await findTurnAnchor(trusted, leaf.activeMarker);
   const harvested = (anchor as any).pending ? undefined : await harvestTurn(trusted, leaf.activeMarker, anchor as any, { state: liveState });
   if (harvested && !(harvested as any).pending) {

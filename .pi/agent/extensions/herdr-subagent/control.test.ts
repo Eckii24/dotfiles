@@ -143,6 +143,15 @@ test("collect accepts terminal lifecycle status without fabricating a trusted fi
  }
 });
 
+test("collect reconciles a timed-out turn with a late trusted native final", async () => {
+ const sessionRoot = join(import.meta.dir, "test-fixtures/sessions"); const sessionPath = join(sessionRoot, "minimal-normal.jsonl");
+ const f = basic([{ leafRunId: "leaf", paneId: "pane", status: "timed_out", activeTurnId: "TURN_NORMAL", activeMarker: " [herdr:task-sentinel:v1:TURN_NORMAL]" }]); f.registry.updateRoot("root", { status: "timed_out" });
+ const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...f.client, getAgent: async () => active("pane", "done", { source: "herdr:pi", kind: "path", value: sessionPath }) }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot });
+ const value = await runtime.execute({ action: "collect", rootRunId: "root", leafRunId: "leaf" });
+ expect(value.details).toMatchObject({ terminalStatus: "succeeded", finalOutput: "done", stopReason: "stop" });
+ expect(f.registry.getLeaf("root", "leaf")).toMatchObject({ status: "succeeded", activeTurnId: undefined, activeMarker: undefined, terminal: { finalEntryId: "final" } });
+});
+
 test("collect fixed clock times out, suppresses duplicate updates, and observes abort", async () => {
  const f = basic([{ leafRunId: "leaf", paneId: "pane", status: "blocked" }]); let sleeps = 0; const runtime = createHerdrSubagentControlRuntime({ registry: f.registry, createClient: () => ({ ...(f as any).client, getAgent: async () => active("pane", "blocked") }), preflight: async () => ({ socketPath: "/socket" }), sessionRoot: "/sessions", now: () => 0, sleeper: { sleep: async () => { sleeps++; } } });
  const updates: any[] = []; const value = await runtime.execute({ action: "collect", rootRunId: "root", timeoutSeconds: 1 }, undefined, update => updates.push(update)); expect(value.details).toMatchObject({ pending: true, state: "blocked" }); expect(sleeps).toBe(4); expect(updates).toHaveLength(1);

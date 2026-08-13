@@ -45,10 +45,15 @@ test("missed working, done settlement, and delayed flush never resend", async ()
 	expect((await turn(f)).status).toBe("succeeded"); expect(f.calls()).toMatchObject({ sends: 1, enters: 1, materializes: 2 });
 });
 
-test("startup idle is not completion; blocked returns promptly and pane loss is lost", async () => {
-	const blocked = fake([{ state: "idle", paneId: "p" }, { state: "blocked", paneId: "p", blockedReason: "confirm" }]);
-	expect(await turn(blocked)).toMatchObject({ status: "blocked", delivered: true }); expect(blocked.calls()).toMatchObject({ sends: 1, enters: 1 });
-	const lost = fake([{ state: "idle", paneId: "p" }, { state: "working", paneId: "p", exists: false }]);
+test("visible block pauses lifecycle until human resolution, without redelivery", async () => {
+	const afterDelivery = fake([{ state: "idle", paneId: "p" }, { state: "blocked", paneId: "p", blockedReason: "confirm" }, { state: "working", paneId: "p" }, { state: "done", paneId: "p" }]);
+	expect(await turn(afterDelivery)).toMatchObject({ status: "succeeded", delivered: true }); expect(afterDelivery.calls()).toMatchObject({ sends: 1, enters: 1 });
+	const beforeDelivery = fake([{ state: "blocked", paneId: "p", blockedReason: "confirm" }, { state: "idle", paneId: "p" }, { state: "done", paneId: "p" }]);
+	expect(await turn(beforeDelivery)).toMatchObject({ status: "succeeded", delivered: true }); expect(beforeDelivery.calls()).toMatchObject({ sends: 1, enters: 1 });
+});
+
+test("pane loss remains lost while waiting for visible block resolution", async () => {
+	const lost = fake([{ state: "idle", paneId: "p" }, { state: "blocked", paneId: "p", blockedReason: "confirm" }, { state: "working", paneId: "p", exists: false }]);
 	expect(await turn(lost)).toMatchObject({ status: "lost" });
 });
 

@@ -27,13 +27,16 @@ export function formatResult(result: HerdrSubagentResult, retained?: RetainedCon
 		? [...outputs, ...failures].join("\n")
 		: `${result.group}: ${result.status}${blocked?.blockedReason ? ` — ${blocked.blockedReason}` : ""}`;
 	const blockedLeaves = retained?.leaves.filter(leaf => leaf.status === "blocked") ?? [];
+	const timedOutLeaves = retained?.leaves.filter(leaf => leaf.status === "timed_out") ?? [];
 	const succeededLeaves = retained?.leaves.filter(leaf => leaf.status === "succeeded") ?? [];
-	const terminalLeaves = retained?.leaves.filter(leaf => leaf.status === "failed" || leaf.status === "aborted" || leaf.status === "timed_out" || leaf.status === "lost") ?? [];
+	const terminalLeaves = retained?.leaves.filter(leaf => leaf.status === "failed" || leaf.status === "aborted" || leaf.status === "lost") ?? [];
 	const guidance = blockedLeaves.length
-		? "Blocked child: resolve visibly, then make one bounded subagent_control collect; never follow_up blocked child. Do not questionnaire, repeat status, or Bash sleep-poll."
-		: succeededLeaves.length
-			? `Use subagent_control follow_up with rootRunId and a succeeded leafRunId; close when done.${terminalLeaves.length ? " Collect terminal siblings by leafRunId when needed." : ""}`
-			: "Use subagent_control collect for terminal status when needed; close retained panes when done.";
+		? "Blocked child: resolve visibly in child pane; parent lifecycle remains waiting for native final. Never auto-approve or follow_up blocked child. Do not questionnaire, repeat status, or Bash sleep-poll."
+		: timedOutLeaves.length
+			? "Timed-out child may still be live. Use one bounded subagent_control collect to reconcile its current pane and native final; close retained panes when done."
+			: succeededLeaves.length
+				? `Use subagent_control follow_up with rootRunId and a succeeded leafRunId; close when done.${terminalLeaves.length ? " Collect terminal siblings by leafRunId when needed." : ""}`
+				: "Use subagent_control collect for terminal status when needed; close retained panes when done.";
 	const controls = retained?.leaves.length ? `\nControl retained run: root=${retained.rootRunId} status=${retained.status}\n${retained.leaves.map(leaf => `- ${leaf.name ?? "leaf"}: leaf=${leaf.leafRunId} status=${leaf.status}`).join("\n")}\n${guidance}` : "";
 	return { content: [{ type: "text", text: cap(`${text}${controls}`, MAX_RESULT_TEXT) }], details: result };
 }

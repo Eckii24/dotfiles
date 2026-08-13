@@ -120,8 +120,10 @@ test("keepOpen retains terminal topology and blocked retains pane", async () => 
 	expect(kept.content[0].text).not.toContain("pane-1"); expect(kept.content[0].text).not.toContain("/trusted/session.jsonl"); expect(kept.content[0].text).not.toContain("[herdr:");
 	expect(keep.runtime.registry.get("root")?.status).toBe("succeeded"); expect(keep.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: undefined, activeMarker: undefined });
 	const timed = vertical({ status: "timed_out" }); const timedResult = await timed.runtime.execute(params({ keepOpen: true }), context);
-	// A timed_out leaf keeps its pane open under keepOpen but is not succeeded/blocked, so it drops out of the compact control-handle list (README: only succeeded keepOpen or blocked leaves are advertised).
-	expect(timedResult.content[0].text).not.toContain("Control retained run:"); expect(timedResult.content[0].text).toContain("timed_out");
+	// A timed_out leaf may still be live, so it remains a compact control handle for reconciliation.
+	expect(timedResult.content[0].text).toContain("Control retained run: root=root status=timed_out"); expect(timedResult.content[0].text).toContain("leaf=leaf status=timed_out"); expect(timedResult.content[0].text).toContain("reconcile its current pane"); expect(timed.runtime.registry.getLeaf("root", "leaf")).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });
+	const timedDefault = vertical({ status: "timed_out" }); const timedDefaultResult = await timedDefault.runtime.execute(params(), context);
+	expect(timedDefaultResult.content[0].text).toContain("Control retained run: root=root status=timed_out"); expect(timedDefault.events).toEqual(["ready-cleanup", "send", "dispose"]); expect(timedDefault.runtime.registry.get("root")?.leaves[0]?.status).toBe("timed_out");
 	const blocked = vertical({ status: "blocked" }); const result = await blocked.runtime.execute(params(), context);
 	expect(result.details.status).toBe("blocked"); expect(result.content[0].text).toContain("Control retained run: root=root status=blocked"); expect(result.content[0].text).toContain("leaf=leaf status=blocked"); expect(blocked.events).toEqual(["ready-cleanup", "send", "dispose"]);
 	expect(blocked.runtime.registry.get("root")?.status).toBe("blocked"); expect(blocked.runtime.registry.get("root")?.leaves[0]).toMatchObject({ activeTurnId: "turn", activeMarker: " [herdr:task-sentinel:v1:turn]" });

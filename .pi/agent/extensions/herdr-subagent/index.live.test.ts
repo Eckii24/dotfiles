@@ -167,25 +167,28 @@ test.skipIf(!g19Live)("G19 steer: explicit active leaf reaches native target the
 	} finally { if (details) { await observer.closePane(details.children[0].paneId).catch(() => undefined); await observer.closeTab(details.tabId).catch(() => undefined); } observer.dispose(); await running?.catch(() => undefined); await rm(cwd, { recursive: true, force: true }); }
 }, 180_000);
 
-/** Opt-in G19: destructive Git reset block remains retained and collectable after fixed Enter. */
-test.skipIf(!g19Live)("G19 blocked collect: fixed Enter resolves harmless permission prompt", async () => {
+/** Opt-in G19: parent waits while a human resolves a destructive-command block in child pane. */
+test.skipIf(!g19Live)("G19 visible block resolution lets parent return native final", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-herdr-g19-blocked-")); const cwd = await disposableRepo(root, "repo"); const observer = new HerdrClient({ socketPath: socketPath! });
 	const gitState = async () => ({ head: await git(cwd, "rev-parse", "HEAD"), status: await git(cwd, "status", "--porcelain=v1"), tree: await git(cwd, "write-tree") });
-	const runtime = createHerdrSubagentRuntime({ ids: () => ({ rootRunId: "g19-blocked-root", leafRunId: "g19-blocked-leaf", turnId: "g19-blocked-turn" }) }); const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }), preflight: checkPreconditions, sessionRoot, lifecyclePort: (client, paneId) => lifecyclePort(client as any, paneId), sessionPort }); let details: any;
+	const runtime = createHerdrSubagentRuntime({ ids: () => ({ rootRunId: "g19-blocked-root", leafRunId: "g19-blocked-leaf", turnId: "g19-blocked-turn" }) }); const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }), preflight: checkPreconditions, sessionRoot, lifecyclePort: (client, paneId) => lifecyclePort(client as any, paneId), sessionPort });
+	let details: any; let running: Promise<any> | undefined; let completed: any; let paneId: string | undefined; let tabId: string | undefined;
 	try {
 		const before = await gitState();
-		const launched = await runtime.execute({ group: "g19-blocked", agent: "worker", cwd, keepOpen: true, timeoutSeconds: 90, task: "Use Bash only to run git reset --hard HEAD. This is a disposable clean Git repository with a committed baseline. Do not write, create, or modify anything else. After the command, return exact text G19_BLOCKED_DONE only." }, { cwd, hasUI: false, ui: {} } as any);
-		details = launched.details; const leaf = details.children[0];
-		expect(await gitState()).toEqual(before);
-		if (details.status !== "blocked") { console.info("G19 blocked/collect skipped: Pi integration auto-approved git reset --hard HEAD; no guardrail prompt was available (deterministic environment blocker)."); return; }
-		expect(details).toMatchObject({ status: "blocked", keepOpen: true, children: [expect.objectContaining({ status: "blocked" })] });
-		// Fixed internal Enter is the sole simulated human resolution; no caller-chosen key API is used.
-		await observer.submitOwnedPane(leaf.paneId);
-		let collected: any;
-		await waitFor("G19 collected native final", async () => { const value = await control.execute({ action: "collect", rootRunId: details.rootRunId, leafRunId: leaf.leafRunId }).catch(() => undefined); if (value?.details?.finalOutput === "G19_BLOCKED_DONE") { collected = value; return true; } return false; }, 60_000);
-		expect(collected.details).toMatchObject({ action: "collect", status: "succeeded", finalOutput: "G19_BLOCKED_DONE" }); expect(await gitState()).toEqual(before);
+		running = runtime.execute({ group: "g19-blocked", agent: "worker", cwd, keepOpen: true, timeoutSeconds: 90, task: "Use Bash only to run git reset --hard HEAD. This is a disposable clean Git repository with a committed baseline. Do not write, create, or modify anything else. After the command, return exact text G19_BLOCKED_DONE only." }, { cwd, hasUI: false, ui: {} } as any).then(value => { completed = value; return value; });
+		await waitFor("G19 blocked or native final", async () => {
+			if (completed) return true;
+			const leaf = runtime.registry.get("g19-blocked-root")?.leaves[0]; paneId = leaf?.paneId; tabId = runtime.registry.get("g19-blocked-root")?.tabId;
+			if (!paneId) return false;
+			return (await observer.getAgent(paneId)).agent?.agent_status === "blocked";
+		}, 60_000);
+		if (completed) { details = completed.details; console.info("G19 visible-resolution skipped: Pi integration auto-approved git reset --hard HEAD; no guardrail prompt was available."); return; }
+		// Fixed Enter models the user's visible confirmation. Parent remains in its original lifecycle.
+		await observer.submitOwnedPane(paneId!);
+		const launched = await running; running = undefined; details = launched.details;
+		expect(launched.details).toMatchObject({ status: "succeeded", children: [expect.objectContaining({ status: "succeeded", finalOutput: "G19_BLOCKED_DONE" })] }); expect(await gitState()).toEqual(before);
 		const closed = await control.execute({ action: "close", rootRunId: details.rootRunId }); expect(closed.details.warnings).toEqual([]); expect(await gitState()).toEqual(before);
-	} finally { const paneId = details?.children?.[0]?.paneId; if (paneId) await observer.closePane(paneId).catch(() => undefined); if (details?.tabId) await observer.closeTab(details.tabId).catch(() => undefined); observer.dispose(); await rm(root, { recursive: true, force: true }); }
+	} finally { const ownedPaneId = paneId ?? details?.children?.[0]?.paneId; const ownedTabId = tabId ?? details?.tabId; if (ownedPaneId) await observer.closePane(ownedPaneId).catch(() => undefined); if (ownedTabId) await observer.closeTab(ownedTabId).catch(() => undefined); observer.dispose(); await running?.catch(() => undefined); await rm(root, { recursive: true, force: true }); }
 }, 180_000);
 
 /** Opt-in G19: losing an owned active pane produces explicit loss, never a fabricated final. */
