@@ -12,10 +12,10 @@ Use for code delivery. Optimize for evidence and signal density, not ceremony.
 | Mode | Use when | Default shape |
 |---|---|---|
 | Quick Task | Small/local, obvious scope | Direct work; no artifacts/subagents |
-| Bounded Delivery | Clear change across ~1-3 areas | Direct, or `0-1 scout -> 1 worker -> optional review` |
+| Bounded Delivery | Clear change across ~1-3 areas | One worker by default; `0-1 scout -> 1 worker -> optional review` |
 | Tracked Project | Multi-session, expensive restart/handoff, or explicitly requested | Phase contracts + `.ai/current-work.md` pointer |
 
-Default Quick/Bounded. Do not inherit a stale/completed/unrelated anchor.
+Default Quick/Bounded. Quick stays direct. Bounded uses one worker by default for nontrivial code work; direct execution only for obvious one-file, low-risk changes. Do not inherit a stale/completed/unrelated anchor.
 
 ## Compact inputs
 
@@ -36,6 +36,7 @@ Parallelize only read-only or isolated work. Never share a mutable checkout betw
 For each phase state: objective, acceptance evidence, child shape, and escalation condition.
 
 - Default phase budget: `0-1 scout -> 1 worker -> optional 1 reviewer`.
+- For bounded code work, launch one worker by default. Direct execution is reserved for obvious one-file, low-risk changes.
 - More than three child runs in a phase needs an explicit evidence-based reason.
 - Global orchestration budget: 12 delegation calls or 60 minutes wall time per run, whichever comes first. Count scouts, workers, reviewers, follow-ups, and state updates.
 - At the global limit, collect any useful in-flight result, create a compact phase handoff, then stop before another delegation. Explicit user continuation starts a new budget.

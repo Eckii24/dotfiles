@@ -14,8 +14,9 @@ Read and follow:
 4. The worker fixes in-scope implementation/type/test failures. A material gate gets one diagnosis, one decision, and one rerun; then stop/escalate.
 5. Validate changed files and eval/test evidence yourself.
 6. Declare exactly one review focus: `plan/spec`, `correctness`, `security`, `performance`, `tests`, `maintainability`, `architecture`, or `full`. Use `plan/spec` for implementation fidelity; reserve `full` for deliberate broad review.
-7. Build a compact review packet from focus, changed paths/symbols, and eval evidence. Run at most one independent `code-reviewer` pass.
-8. Do not auto-fix review findings. Update `.ai/` only at material phase boundaries, blocker, handoff, or explicit review artifact request.
+7. Build a compact review packet from focus, changed paths/symbols, and eval evidence. For any source-code, test, configuration, infrastructure, or schema change, MUST launch exactly one independent `code-reviewer` pass after implementation verification. Do not substitute an inline review. Skip only documentation-only or formatting-only changes, or when user explicitly says no review. If launch fails, report `review not run` with reason; never imply review completed.
+8. Reviewer packet contains only fixed point, exactly one focus, changed paths/symbols, acceptance criteria, and eval evidence. Do not forward full implementation output, files, diffs, or logs.
+9. Do not auto-fix review findings. Update `.ai/` only at material phase boundaries, blocker, handoff, or explicit review artifact request.
 
 ## Final summary
 
