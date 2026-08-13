@@ -147,7 +147,7 @@ import { getEffectiveCwd } from "./effective-cwd.js";
 import { checkRead, checkWrite, resolvePath } from "./path-guard.js";
 import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
-import { buildPreflightPrompt, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
+import { buildPreflightPrompt, canReuseSessionPreflightApproval, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
 import { SessionPreflightRules } from "./session-preflight-rules.js";
 import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
@@ -690,6 +690,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const preflightModel = currentConfig.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL;
+      const scopePreflightApprovals = sessionPreflightApprovals.approvalsForScope(sessionScope);
       const preflightPrompt = buildPreflightPrompt({
         command,
         cwd: ctx.cwd,
@@ -699,7 +700,7 @@ export default function (pi: ExtensionAPI) {
         gate1Hints: gateResult.hints,
         preflightRules: [...(currentConfig.bash?.preflightRules ?? []), ...sessionPreflightRules.rules],
         sessionAllowedCommands: sessionAllow.commandsForScope(sessionScope),
-        sessionPreflightApprovals: sessionPreflightApprovals.approvalsForScope(sessionScope),
+        sessionPreflightApprovals: scopePreflightApprovals,
       });
 
       let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
@@ -760,6 +761,11 @@ export default function (pi: ExtensionAPI) {
 
       if (preflightVerdict.decision === "allow") {
         recordDecision(ctx, "bash-preflight-allowed", { toolName: "bash", command, preflightVerdict });
+        return undefined;
+      }
+
+      if (canReuseSessionPreflightApproval(preflightVerdict, scopePreflightApprovals)) {
+        recordDecision(ctx, "bash-preflight-allowed-session-intent-reuse", { toolName: "bash", command, preflightVerdict });
         return undefined;
       }
 

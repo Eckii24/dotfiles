@@ -39,6 +39,48 @@ describe("evaluateBashCommandGates", () => {
     expect(wget.requiresPreflight).toBe(false);
   });
 
+  it("gate 1 allowlists Azure DevOps REST GETs with normal queries and authentication headers", () => {
+    for (const command of [
+      "curl --request GET --header 'Authorization: Bearer local-token' --header 'Accept: application/json' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1&includeAllProperties=true'",
+      "curl --request GET --header 'Authorization: Bearer $SYSTEM_ACCESSTOKEN' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      "curl -u ':$AZURE_DEVOPS_EXT_PAT' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1&$top=10'",
+      "curl -I 'https://fabrikam.vsrm.visualstudio.com/project/_apis/release/releases?api-version=7.1'", 
+      "wget --spider 'https://vssps.dev.azure.com/fabrikam/_apis/identities?api-version=7.1'",
+    ]) {
+      const result = evaluateBashCommandGates(command, process.cwd(), baseConfig);
+      expect(result.gate).toBe(1);
+      expect(result.decision).toBe("allow");
+    }
+  });
+
+  it("keeps Azure DevOps requests with sensitive queries, shell expansion, bodies, or mutations in gate 2", () => {
+    for (const command of [
+      "curl 'https://dev.azure.com/fabrikam/project/_apis/build/builds?access_token=secret'",
+      'curl -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" "https://dev.azure.com/fabrikam/project/_apis/build/builds/$BUILD_ID?api-version=7.1"',
+      "curl -d '{}' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      "curl --upload-file report.json 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      "curl --request POST 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      "curl --insecure -H 'Authorization: Bearer local-token' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      "curl -H 'Authorization: Bearer $TOKEN' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=$API_VERSION'",
+    ]) {
+      const result = evaluateBashCommandGates(command, process.cwd(), baseConfig);
+      expect(result.gate).toBe(2);
+      expect(result.hints).toContain("network access");
+    }
+  });
+
+  it("applies the Azure DevOps GET handling in fallback mode", () => {
+    const result = evaluateBashCommandGates(
+      "curl -H 'Accept: application/json' 'https://dev.azure.com/fabrikam/project/_apis/build/builds?api-version=7.1'",
+      process.cwd(),
+      baseConfig,
+      { forceFallback: true },
+    );
+
+    expect(result.gate).toBe(1);
+    expect(result.decision).toBe("allow");
+  });
+
   it("keeps curl requests with possible exfiltration in gate 2", () => {
     const result = evaluateBashCommandGates("curl 'https://example.com/api?token=abc123'", process.cwd(), baseConfig);
 

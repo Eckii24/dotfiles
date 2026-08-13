@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildPreflightPrompt, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge, sanitizeSessionAllowedCommand } from "./preflight.js";
+import { buildPreflightPrompt, canReuseSessionPreflightApproval, formatPreflightRulesForDisplay, parsePreflightVerdict, runPreflightJudge, sanitizeSessionAllowedCommand } from "./preflight.js";
 import type { SessionPreflightApproval } from "./session-preflight-approvals.js";
 
 describe("parsePreflightVerdict", () => {
@@ -28,6 +28,42 @@ describe("parsePreflightVerdict", () => {
       approvalMatch: "uncertain",
       approvalIntent: "publish package to registry",
     });
+  });
+});
+
+describe("canReuseSessionPreflightApproval", () => {
+  const approval: SessionPreflightApproval = {
+    scope: "/repo",
+    command: "git push origin feature/login",
+    intent: "push the feature branch",
+    reason: "expected delivery",
+    riskSignals: ["network access", "repo mutation"],
+    createdAt: "2026-07-21T00:00:00.000Z",
+  };
+
+  it("reuses an explicit approval only after a non-denying same-intent verdict", () => {
+    expect(canReuseSessionPreflightApproval({
+      decision: "confirm",
+      reason: "remote mutation needs confirmation",
+      concerns: ["network access"],
+      approvalMatch: "same_intent",
+      approvalIntent: "push the feature branch",
+    }, [approval])).toBe(true);
+  });
+
+  it("does not reuse missing, different-intent, or denying verdicts", () => {
+    const sameIntentDeny = {
+      decision: "deny" as const,
+      reason: "force push is unsafe",
+      concerns: ["repo mutation"],
+      approvalMatch: "same_intent" as const,
+      approvalIntent: "push the feature branch",
+    };
+    const differentIntentConfirm = { ...sameIntentDeny, decision: "confirm" as const, approvalMatch: "different_intent" as const };
+
+    expect(canReuseSessionPreflightApproval(sameIntentDeny, [approval])).toBe(false);
+    expect(canReuseSessionPreflightApproval(differentIntentConfirm, [approval])).toBe(false);
+    expect(canReuseSessionPreflightApproval({ ...differentIntentConfirm, approvalMatch: "same_intent" }, [])).toBe(false);
   });
 });
 

@@ -94,6 +94,16 @@ function isLikelySensitiveUrlSegment(value: string): boolean {
   return /^[A-Za-z0-9+/_=-]{32,}$/.test(value) && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value);
 }
 
+function hasSafePathSegments(url: URL): boolean {
+  return url.pathname.split(/[/?#]/).filter(Boolean).every((segment) => {
+    try {
+      return !isLikelySensitiveUrlSegment(decodeURIComponent(segment));
+    } catch {
+      return false;
+    }
+  });
+}
+
 function isSafeHttpGetUrl(value: string): boolean {
   if (hasPlaceholderToken(value)) return false;
   let url: URL;
@@ -104,13 +114,65 @@ function isSafeHttpGetUrl(value: string): boolean {
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
   if (url.username || url.password || url.search || url.hash) return false;
-  return url.pathname.split(/[/?#]/).filter(Boolean).every((segment) => {
+  return hasSafePathSegments(url);
+}
+
+function isAzureDevOpsHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "dev.azure.com" || host === "vssps.dev.azure.com" || host === "vsrm.dev.azure.com" || host.endsWith(".visualstudio.com");
+}
+
+function isSensitiveQueryParameter(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return ["accesskey", "accesstoken", "apikey", "auth", "authorization", "clientsecret", "credential", "key", "password", "passwd", "pat", "secret", "signature", "sig", "token"].includes(normalized);
+}
+
+const SAFE_AZURE_ODATA_QUERY_PARAMETERS = new Set(["$count", "$expand", "$filter", "$format", "$orderby", "$select", "$skip", "$top"]);
+
+function isSafeAzureDevOpsRestUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.hash || !isAzureDevOpsHost(url.hostname) || !hasSafePathSegments(url)) return false;
+  if (url.pathname.split("/").some((segment) => hasPlaceholderToken(segment))) return false;
+
+  const isRestEndpoint = url.pathname.split("/").some((segment) => {
     try {
-      return !isLikelySensitiveUrlSegment(decodeURIComponent(segment));
+      return decodeURIComponent(segment).toLowerCase() === "_apis";
     } catch {
       return false;
     }
   });
+  if (!isRestEndpoint) return false;
+
+  for (const [name, queryValue] of url.searchParams) {
+    const isSafeODataName = SAFE_AZURE_ODATA_QUERY_PARAMETERS.has(name.toLowerCase());
+    if ((!isSafeODataName && hasPlaceholderToken(name)) || hasPlaceholderToken(queryValue) || isSensitiveQueryParameter(name) || isLikelySensitiveUrlSegment(queryValue)) return false;
+  }
+  return true;
+}
+
+function isSafeAzureEnvironmentValue(value: string): boolean {
+  return /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/.test(value);
+}
+
+function isSafeAzureDevOpsCredentials(value: string): boolean {
+  return /^(?:[^: ]*:)?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/.test(value);
+}
+
+function isSafeAzureDevOpsHeader(value: string): boolean {
+  if (/[\r\n]/.test(value)) return false;
+  const match = value.match(/^([A-Za-z][A-Za-z0-9-]*):[ \t]*(\S(?:.*\S)?)$/);
+  if (!match) return false;
+  const name = match[1]!.toLowerCase();
+  if (name === "accept") return !hasPlaceholderToken(match[2]!);
+  if (name !== "authorization") return false;
+  const authValue = match[2]!;
+  const authToken = authValue.replace(/^(?:bearer|basic)[ \t]+/i, "");
+  return !hasPlaceholderToken(authValue) || isSafeAzureEnvironmentValue(authToken);
 }
 
 function isAllowedCurlFlag(token: string): boolean {
@@ -121,12 +183,44 @@ function isAllowedCurlFlag(token: string): boolean {
 
 function isSafeCurlGet(args: string[]): boolean {
   let urls = 0;
+  let azureDevOpsUrl = false;
+  let hasAzureDevOpsHeaders = false;
+  let hasAzureDevOpsCredentials = false;
+  let hasInsecureTransport = false;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     const lower = arg.toLowerCase();
 
+    if (isSafeAzureDevOpsRestUrl(arg)) {
+      urls += 1;
+      azureDevOpsUrl = true;
+      continue;
+    }
     if (isSafeHttpGetUrl(arg)) {
       urls += 1;
+      continue;
+    }
+    if (lower === "-h" || lower === "--header") {
+      if (!isSafeAzureDevOpsHeader(args[++index] ?? "")) return false;
+      hasAzureDevOpsHeaders = true;
+      continue;
+    }
+    const headerMatch = arg.match(/^--header=(.+)$/i);
+    if (headerMatch) {
+      if (!isSafeAzureDevOpsHeader(headerMatch[1]!)) return false;
+      hasAzureDevOpsHeaders = true;
+      continue;
+    }
+    if (lower === "-u" || lower === "--user") {
+      const credentials = args[++index];
+      if (!credentials || !isSafeAzureDevOpsCredentials(credentials)) return false;
+      hasAzureDevOpsCredentials = true;
+      continue;
+    }
+    const userMatch = arg.match(/^--user=(.+)$/i);
+    if (userMatch) {
+      if (!isSafeAzureDevOpsCredentials(userMatch[1]!)) return false;
+      hasAzureDevOpsCredentials = true;
       continue;
     }
     if (lower === "-x" || lower === "--request") {
@@ -141,8 +235,9 @@ function isSafeCurlGet(args: string[]): boolean {
       continue;
     }
     if (!isAllowedCurlFlag(arg)) return false;
+    if (lower === "--insecure" || /^-[a-z]*k[a-z]*$/i.test(arg)) hasInsecureTransport = true;
   }
-  return urls === 1;
+  return urls === 1 && (!hasAzureDevOpsHeaders && !hasAzureDevOpsCredentials || (azureDevOpsUrl && !hasInsecureTransport));
 }
 
 function isSafeWgetGet(args: string[]): boolean {
@@ -153,7 +248,7 @@ function isSafeWgetGet(args: string[]): boolean {
     const arg = args[index];
     const lower = arg.toLowerCase();
 
-    if (isSafeHttpGetUrl(arg)) {
+    if (isSafeAzureDevOpsRestUrl(arg) || isSafeHttpGetUrl(arg)) {
       urls += 1;
       continue;
     }
@@ -292,9 +387,10 @@ function isSimpleAllowlistedFallback(command: string, config: GuardrailsConfig):
 
   const commandName = tokens[0];
   if (!commandName || commandName.includes("/") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(commandName)) return false;
-  if (tokens.some(hasPlaceholderToken)) return false;
 
   const args = tokens.slice(1);
+  const safeAzureRequest = commandName.toLowerCase() === "curl" && isSafeCurlGet(args);
+  if (tokens.some(hasPlaceholderToken) && !safeAzureRequest) return false;
   return isDeterministicSafeSimpleCommand(commandName, args, config);
 }
 
@@ -310,7 +406,8 @@ function isSimpleAllowlistedAST(ast: ShellFile, config: GuardrailsConfig): boole
   if (!commandName || commandName.includes("/")) return false;
 
   const args = stmt.Cmd.Args.slice(1).map(wordToString);
-  if ([commandName, ...args].some(hasPlaceholderToken)) return false;
+  const safeAzureRequest = commandName.toLowerCase() === "curl" && isSafeCurlGet(args);
+  if ([commandName, ...args].some(hasPlaceholderToken) && !safeAzureRequest) return false;
 
   let commandCount = 0;
   let onlySimple = true;
@@ -319,7 +416,7 @@ function isSimpleAllowlistedAST(ast: ShellFile, config: GuardrailsConfig): boole
     commandCount += 1;
     if (cmd.writeRedirects.length > 0) hasWriteRedirect = true;
     if (cmd.name !== commandName) onlySimple = false;
-    if ([cmd.name, ...cmd.args].some(hasPlaceholderToken)) onlySimple = false;
+    if ([cmd.name, ...cmd.args].some(hasPlaceholderToken) && !safeAzureRequest) onlySimple = false;
   });
 
   if (commandCount !== 1 || !onlySimple || hasWriteRedirect) return false;

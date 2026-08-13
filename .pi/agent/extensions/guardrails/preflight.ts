@@ -16,6 +16,14 @@ export interface PreflightVerdict {
   approvalIntent: string;
 }
 
+/** A prior explicit session approval can only be reused after a new non-denying model verdict confirms the same intent. */
+export function canReuseSessionPreflightApproval(
+  verdict: PreflightVerdict,
+  approvals: SessionPreflightApproval[],
+): boolean {
+  return approvals.length > 0 && verdict.decision !== "deny" && verdict.approvalMatch === "same_intent";
+}
+
 export interface BuildPreflightPromptInput {
   command: string;
   cwd: string;
@@ -203,7 +211,7 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("- defaults to ALLOW for routine developer workflow when no concrete risk is visible");
   parts.push("- treats read-only inspection commands as safe when they do not touch denied/sensitive paths");
   parts.push("- treats standalone test commands as safe even when they create normal test caches, coverage, or temp files");
-  parts.push("- treats simple HTTP(S) GET/HEAD requests as safe when the URL has no query string, userinfo, shell expansion, or sensitive-looking path segments, and no headers/body/upload are supplied");
+  parts.push("- treats simple HTTP(S) GET/HEAD requests as safe when the URL has no query string, userinfo, shell expansion, or sensitive-looking path segments, and no headers/body/upload are supplied; Azure DevOps REST GET/HEAD endpoints additionally permit normal non-sensitive query parameters plus Accept or Authorization headers");
   parts.push("- treats temporary test artifacts under /tmp as acceptable when they do not execute remote code or expose secrets");
   parts.push("- sensitive file contents are not themselves a reason to confirm or deny when Gate 1 already allowed the read");
   parts.push("- local commands, tests, builds, parsers, and scripts are allowed when no concrete write, network, privilege, remote-execution, or unrelated-system-state risk is visible; do not infer risk merely because local code could theoretically do more");
