@@ -59,6 +59,9 @@ describe("buildPreflightPrompt", () => {
     expect(prompt).toContain("standalone test commands as safe");
     expect(prompt).toContain("simple HTTP(S) GET/HEAD requests as safe");
     expect(prompt).toContain("temporary test artifacts under /tmp as acceptable");
+    expect(prompt).toContain("sensitive file contents are not themselves a reason");
+    expect(prompt).toContain("local commands, tests, builds, parsers, and scripts are allowed");
+    expect(prompt).toContain("trusted task intent explicitly authorizes the remote destination and data transfer");
     expect(prompt).toContain('"Production deploy commands must require confirmation"');
     expect(prompt).toContain("These rules can only make the decision stricter");
     expect(prompt).toContain("Session-approved command hints");

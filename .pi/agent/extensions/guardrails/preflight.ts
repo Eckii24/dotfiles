@@ -205,6 +205,12 @@ export function buildPreflightPrompt(input: BuildPreflightPromptInput): string {
   parts.push("- treats standalone test commands as safe even when they create normal test caches, coverage, or temp files");
   parts.push("- treats simple HTTP(S) GET/HEAD requests as safe when the URL has no query string, userinfo, shell expansion, or sensitive-looking path segments, and no headers/body/upload are supplied");
   parts.push("- treats temporary test artifacts under /tmp as acceptable when they do not execute remote code or expose secrets");
+  parts.push("- sensitive file contents are not themselves a reason to confirm or deny when Gate 1 already allowed the read");
+  parts.push("- local commands, tests, builds, parsers, and scripts are allowed when no concrete write, network, privilege, remote-execution, or unrelated-system-state risk is visible; do not infer risk merely because local code could theoretically do more");
+  parts.push("- reading or displaying sensitive values locally is allowed when Gate 1 allowed the source path; protect only concrete unintended mutation or remote disclosure");
+  parts.push("- a remote call normally requires CONFIRM unless it is the existing narrow safe HTTP(S) GET/HEAD allowlist case, or trusted task intent explicitly authorizes the remote destination and data transfer");
+  parts.push("- if trusted task intent explicitly authorizes an intentional sensitive upload or other sensitive remote transfer, use ALLOW when the command matches that intent and has no broader scope; otherwise use CONFIRM");
+  parts.push("- do not treat a sensitive path, token-like filename, or local data flow alone as proof of exfiltration; require visible outbound transfer syntax or concrete remote behavior");
   parts.push("");
   parts.push("## Trusted task intent");
   if (input.trustedIntent) {
