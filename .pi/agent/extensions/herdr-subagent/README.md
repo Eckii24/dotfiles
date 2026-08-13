@@ -177,6 +177,7 @@ type Item = {
 
 type Launch = {
   group: string;       // 1..60 Unicode-Scalars, terminalsteuerzeichenbereinigt
+  mode: "single" | "parallel" | "chain"; // explizite Auswahl; genau ein Ausführungsmodus
   agent?: string;      // Single-Modus
   task?: string;
   cwd?: string;
@@ -194,9 +195,11 @@ Genau ein Ausführungsmodus ist erlaubt:
 
 | Modus | Felder | Semantik |
 |---|---|---|
-| Single | `agent` und `task`, optional `cwd` | Ein Child-Pi |
-| Parallel | `tasks` | 1–4 Child-Pis gleichzeitig |
-| Chain | `chain` | 1–4 Child-Pis nacheinander |
+| `mode: "single"` | `agent` und `task`, optional `cwd` | Ein Child-Pi |
+| `mode: "parallel"` | `tasks` | 1–4 Child-Pis gleichzeitig |
+| `mode: "chain"` | `chain` | 1–4 Child-Pis nacheinander |
+
+`mode` ist erforderlich. Tool-Adapter dürfen Felder anderer Modi nicht zur Modus-Erkennung verwenden; nur die durch `mode` ausgewählten Felder werden normalisiert. Damit bleiben materialisierte optionale Felder aus Function-Bridges wirkungslos.
 
 `cwd` wird mit `realpath` kanonisiert und muss danach ein bestehendes Verzeichnis sein. Auch der Aufrufer-CWD wird vor Discovery kanonisiert. Fehlt es bei einem Item, gilt CWD des aufrufenden Pi. Bei exakt `PI_SANDBOX=gondolin` muss jeder Item-CWD nach Kanonisierung dem Aufrufer-CWD entsprechen; Abweichungen schlagen vor Client-, Kapazitäts- oder Topologie-Allokation mit `invalid_execution_mode` fehl. Eine vorhandene, höchstens 64 KiB große `PI_SANDBOX_SESSION_POLICY_V1` wird nur zusammen mit diesem exakten Marker strukturell validiert und an direkte sowie verschachtelte Child-Pis weitergegeben; Logs enthalten nur den Umgebungsvariablennamen, nie ihren Wert. Ein Chain-Schritt ersetzt jedes `{previous}` durch den finalen Text des vorherigen erfolgreichen Leafs als einzeiliges JSON-Stringliteral (`JSON.parse` stellt den Originaltext wieder her); rohe CR/LF gelangen nie in die Delivery. Die vollständige `pane.send_text`-Request (Sentinel, Pane-ID, JSON-Escaping, Envelope und Newline eingeschlossen) ist auf 65536 UTF-8-Bytes begrenzt und scheitert vor Sendung strukturiert mit `task_delivery_failed`.
 
@@ -207,6 +210,7 @@ Single:
 ```json
 {
   "group": "API-Analyse",
+  "mode": "single",
   "agent": "scout",
   "task": "Finde die API-Grenzen.",
   "cwd": "/work/service",
@@ -219,6 +223,7 @@ Sicher parallele Leser:
 ```json
 {
   "group": "Erkundung",
+  "mode": "parallel",
   "tasks": [
     {"name": "api", "agent": "scout", "task": "Finde API-Grenzen.", "cwd": "/work/service"},
     {"name": "tests", "agent": "scout", "task": "Finde Test-Einstiegspunkte.", "cwd": "/work/service"}
@@ -231,6 +236,7 @@ Sequentielle Writer im selben Workspace:
 ```json
 {
   "group": "Änderung",
+  "mode": "chain",
   "chain": [
     {"name": "implement", "agent": "worker", "task": "Implementiere die Änderung.", "cwd": "/work/service"},
     {"name": "verify", "agent": "worker", "task": "Prüfe Ergebnis: {previous}", "cwd": "/work/service"}

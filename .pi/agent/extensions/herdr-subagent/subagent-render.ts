@@ -8,8 +8,10 @@ const COLLAPSED_PROMPT_LIMIT = 140;
 
 /** Compact live view: profile and task explain a running child better than model/tool internals. */
 export function renderSubagentCall(args: HerdrSubagentParams, theme: RenderTheme, context: RenderContext) {
-	const items = args.tasks ?? args.chain ?? (args.agent && args.task ? [{ agent: args.agent, task: args.task }] : []);
-	const mode = args.tasks ? `parallel · ${items.length} panes` : args.chain ? `chain · ${items.length} steps` : "single";
+	// Function bridges may materialize inactive fields. Render only the shape selected
+	// by the required mode selector, matching execution normalization.
+	const items = args.mode === "parallel" ? args.tasks ?? [] : args.mode === "chain" ? args.chain ?? [] : args.agent && args.task ? [{ agent: args.agent, task: args.task }] : [];
+	const mode = items.length === 1 ? "single" : args.mode === "parallel" ? `parallel · ${items.length} panes` : args.mode === "chain" ? `chain · ${items.length} steps` : "single";
 	let text = theme.fg("toolTitle", theme.bold("subagent ")) + theme.fg("accent", args.group) + theme.fg("muted", ` · ${mode}`);
 	for (const item of items) {
 		const name = "name" in item && item.name ? `${item.name} · ` : "";

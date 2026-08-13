@@ -24,6 +24,7 @@ export const ERROR_CODES = [
 
 const Strict = { additionalProperties: false } as const;
 const AgentScopeSchema = StringEnum(AGENT_SCOPES);
+const ExecutionModeSchema = StringEnum(["single", "parallel", "chain"] as const);
 const ControlActionSchema = StringEnum(CONTROL_ACTIONS);
 const LeafStateSchema = StringEnum(LEAF_STATES);
 const RootStateSchema = StringEnum(ROOT_STATES);
@@ -36,9 +37,13 @@ export const HerdrSubagentItemSchema = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd. Parallel writers require distinct canonical cwd values." })),
 }, Strict);
 
-/** Strict wire schema; cross-field mode rules are enforced by normalizeSubagentParams. */
+/**
+ * Explicit selector prevents function bridges from treating their materialized
+ * optional fields as simultaneous single/tasks/chain requests.
+ */
 export const HerdrSubagentParamsSchema = Type.Object({
 	group: Type.String(),
+	mode: ExecutionModeSchema,
 	agent: Type.Optional(Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." })),
 	task: Type.Optional(Type.String({ description: "Task text. CR/LF input is normalized to spaces before delivery." })),
 	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd." })),
@@ -196,7 +201,18 @@ function taskText(value: unknown, field: string): string {
 }
 
 function optionalText(value: unknown, field: string): string | undefined {
-	return value === undefined ? undefined : text(value, field);
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") invalid("invalid_execution_mode", `${field} must be a string`);
+	const normalized = value.normalize("NFKC").trim();
+	return normalized || undefined;
+}
+
+function hasMeaningfulText(value: unknown): boolean {
+	return typeof value === "string" && value.normalize("NFKC").trim().length > 0;
+}
+
+function hasModeItems(value: unknown): boolean {
+	return value !== undefined && (!Array.isArray(value) || value.length > 0);
 }
 
 function timeout(value: unknown): number | undefined {
@@ -229,19 +245,26 @@ function normalizeItems(value: unknown, field: "tasks" | "chain"): NormalizedIte
 
 export function normalizeSubagentParams(raw: unknown): NormalizedSubagentParams {
 	const value = record(raw);
-	onlyFields(value, ["group", "agent", "task", "cwd", "tasks", "chain", "agentScope", "confirmProjectAgents", "timeoutSeconds", "keepOpen", "allowSharedWorkspaceWrites"]);
+	onlyFields(value, ["group", "mode", "agent", "task", "cwd", "tasks", "chain", "agentScope", "confirmProjectAgents", "timeoutSeconds", "keepOpen", "allowSharedWorkspaceWrites"]);
 	const group = sanitizeGroup(value.group);
-	const hasSingle = value.agent !== undefined || value.task !== undefined || value.cwd !== undefined;
-	const hasTasks = value.tasks !== undefined;
-	const hasChain = value.chain !== undefined;
-	if (Number(hasSingle) + Number(hasTasks) + Number(hasChain) !== 1) invalid("invalid_execution_mode", "provide exactly one of single, tasks, or chain");
+	const explicitMode = value.mode === undefined ? undefined : text(value.mode, "mode");
+	if (explicitMode !== undefined && !(["single", "parallel", "chain"] as const).includes(explicitMode as "single" | "parallel" | "chain")) invalid("invalid_execution_mode", "mode is invalid");
+	// Compatibility for direct runtime callers predating the public selector. Registered
+	// tool calls always include mode because the wire schema requires it.
+	const hasSingle = hasMeaningfulText(value.agent) || hasMeaningfulText(value.task);
+	const hasTasks = hasModeItems(value.tasks);
+	const hasChain = hasModeItems(value.chain);
+	const mode = explicitMode ?? (() => {
+		if (Number(hasSingle) + Number(hasTasks) + Number(hasChain) !== 1) invalid("invalid_execution_mode", "provide exactly one of single, tasks, or chain");
+		return hasTasks ? "parallel" : hasChain ? "chain" : "single";
+	})();
 	const agentScope = value.agentScope === undefined ? "user" : text(value.agentScope, "agentScope");
 	if (!(AGENT_SCOPES as readonly string[]).includes(agentScope)) invalid("invalid_execution_mode", "agentScope is invalid");
 	const base = { group, agentScope: agentScope as typeof AGENT_SCOPES[number], confirmProjectAgents: bool(value.confirmProjectAgents, "confirmProjectAgents", true), timeoutSeconds: timeout(value.timeoutSeconds) ?? DEFAULT_TIMEOUT_SECONDS, keepOpen: bool(value.keepOpen, "keepOpen", false), allowSharedWorkspaceWrites: bool(value.allowSharedWorkspaceWrites, "allowSharedWorkspaceWrites", false) };
-	if (hasTasks) return { ...base, mode: "parallel", items: normalizeItems(value.tasks, "tasks") };
-	if (hasChain) return { ...base, mode: "chain", items: normalizeItems(value.chain, "chain") };
+	if (mode === "parallel") return { ...base, mode, items: normalizeItems(value.tasks, "tasks") };
+	if (mode === "chain") return { ...base, mode, items: normalizeItems(value.chain, "chain") };
 	if (value.agent === undefined || value.task === undefined) invalid("invalid_execution_mode", "single mode requires agent and task");
-	return { ...base, mode: "single", agent: text(value.agent, "agent"), task: taskText(value.task, "task"), cwd: optionalText(value.cwd, "cwd") };
+	return { ...base, mode, agent: text(value.agent, "agent"), task: taskText(value.task, "task"), cwd: optionalText(value.cwd, "cwd") };
 }
 
 export function normalizeControlParams(raw: unknown): NormalizedControlParams {

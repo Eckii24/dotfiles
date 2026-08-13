@@ -31,6 +31,42 @@ test("normalizes a strict single request and applies defaults", () => {
 	expect(HerdrSubagentControlParamsSchema.additionalProperties).toBe(false);
 });
 
+test("explicit mode selects one execution shape despite bridge-materialized fields", () => {
+	expect(HerdrSubagentParamsSchema.required).toContain("mode");
+	expect(normalizeSubagentParams({
+		group: "parallel", mode: "parallel", agent: "scout", task: "inspect", cwd: "/tmp",
+		tasks: [{ agent: "scout", task: "inspect" }], chain: [{ agent: "other", task: "ignored" }],
+	})).toMatchObject({ mode: "parallel", items: [{ agent: "scout", task: "inspect" }] });
+	expect(normalizeSubagentParams({
+		group: "chain", mode: "chain", agent: "scout", task: "inspect", cwd: "/tmp",
+		tasks: [{ agent: "other", task: "ignored" }], chain: [{ agent: "scout", task: "inspect" }],
+	})).toMatchObject({ mode: "chain", items: [{ agent: "scout", task: "inspect" }] });
+	expect(() => normalizeSubagentParams({ group: "g", mode: "invalid", agent: "a", task: "t" })).toThrow(ContractValidationError);
+});
+
+test("normalizes legacy bridge-materialized empty launch fields", () => {
+	const bridgeDefaults = {
+		agentScope: "user",
+		confirmProjectAgents: false,
+		timeoutSeconds: 300,
+		keepOpen: false,
+		allowSharedWorkspaceWrites: false,
+	};
+
+	expect(normalizeSubagentParams({
+		group: "single", agent: "scout", task: "inspect", cwd: "", tasks: [], chain: [], ...bridgeDefaults,
+	})).toMatchObject({ mode: "single", agent: "scout", task: "inspect", cwd: undefined });
+	expect(normalizeSubagentParams({
+		group: "parallel", agent: "", task: "", cwd: "/tmp", tasks: [{ agent: "scout", task: "inspect" }], chain: [], ...bridgeDefaults,
+	})).toMatchObject({ mode: "parallel", items: [{ agent: "scout", task: "inspect" }] });
+	expect(normalizeSubagentParams({
+		group: "chain", agent: "", task: "", cwd: "/tmp", tasks: [], chain: [{ agent: "scout", task: "inspect" }], ...bridgeDefaults,
+	})).toMatchObject({ mode: "chain", items: [{ agent: "scout", task: "inspect" }] });
+	expect(() => normalizeSubagentParams({
+		group: "conflict", agent: "scout", task: "inspect", cwd: "", tasks: [{ agent: "scout", task: "inspect" }], chain: [], ...bridgeDefaults,
+	})).toThrow(ContractValidationError);
+});
+
 test("schema descriptions warn about parallel writer cwd conflicts", () => {
 	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("Omitted profile tools use Pi defaults and are writers");
 	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("bash");
@@ -45,7 +81,7 @@ test("requires exactly one mode and complete single pairing", () => {
 		{ group: "g", agent: "a" },
 		{ group: "g", task: "t" },
 		{ group: "g", agent: "a", task: "t", tasks: [{ agent: "b", task: "u" }] },
-		{ group: "g", cwd: "/tmp", tasks: [{ agent: "a", task: "t" }] },
+		{ group: "g", agent: "a", cwd: "/tmp", tasks: [{ agent: "a", task: "t" }] },
 	]) expect(() => normalizeSubagentParams(value)).toThrow(ContractValidationError);
 });
 
