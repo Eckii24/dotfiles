@@ -1,8 +1,8 @@
 {
   "lastChangelogVersion": "0.84.0",
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "high",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-terra",
+  "defaultModel": "gpt-5.6-luna",
   "modelTiers": {
     "small": "gpt-5.6-luna",
     "medium": "gpt-5.6-terra",

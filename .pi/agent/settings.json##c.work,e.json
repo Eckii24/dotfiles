@@ -1,14 +1,14 @@
 {
-  "defaultThinkingLevel": "medium",
-  "defaultProvider": "gen-ai-platform",
+  "defaultThinkingLevel": "high",
+  "defaultProvider": "github-copilot",
   "lastChangelogVersion": "0.84.0",
-  "defaultModel": "gpt-56-terra",
+  "defaultModel": "gpt-5.6-luna",
   "modelTiers": {
-    "small": "gen-ai-platform/gpt-56-luna",
-    "medium": "gen-ai-platform/gpt-56-terra",
-    "large": "claude-opus-4.8"
+    "small": "gpt-5.6-luna",
+    "medium": "gpt-5.6-terra",
+    "large": "gpt-5.6-sol"
   },
-  "chatModel": "gen-ai-platform/gpt-56-luna",
+  "chatModel": "gpt-5.6-luna",
   "goal": {
     "maxTurns": 20,
     "evaluatorModel": "@small"
