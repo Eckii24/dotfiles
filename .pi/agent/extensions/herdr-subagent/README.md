@@ -117,6 +117,7 @@ Jeder Child-Pi erhält nur explizite Koordinationswerte; Profiltext, Task und ge
 | `PI_HERDR_NESTING_DEPTH` | Child-Tiefe |
 | `PI_HERDR_GROUP` | sanitisierte Gruppe |
 | `PI_HERDR_AGENT_PROFILE` | Profilname |
+| `PI_HERDR_ALLOWED_CHILDREN` | nur bei autorisierten Parent-Profilen: JSON-Liste unmittelbarer erlaubter Child-Profilnamen |
 | `PI_HERDR_SUBAGENT_CHILD=1` | Herdr-spezifische Child-Markierung |
 | `PI_SUBAGENT=1` | allgemeine Pi-Subagent-Markierung |
 
@@ -153,6 +154,7 @@ Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
 | `name` | ja | Auswahlname im Tool-Aufruf |
 | `description` | ja | Wird dem aufrufenden Modell im Prompt angezeigt |
 | `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben; ohne Feld nutzt Pi seine mutation-fähigen Default-Tools |
+| `allowedChildren` | nein | Nichtleere, eindeutige Liste getrimmter Profilnamen (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`); autorisiert nur diese unmittelbaren Nested-Children. Ohne Feld keine Nested-Delegation. |
 | `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert |
 | `thinking` | nein | Einer von `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; wird als `pi --thinking …` an Child übergeben. Ohne Feld bleibt Pi-Default erhalten. |
 | Markdown-Body | nein | temporär als Datei geschrieben und via `--append-system-prompt <datei>` angehängt |
@@ -164,6 +166,12 @@ Ungültige/unlesbare Profile werden bei Discovery verworfen. Jedes Item entdeckt
 Temporäre Prompt-Dateien liegen in einem neuen `0700`-Runtime-Unterordner, werden exklusiv als `0600` erzeugt und nach stabiler Child-Bereitschaft oder Startfehler gelöscht.
 
 > Profile ohne `tools` nutzen Pi-Defaults und werden konservativ als Writer klassifiziert. Explizite `edit`-, `write`- oder `bash`-Deklarationen sind ebenfalls Writer; Bash darf schreiben. Dies ist kein Sandbox-Nachweis.
+
+### Verschachtelte Delegation
+
+Ein Top-Level-Parent kann Profile unverändert wählen. Ein bereits von Herdr gestartetes Child wird dagegen über `PI_HERDR_AGENT_PROFILE` erkannt und darf nur dann `subagent` aufrufen, wenn sein Launcher eine valide `PI_HERDR_ALLOWED_CHILDREN`-Liste mitgegeben hat. Höchstens zwei unmittelbare Children sind erlaubt; jeder angefragte Name muss in der Liste stehen. Das Zielprofil muss eine explizite Tool-Liste ohne `edit`, `write` oder `bash` haben; fehlende `tools` gelten als Pi-Defaults und werden ebenfalls abgewiesen. Fehler vor Client-, Kapazitäts- oder Launch-Allokation verwenden `nested_delegation_forbidden`. Die bestehende maximale Child-Tiefe von 3 bleibt zusätzlich aktiv.
+
+Die Allowlist ist pro gestarteter Parent-Profilinstanz und wird nur als Umgebungswert weitergegeben; Diagnose-Logs enthalten ausschließlich Variablennamen, keine Profil-Prompts, Tasks oder Umgebungswerte.
 
 ## Aufrufkonfiguration
 
@@ -544,4 +552,11 @@ Opt-in Live-Test gegen reale Herdr/Pi-Umgebung:
 
 ```bash
 HERDR_G4_LIVE=1 bun test index.live.test.ts
+```
+
+Der geschachtelte G5-Live-Test bleibt zusätzlich opt-in und verwendet nie ein ausgeliefertes Profil. Vor dem Start des aufrufenden Pi die Fixture in ein separates Test-Agent-Verzeichnis kopieren und diesen Pi mit `PI_CODING_AGENT_DIR` auf dieses Verzeichnis zeigen lassen; dann aus diesem Verzeichnis ausführen:
+
+```bash
+cp test-fixtures/agents/user/nested-runtime-fixture.md "$PI_CODING_AGENT_DIR/agents/"
+HERDR_G5_LIVE=1 HERDR_G5_NESTED_FIXTURE_AGENT=nested-runtime-fixture bun test index.live.test.ts
 ```

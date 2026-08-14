@@ -15,6 +15,7 @@ const groupLive = process.env.HERDR_G13_LIVE === "1";
 const g4Live = process.env.HERDR_G4_LIVE === "1";
 const g2Live = process.env.HERDR_G2_LIVE === "1";
 const g5Live = process.env.HERDR_G5_LIVE === "1";
+const g5NestedFixtureAgent = process.env.HERDR_G5_NESTED_FIXTURE_AGENT ?? "nested-runtime-fixture";
 const g16Live = process.env.HERDR_G16_LIVE === "1";
 const g19Live = process.env.HERDR_G19_LIVE === "1";
 const socketPath = process.env.HERDR_SOCKET_PATH;
@@ -238,11 +239,11 @@ test.skipIf(!g5Live)("G5 retained nested groups: labels, native finals, capacity
 		}
 	};
 	try {
-		const started = await runtime.execute({ group: "g5-parent", agent: "orchestrator", cwd: process.cwd(), timeoutSeconds: 600, keepOpen: true,
+		const started = await runtime.execute({ group: "g5-parent", agent: g5NestedFixtureAgent, cwd: process.cwd(), timeoutSeconds: 600, keepOpen: true,
 			task: "Use subagent exactly twice, sequentially. Create retained single scout group g5-web with task: Do not use tools. Return exact text G5_WEB_NATIVE only. Then create retained single scout group g5-cli with task: Do not use tools. Return exact text G5_CLI_NATIVE only. Both must use keepOpen true. Leave both tabs open for parent observation. Return concise native-final handoff.",
 		}, ctx);
 		parent = started.details;
-		expect(parent).toMatchObject({ group: "g5-parent", status: "succeeded", keepOpen: true, children: [{ agent: "orchestrator", status: "succeeded" }] });
+		expect(parent).toMatchObject({ group: "g5-parent", status: "succeeded", keepOpen: true, children: [{ agent: g5NestedFixtureAgent, status: "succeeded" }] });
 		const entries = (await readFile(parent.children[0].piSession.path, "utf8")).trim().split("\n").map(line => JSON.parse(line));
 		nested = entries.flatMap((entry: any) => entry.message?.role === "toolResult" && ["g5-web", "g5-cli"].includes(entry.message.details?.group) ? [entry.message.details] : []);
 		expect(nested).toHaveLength(2);

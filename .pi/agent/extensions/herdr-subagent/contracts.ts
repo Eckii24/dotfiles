@@ -16,7 +16,7 @@ export const ROOT_STATES = ["succeeded", "blocked", "failed", "aborted", "timed_
 export const ERROR_CODES = [
 	"not_in_herdr", "missing_herdr_socket", "herdr_socket_unreachable", "herdr_protocol_unsupported", "calling_pane_not_found",
 	"pi_integration_missing", "agent_profile_not_found", "agent_profile_invalid", "project_agent_not_confirmed", "invalid_execution_mode",
-	"invalid_group", "tab_capacity_exceeded", "pane_capacity_exceeded", "nesting_depth_exceeded", "shared_workspace_write_conflict",
+	"invalid_group", "tab_capacity_exceeded", "pane_capacity_exceeded", "nesting_depth_exceeded", "nested_delegation_forbidden", "shared_workspace_write_conflict",
 	"tab_create_failed", "agent_start_failed", "child_boot_timeout", "task_delivery_failed", "task_anchor_missing", "child_blocked",
 	"turn_timeout", "pane_lost", "session_reference_missing", "session_path_untrusted", "session_parse_failed", "ambiguous_turn",
 	"empty_final_output", "result_unavailable", "child_model_error", "child_aborted", "cleanup_incomplete", "unknown_or_foreign_run", "sandbox_cwd_restricted",

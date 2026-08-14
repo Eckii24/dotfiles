@@ -100,6 +100,49 @@ test("maximum nesting rejects before discovery or launch side effects", async ()
 	expect(calls).toEqual(["preflight"]);
 });
 
+test("nested delegation allows only explicitly authorized read-only profiles before launch", async () => {
+	const calls: string[] = [];
+	const nestedEnv = { PI_HERDR_AGENT_PROFILE: "spec-writer", PI_HERDR_ALLOWED_CHILDREN: '["scout"]' } as NodeJS.ProcessEnv;
+	const allowed = vertical({
+		env: nestedEnv,
+		discover: (() => ({ agents: [{ ...profile(), name: "scout", tools: ["read"] }], projectAgentsDir: null })) as any,
+	});
+	const result = await allowed.runtime.execute(params(), context);
+	expect(result.details.status).toBe("succeeded");
+	expect(allowed.events).toContain("send");
+
+	for (const [label, env, target] of [
+		["missing", { PI_HERDR_AGENT_PROFILE: "spec-writer" }, { ...profile(), name: "scout", tools: ["read"] }],
+		["forbidden", { PI_HERDR_AGENT_PROFILE: "spec-writer", PI_HERDR_ALLOWED_CHILDREN: '["other"]' }, { ...profile(), name: "scout", tools: ["read"] }],
+		["writer", nestedEnv, { ...profile(), name: "scout", tools: ["read", "bash"] }],
+		["default-tools", nestedEnv, { ...profile(), name: "scout", tools: undefined }],
+	] as const) {
+		const runtime = createHerdrSubagentRuntime({
+			preflight,
+			env: env as NodeJS.ProcessEnv,
+			discover: (() => ({ agents: [target], projectAgentsDir: null })) as any,
+			createClient: () => { calls.push(`${label}:client`); return {} as any; },
+			createCapacity: () => { calls.push(`${label}:capacity`); return {}; },
+			createLaunch: async () => { calls.push(`${label}:launch`); throw new Error("must not launch"); },
+		});
+		await expect(runtime.execute(params(), context)).rejects.toMatchObject({ code: "nested_delegation_forbidden" });
+	}
+	expect(calls).toEqual([]);
+});
+
+test("nested delegation rejects a third read-only child before client allocation", async () => {
+	const calls: string[] = [];
+	const runtime = createHerdrSubagentRuntime({
+		preflight,
+		env: { PI_HERDR_AGENT_PROFILE: "plan-writer", PI_HERDR_ALLOWED_CHILDREN: '["scout"]' } as NodeJS.ProcessEnv,
+		discover: (() => ({ agents: [{ ...profile(), name: "scout", tools: ["read"] }], projectAgentsDir: null })) as any,
+		createClient: () => { calls.push("client"); return { dispose: () => {} } as any; },
+		createLaunch: async () => { calls.push("launch"); throw new Error("must not launch"); },
+	});
+	await expect(runtime.execute({ group: "nested", tasks: [{ agent: "scout", task: "one" }, { agent: "scout", task: "two" }, { agent: "scout", task: "three" }] }, context)).rejects.toMatchObject({ code: "nested_delegation_forbidden" });
+	expect(calls).toEqual([]);
+});
+
 test("single success delivers direct prompt with terminal sentinel, cleans prompt after ready, closes once, and returns trusted path", async () => {
 	const f = vertical(); const updates: any[] = [];
 	const result = await f.runtime.execute(params(), context, undefined, value => updates.push(value));

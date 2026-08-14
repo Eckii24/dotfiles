@@ -12,6 +12,8 @@ export const PI_HERDR_PARENT_ROOT_RUN_ID = "PI_HERDR_PARENT_ROOT_RUN_ID";
 export const PI_HERDR_NESTING_DEPTH = "PI_HERDR_NESTING_DEPTH";
 export const PI_HERDR_GROUP = "PI_HERDR_GROUP";
 export const PI_HERDR_AGENT_PROFILE = "PI_HERDR_AGENT_PROFILE";
+/** JSON array of profile names authorized as immediate nested children. */
+export const PI_HERDR_ALLOWED_CHILDREN = "PI_HERDR_ALLOWED_CHILDREN";
 export const PI_HERDR_SUBAGENT_CHILD = "PI_HERDR_SUBAGENT_CHILD";
 /** Standard marker consumed by child-aware global extensions such as dirty-repo-guard. */
 export const PI_SUBAGENT = "PI_SUBAGENT";
@@ -22,7 +24,7 @@ export const MAX_SANDBOX_SESSION_POLICY_BYTES = 64 * 1024;
 export type PiLaunchInput = {
 	piExecutable: string;
 	cwd: string;
-	profile: Pick<AgentProfile, "name" | "model" | "thinking" | "tools" | "systemPrompt">;
+	profile: Pick<AgentProfile, "name" | "model" | "thinking" | "tools" | "allowedChildren" | "systemPrompt">;
 	rootRunId: string;
 	leafRunId: string;
 	parentRootRunId?: string;
@@ -95,6 +97,7 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		[PI_HERDR_SUBAGENT_CHILD]: "1",
 		[PI_SUBAGENT]: "1",
 	};
+	if (input.profile.allowedChildren) env[PI_HERDR_ALLOWED_CHILDREN] = JSON.stringify(input.profile.allowedChildren);
 	// Every Pi child becomes a potential nested caller; its parent is this launched root,
 	// not this root's parent (which would skip one ownership level).
 	env[PI_HERDR_PARENT_ROOT_RUN_ID] = requiredId(input.rootRunId, "rootRunId");

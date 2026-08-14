@@ -2,11 +2,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { CapacityCoordinator, isDeclaredWriter, type WriteLease } from "./capacity.js";
-import { discoverAgentProfiles, projectProfilesRequiringConfirmation, type AgentProfile } from "./agent-profiles.js";
+import { discoverAgentProfiles, parseAllowedChildren, projectProfilesRequiringConfirmation, type AgentProfile } from "./agent-profiles.js";
 import { HerdrSubagentParamsSchema, HerdrSubagentControlParamsSchema, ContractValidationError, createRunIds, makeError, normalizeSubagentParams, type ErrorCode, type HerdrLeafResult, type HerdrSubagentResult, type NormalizedItem } from "./contracts.js";
 import { DEFAULT_MAX_PAYLOAD_BYTES, HerdrClient, paneSendTextRequestByteLength } from "./herdr-client.js";
 import { runLifecycleTurn, type AgentSnapshot, type HerdrLifecyclePort, type LifecycleResult, type SessionHarvestPort } from "./lifecycle.js";
-import { createPiLaunchDescriptor, type PiLaunchDescriptor } from "./pi-launch.js";
+import { PI_HERDR_AGENT_PROFILE, PI_HERDR_ALLOWED_CHILDREN, createPiLaunchDescriptor, type PiLaunchDescriptor } from "./pi-launch.js";
 import { findTurnAnchor, harvestTurn, materializeAndTrustSession, recordAbsentSessionBaseline, validatePiSessionRef, type SessionBaseline } from "./pi-session.js";
 import { checkPreconditions, MAX_NESTING_DEPTH, PreconditionsError, type PreconditionsContext } from "./preconditions.js";
 import { RunRegistry } from "./run-registry.js";
@@ -71,6 +71,7 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 				const id = index === 0 ? (deps.ids ?? createRunIds)() : createRunIds();
 				return { item, profile, cwd, ids: { leafRunId: id.leafRunId, turnId: id.turnId } } as Omit<PreparedLeaf, "lease" | "launch" | "leaf">;
 			});
+			enforceNestedDelegationPolicy(env, prepared);
 			const requestedProject = projectProfilesRequiringConfirmation(prepared.map(x => x.profile));
 			if (input.mode === "parallel") {
 				const writerCwds = new Set<string>();
@@ -208,6 +209,20 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			throw setupError(error);
 		} finally { if (!deferClientDispose) client?.dispose(); }
 	} };
+}
+
+/** A Herdr child has no nested authority unless its launcher propagated a strict allowlist. */
+function enforceNestedDelegationPolicy(env: NodeJS.ProcessEnv, prepared: Array<{ item: NormalizedItem; profile: AgentProfile }>) {
+	if (typeof env[PI_HERDR_AGENT_PROFILE] !== "string" || !env[PI_HERDR_AGENT_PROFILE]!.trim()) return;
+	let raw: unknown;
+	try { raw = JSON.parse(env[PI_HERDR_ALLOWED_CHILDREN] ?? ""); } catch { raw = undefined; }
+	const allowedChildren = parseAllowedChildren(raw);
+	if (!allowedChildren) throw new HerdrSetupError("nested_delegation_forbidden", "Nested delegation is not authorized for this Herdr child profile.");
+	if (prepared.length > 2) throw new HerdrSetupError("nested_delegation_forbidden", "Nested delegation may launch at most two read-only children.");
+	for (const entry of prepared) {
+		if (!allowedChildren.includes(entry.item.agent)) throw new HerdrSetupError("nested_delegation_forbidden", `Nested child profile ${entry.item.agent} is not authorized by this Herdr child profile.`);
+		if (isDeclaredWriter(entry.profile.tools)) throw new HerdrSetupError("nested_delegation_forbidden", `Nested child profile ${entry.profile.name} must declare explicit read-only tools.`);
+	}
 }
 
 /** {previous} becomes a one-line JSON string literal; consumers can recover prior output with JSON.parse. */

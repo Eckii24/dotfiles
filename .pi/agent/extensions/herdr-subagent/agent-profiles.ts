@@ -9,11 +9,13 @@ export type AgentScope = "user" | "project" | "both";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
+const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export interface AgentProfile {
 	name: string;
 	description: string;
 	tools?: string[];
+	allowedChildren?: string[];
 	model?: string;
 	thinking?: ThinkingLevel;
 	systemPrompt: string;
@@ -64,6 +66,9 @@ function loadProfilesFromDir(dir: string, source: AgentProfile["source"]): Agent
 		if (toolsValue !== undefined && (!Array.isArray(toolsValue) || toolsValue.length === 0 || toolsValue.some(tool => typeof tool !== "string" || !tool.trim()))) continue;
 		const tools = toolsValue?.map(tool => (tool as string).trim());
 
+		const allowedChildren = parseAllowedChildren(frontmatter.allowedChildren);
+		if (frontmatter.allowedChildren !== undefined && !allowedChildren) continue;
+
 		const modelValue = frontmatter.model;
 		if (modelValue !== undefined && (typeof modelValue !== "string" || !modelValue.trim())) continue;
 
@@ -78,9 +83,17 @@ function loadProfilesFromDir(dir: string, source: AgentProfile["source"]): Agent
 		}
 
 		const thinking = thinkingValue as ThinkingLevel | undefined;
-		agents.push({ name: name.trim(), description: description.trim(), tools, model, thinking, systemPrompt: body, source, filePath });
+		agents.push({ name: name.trim(), description: description.trim(), tools, ...(allowedChildren ? { allowedChildren } : {}), model, thinking, systemPrompt: body, source, filePath });
 	}
 	return agents;
+}
+
+/** Parse nested-delegation authority identically for frontmatter and child env. */
+export function parseAllowedChildren(value: unknown): string[] | undefined {
+	if (!Array.isArray(value) || value.length === 0) return undefined;
+	const children = value.map(child => typeof child === "string" ? child.trim() : "");
+	if (children.some(child => !PROFILE_NAME.test(child)) || new Set(children).size !== children.length) return undefined;
+	return children;
 }
 
 function isDirectory(candidate: string): boolean {

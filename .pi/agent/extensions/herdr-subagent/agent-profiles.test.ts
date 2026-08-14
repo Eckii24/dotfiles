@@ -55,6 +55,7 @@ test("golden parity preserves user, project, and both discovery semantics", () =
 				{ name: "bare", description: "Bare model profile", model: "openai-codex/luna", systemPrompt: "Bare model body.", source: "user", filePath: "agents/bare.md" },
 				{ name: "base", description: "User base profile", tools: ["read", "bash"], model: "openai-codex/tier-model", systemPrompt: "User body keeps trailing newline.", source: "user", filePath: "agents/base.md" },
 				{ name: "explicit", description: "Explicit model profile", model: "github-copilot/claude-haiku-4.5", systemPrompt: "Explicit model body.", source: "user", filePath: "agents/explicit.md" },
+				{ name: "nested-runtime-fixture", description: "Deterministic nested runtime test fixture; never ship as a user profile.", tools: ["subagent", "subagent_control"], model: "openai-codex/medium-model", thinking: "high", systemPrompt: "Fixture only. Exercise bounded nested-child runtime behavior.", source: "user", filePath: "agents/nested-runtime-fixture.md" },
 				{ name: "no-model", description: "No model profile", systemPrompt: "No model body.", source: "user", filePath: "agents/no-model.md" },
 			]);
 
@@ -65,7 +66,7 @@ test("golden parity preserves user, project, and both discovery semantics", () =
 			]);
 
 			const both = discoverAgentProfiles(cwd, "both");
-			expect(both.agents.map(agent => agent.name).sort()).toEqual(["bare", "base", "explicit", "no-model", "project-only"]);
+			expect(both.agents.map(agent => agent.name).sort()).toEqual(["bare", "base", "explicit", "nested-runtime-fixture", "no-model", "project-only"]);
 			expect(both.agents.find(agent => agent.name === "base")).toMatchObject({ source: "project", description: "Project override profile" });
 			expect(projectProfilesRequiringConfirmation([both.agents.find(agent => agent.name === "base")!, both.agents.find(agent => agent.name === "base")!, both.agents.find(agent => agent.name === "project-only")!])
 				.map(agent => agent.name)).toEqual(["base", "project-only"]);
@@ -75,20 +76,26 @@ test("golden parity preserves user, project, and both discovery semantics", () =
 	}
 });
 
-test("orchestrator profile parses with exact nested tools, medium model, and high thinking", () => {
+test("shipped user profiles limit nested delegation tools to named spec/plan writers", () => {
+	const agentDir = join(import.meta.dir, "..", "..");
+	withAgentDir(agentDir, () => {
+		const agents = discoverAgentProfiles(process.cwd(), "user").agents;
+		expect(agents.find(agent => agent.name === "orchestrator")).toBeUndefined();
+		expect(agents.filter(agent => agent.tools?.some(tool => tool === "subagent" || tool === "subagent_control")).map(agent => agent.name).sort()).toEqual(["plan-writer", "spec-writer"]);
+	});
+});
+
+test("nested runtime fixture parses with exact nested tools, medium model, and high thinking", () => {
 	const { root, agentDir, cwd } = setup();
 	try {
-		for (const name of ["orchestrator", "worker", "scout"]) cpSync(join(import.meta.dir, "..", "..", "agents", `${name}.md`), join(agentDir, "agents", `${name}.md`));
 		withAgentDir(agentDir, () => {
-			const agents = discoverAgentProfiles(cwd, "user").agents;
-			const agent = agents.find(value => value.name === "orchestrator");
+			const agent = discoverAgentProfiles(cwd, "user").agents.find(value => value.name === "nested-runtime-fixture");
 			expect(agent).toMatchObject({
-				name: "orchestrator",
+				name: "nested-runtime-fixture",
 				tools: ["subagent", "subagent_control"],
 				model: "openai-codex/medium-model",
 				thinking: "high",
 			});
-			for (const name of ["worker", "scout"]) expect(agents.find(value => value.name === name)?.tools).not.toContain("subagent");
 		});
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -110,6 +117,25 @@ test("parses supported profile thinking and ignores malformed or unsupported thi
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("parses a strict allowedChildren list and rejects malformed nested authority", () => {
+	const { root, agentDir, cwd } = setup();
+	try {
+		writeFileSync(join(agentDir, "agents", "nested-valid.md"), "---\nname: nested-valid\ndescription: Valid nested authority\nallowedChildren:\n  - scout\n  - ' repo-scout.v2 '\n---\nValid body.\n");
+		for (const [name, value] of [
+			["nested-empty", "[]"],
+			["nested-not-array", "scout"],
+			["nested-duplicate", "[scout, scout]"],
+			["nested-trim-duplicate", "[' scout ', scout]"],
+			["nested-invalid", "['scout child']"],
+		]) writeFileSync(join(agentDir, "agents", `${name}.md`), `---\nname: ${name}\ndescription: Invalid nested authority\nallowedChildren: ${value}\n---\nInvalid body.\n`);
+		withAgentDir(agentDir, () => {
+			const agents = discoverAgentProfiles(cwd, "user").agents;
+			expect(agents.find(agent => agent.name === "nested-valid")).toMatchObject({ allowedChildren: ["scout", "repo-scout.v2"] });
+			for (const name of ["nested-empty", "nested-not-array", "nested-duplicate", "nested-trim-duplicate", "nested-invalid"]) expect(agents.find(agent => agent.name === name)).toBeUndefined();
+		});
+	} finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("deduplicates selected project profiles by source and canonical file path", () => {

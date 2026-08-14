@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 
 import {
 	PI_HERDR_AGENT_PROFILE,
+	PI_HERDR_ALLOWED_CHILDREN,
 	PI_HERDR_GROUP,
 	PI_HERDR_LEAF_RUN_ID,
 	PI_HERDR_NESTING_DEPTH,
@@ -28,7 +29,7 @@ function fixtureRoot() {
 function input(cwd: string, extra: Record<string, unknown> = {}) {
 	return {
 		piExecutable: process.execPath, cwd, rootRunId: "root-123", leafRunId: "leaf-456789", nestingDepth: 0, group: "safe group",
-		profile: { name: "orchestrator", model: "openai-codex/gpt-test", thinking: "high", tools: ["subagent", "subagent_control"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
+		profile: { name: "nested-runtime-fixture", model: "openai-codex/gpt-test", thinking: "high", tools: ["subagent", "subagent_control"], allowedChildren: ["scout"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
 		...extra,
 	};
 }
@@ -49,14 +50,15 @@ test("builds persisted interactive argv with exact model, thinking, and tools, n
 		expect(JSON.stringify(launch)).not.toContain("PRIVATE PROFILE BODY");
 		const envNames = [
 			PI_HERDR_AGENT_PROFILE, PI_HERDR_GROUP, PI_HERDR_LEAF_RUN_ID, PI_HERDR_NESTING_DEPTH,
-			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT,
+			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT, PI_HERDR_ALLOWED_CHILDREN,
 		].sort();
 		expect(launch.log).toEqual({ executable: process.execPath, argv: launch.argv, cwd: realpathSync(value.cwd), envNames, name: launch.name });
 		expect(launch.log.envNames).not.toContain("PRIVATE PROFILE BODY");
 		expect(launch.env).toEqual({
 		[PI_HERDR_ROOT_RUN_ID]: "root-123", [PI_HERDR_LEAF_RUN_ID]: "leaf-456789", [PI_HERDR_NESTING_DEPTH]: "1",
-		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "orchestrator", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1",
-	});
+		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "nested-runtime-fixture", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1", [PI_HERDR_ALLOWED_CHILDREN]: '["scout"]',
+		});
+		expect(JSON.stringify(launch.log)).not.toContain("scout");
 		expect(launch.env).not.toHaveProperty("SECRET");
 		expect(readFileSync(launch.promptFilePath, "utf8")).toBe("PRIVATE PROFILE BODY\nDo not leak.");
 		await launch.cleanupAfterReady();
@@ -127,6 +129,7 @@ test("worker/scout-like profiles receive no nested tools, and cwd is canonicaliz
 		expect(launch.cwd).toBe(realpathSync(value.cwd));
 		expect(launch.argv).toEqual(["--name", launch.name, "--tools", "read", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv.join(" ")).not.toContain("herdr_subagent");
+		expect(launch.env).not.toHaveProperty(PI_HERDR_ALLOWED_CHILDREN);
 		await launch.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
