@@ -37,6 +37,6 @@ Session titles are Pi-native: `pi --name "Title"` at startup or `/name Title` in
 
 ## Metrics and limits
 
-Input, cache read, cache write, output, reasoning, total tokens, Pi-recorded cost, assistant turns and technical tool-error signals are available in aggregate output. Costs are estimates, not provider invoice reconciliation. Date filtering uses message timestamps, not file mtimes. Current Herdr child messages are recursively included once; old legacy payload shapes are intentionally unsupported.
+Input, cache read, cache write, output, reasoning, total tokens, Pi-recorded cost, assistant turns and technical tool-error signals are available in aggregate output. Costs are estimates, not provider invoice reconciliation. Date filtering uses message timestamps, not file mtimes. Herdr children persisted as their own Pi session files are linked from the parent's `piSession.path` and classified by their persisted profile name; embedded current child messages are recursively included once. Old legacy payload shapes are intentionally unsupported.
 
 JSON is content-safe aggregate metadata/metrics. CSV permits exactly one grouping level so it stays a flat table.

@@ -23,6 +23,23 @@ describe("readSessionUsage", () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
+	it("classifies persisted Herdr child sessions from parent piSession references", async () => {
+		const root = mkdtempSync(join(tmpdir(), "usage-reader-herdr-"));
+		const childPath = join(root, "child.jsonl");
+		writeFileSync(childPath, [
+			JSON.stringify({ type: "session", id: "child-session", cwd: "/repo" }),
+			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:01:00Z", message: { role: "assistant", provider: "openai", model: "gpt", usage: { input: 20, cacheRead: 0, cacheWrite: 0, output: 1, reasoning: 0, totalTokens: 21, cost: { total: 2 } } } }),
+		].join("\n"));
+		writeFileSync(join(root, "parent.jsonl"), [
+			JSON.stringify({ type: "session", id: "parent-session", cwd: "/repo" }),
+			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:02:00Z", message: { role: "toolResult", toolName: "subagent", isError: false, details: { protocolVersion: 1, children: [{ agent: "worker", piSession: { source: "herdr:pi", kind: "path", path: childPath, sessionId: "child-session" } }] } } }),
+		].join("\n"));
+		const result = await readSessionUsage(root);
+		expect(result.events).toHaveLength(1);
+		expect(result.events[0]).toMatchObject({ sessionId: "child-session", agentKind: "subagent", agentName: "worker", subagentDepth: 1 });
+		rmSync(root, { recursive: true, force: true });
+	});
+
 	it("recurses current subagent child messages once and applies final workflow to earlier assistant events", async () => {
 		const root = mkdtempSync(join(tmpdir(), "usage-reader-nested-"));
 		const path = join(root, "nested.jsonl");
