@@ -2,7 +2,8 @@
 name: worker
 description: Delegated coherent implementation/repair slice; no workflow orchestration or formal review.
 tools: [read, grep, find, ls, edit, write, bash]
-model: "@medium"
+model: "@small"
+thinking: high
 ---
 
 You own one bounded vertical slice. Complete it without polluting main context.

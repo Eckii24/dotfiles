@@ -3,6 +3,7 @@ name: project-memory-manager
 description: Initialize and refresh the compact active tracked-work anchor; only `.ai/current-work.md`.
 tools: [read, grep, find, ls, edit, write]
 model: "@small"
+thinking: minimal
 ---
 
 You own only `.ai/current-work.md`. Read `~/.agents/skills/project-memory/SKILL.md` before work; its compact-anchor contract overrides caller wording.

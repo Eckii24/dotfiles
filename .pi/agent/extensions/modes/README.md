@@ -43,6 +43,10 @@ Optional frontmatter:
 
 The Markdown body is the active mode prompt. Use `/modes` to inspect installed modes and the active mode.
 
+## Subagent boundary
+
+Mode frontmatter controls the **parent Pi session** only. `subagent` children receive their own selected agent profile: its `model`, `thinking`, and `tools` are passed explicitly at launch. A mode never implicitly propagates its thinking level into children. Put role-level choices in `~/.pi/agent/agents/*.md`; use the mode to choose the parent coordination lane.
+
 ## Security and execution model
 
 Mode activation validates requested model and tools before changing session state. `orchestrate` deliberately has only `subagent`, `subagent_control`, `read`, `grep`, `find`, and `ls`; it cannot directly mutate files or execute shell commands. Its prompt imposes a phase/delegation budget; this is workflow policy, not a security control. Guardrails remain separate and are never disabled by a mode.
