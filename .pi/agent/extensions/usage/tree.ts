@@ -23,6 +23,7 @@ function value(event: UsageEvent, group: GroupBy): string {
 	if (group === "day") { const d = new Date(event.timestampMs); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 	if (group === "model") return `${event.provider}/${event.model}`;
 	if (group === "session") return event.sessionTitle || event.sessionId;
+	if (group === "thread") return event.threadTitle || event.threadId;
 	if (group === "project") return event.project;
 	if (group === "workflow") return event.workflow;
 	return event.agentName;

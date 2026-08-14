@@ -36,7 +36,7 @@ describe("readSessionUsage", () => {
 		].join("\n"));
 		const result = await readSessionUsage(root);
 		expect(result.events).toHaveLength(1);
-		expect(result.events[0]).toMatchObject({ sessionId: "child-session", agentKind: "subagent", agentName: "worker", subagentDepth: 1 });
+		expect(result.events[0]).toMatchObject({ sessionId: "child-session", threadId: "parent-session", agentKind: "subagent", agentName: "worker", subagentDepth: 1 });
 		rmSync(root, { recursive: true, force: true });
 	});
 

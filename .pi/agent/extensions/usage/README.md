@@ -14,8 +14,8 @@ pi --usage --from 2026-07-01 --to 2026-07-31
 pi --usage --last 30d
 
 # Outer -> inner hierarchy
-pi --usage --group-by session,agent,model --period 2026-07
-pi --usage --group-by model,session,agent --last 30d
+pi --usage --group-by thread,agent,model --period 2026-07
+pi --usage --group-by thread,agent,session --last 30d
 pi --usage --group-by project,workflow,model --period 2026-07
 
 # Output formats
@@ -29,7 +29,9 @@ pi --usage=help
 
 ## Group dimensions
 
-`day`, `model`, `session`, `project`, `workflow`, `agent`.
+`day`, `model`, `session`, `thread`, `project`, `workflow`, `agent`.
+
+`thread` is the top-level Pi session for an execution lineage. Persisted Herdr child sessions inherit their parent's thread; nested children retain that same top-level thread.
 
 `agent` is `main` or `subagent`. Normal reports aggregate both. Put it into the grouping path only when the split matters.
 

@@ -12,6 +12,11 @@ describe("parseUsageQuery", () => {
 		expect(q.groupBy).toEqual(["session", "agent", "model"]);
 		expect(q.range.label).toBe("2026-07");
 	});
+	it("parses thread as a hierarchy dimension", () => {
+		const q = parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent,session"]);
+		expect(q.groupBy).toEqual(["thread", "agent", "session"]);
+	});
+
 	it("rejects old mode syntax and invalid duplicate groups", () => {
 		expect(() => parseUsageQuery(["pi", "--usage=models"])).toThrow("Use --usage");
 		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "session,session"])).toThrow("unique");

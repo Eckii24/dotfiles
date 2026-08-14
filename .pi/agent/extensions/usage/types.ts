@@ -1,4 +1,4 @@
-export type GroupBy = "day" | "model" | "session" | "project" | "workflow" | "agent";
+export type GroupBy = "day" | "model" | "session" | "thread" | "project" | "workflow" | "agent";
 export type OutputFormat = "text" | "json" | "csv";
 export type UsageSort = "cost" | "tokens" | "turns" | "cache-rate";
 export type SortOrder = "asc" | "desc";

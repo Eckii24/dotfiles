@@ -8,6 +8,8 @@ const range = { label: "test", startMs: 0, endMs: 10_000 };
 function event(overrides: Partial<UsageEvent> = {}): UsageEvent {
 	return {
 		sessionId: "session-id-1234",
+		threadId: "thread-id-1234",
+		threadTitle: "Main thread",
 		sessionPath: "/sessions/session.jsonl",
 		timestampMs: 1_000,
 		project: "/repo",

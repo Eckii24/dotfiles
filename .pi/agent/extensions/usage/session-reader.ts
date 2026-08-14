@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 export type AgentKind = "main" | "subagent";
 export interface UsageEvent {
-	sessionId: string; sessionTitle?: string; sessionPath: string; timestampMs: number; project: string; workflow: string;
+	sessionId: string; sessionTitle?: string; threadId: string; threadTitle?: string; sessionPath: string; timestampMs: number; project: string; workflow: string;
 	provider: string; model: string; input: number; cacheRead: number; cacheWrite: number; output: number; reasoning: number; totalTokens: number; cost: number;
 	agentKind: AgentKind; agentName: string; subagentDepth: number;
 }
@@ -12,7 +12,7 @@ export interface ReadUsageResult { events: UsageEvent[]; toolEvents: ToolEvent[]
 
 type RecordValue = Record<string, unknown>;
 type ParsedSession = { sessionPath: string; sessionId: string; sessionTitle?: string; project: string; messages: Array<{ message: RecordValue; timestampMs?: number }>; workflow: string };
-type SessionIdentity = { agentKind: AgentKind; agentName: string; subagentDepth: number };
+type SessionIdentity = { agentKind: AgentKind; agentName: string; subagentDepth: number; threadPath: string };
 type ChildLink = { path: string; agentName: string };
 function record(value: unknown): value is RecordValue { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function number(value: unknown): number { return typeof value === "number" && Number.isFinite(value) ? value : 0; }
@@ -41,10 +41,10 @@ function identities(sessions: ParsedSession[]): Map<string, SessionIdentity> {
 	const visit = (path: string, identity: SessionIdentity): void => {
 		if (result.has(path)) return;
 		result.set(path, identity);
-		for (const child of links.get(path) ?? []) visit(child.path, { agentKind: "subagent", agentName: child.agentName, subagentDepth: identity.subagentDepth + 1 });
+		for (const child of links.get(path) ?? []) visit(child.path, { agentKind: "subagent", agentName: child.agentName, subagentDepth: identity.subagentDepth + 1, threadPath: identity.threadPath });
 	};
-	for (const session of sessions) { const path = resolve(session.sessionPath); if (!incoming.has(path)) visit(path, { agentKind: "main", agentName: "main", subagentDepth: 0 }); }
-	for (const session of sessions) { const path = resolve(session.sessionPath); if (!result.has(path)) visit(path, { agentKind: "main", agentName: "main", subagentDepth: 0 }); }
+	for (const session of sessions) { const path = resolve(session.sessionPath); if (!incoming.has(path)) visit(path, { agentKind: "main", agentName: "main", subagentDepth: 0, threadPath: path }); }
+	for (const session of sessions) { const path = resolve(session.sessionPath); if (!result.has(path)) visit(path, { agentKind: "main", agentName: "main", subagentDepth: 0, threadPath: path }); }
 	return result;
 }
 
@@ -57,12 +57,12 @@ export async function readSessionUsage(root: string): Promise<ReadUsageResult> {
 		let workflow = "ad-hoc"; for (const entry of messages) if (entry.message.role === "user") { const classified = workflowFromUser(text(entry.message.content)); if (classified !== "ad-hoc") { workflow = classified; break; } }
 		sessions.push({ sessionPath, sessionId, sessionTitle, project, messages, workflow });
 	}
-	const sessionIdentities = identities(sessions);
+	const sessionIdentities = identities(sessions); const sessionsByPath = new Map(sessions.map((session) => [resolve(session.sessionPath), session]));
 	for (const session of sessions) {
-		const identity = sessionIdentities.get(resolve(session.sessionPath))!;
+		const identity = sessionIdentities.get(resolve(session.sessionPath))!; const thread = sessionsByPath.get(identity.threadPath)!;
 		const visit = (message: RecordValue, fallbackTimestampMs: number | undefined, agentKind: AgentKind, agentName: string, subagentDepth: number): void => {
 			const at = timestamp(message.timestamp) ?? fallbackTimestampMs; if (at === undefined) return;
-			if (message.role === "assistant" && record(message.usage)) { const usage = message.usage; const cost = record(usage.cost) ? number(usage.cost.total) : 0; const input = number(usage.input), cacheRead = number(usage.cacheRead), cacheWrite = number(usage.cacheWrite), output = number(usage.output); events.push({ sessionId: session.sessionId, sessionTitle: session.sessionTitle, sessionPath: session.sessionPath, timestampMs: at, project: session.project, workflow: session.workflow, provider: typeof message.provider === "string" ? message.provider : "unknown", model: typeof message.model === "string" ? message.model : "unknown", input, cacheRead, cacheWrite, output, reasoning: number(usage.reasoning), totalTokens: number(usage.totalTokens) || input + cacheRead + cacheWrite + output, cost, agentKind, agentName, subagentDepth }); return; }
+			if (message.role === "assistant" && record(message.usage)) { const usage = message.usage; const cost = record(usage.cost) ? number(usage.cost.total) : 0; const input = number(usage.input), cacheRead = number(usage.cacheRead), cacheWrite = number(usage.cacheWrite), output = number(usage.output); events.push({ sessionId: session.sessionId, sessionTitle: session.sessionTitle, threadId: thread.sessionId, threadTitle: thread.sessionTitle, sessionPath: session.sessionPath, timestampMs: at, project: session.project, workflow: session.workflow, provider: typeof message.provider === "string" ? message.provider : "unknown", model: typeof message.model === "string" ? message.model : "unknown", input, cacheRead, cacheWrite, output, reasoning: number(usage.reasoning), totalTokens: number(usage.totalTokens) || input + cacheRead + cacheWrite + output, cost, agentKind, agentName, subagentDepth }); return; }
 			if (message.role !== "toolResult") return;
 			const toolName = typeof message.toolName === "string" ? message.toolName : "unknown"; toolEvents.push({ sessionId: session.sessionId, timestampMs: at, isError: message.isError === true, toolName, agentKind, subagentDepth });
 			if (toolName !== "subagent" || !record(message.details) || !record(message.details.run) || !Array.isArray(message.details.run.children)) return;
