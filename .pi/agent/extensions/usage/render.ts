@@ -6,7 +6,12 @@ export const CSV_DATA_HEADERS = ["sessions", "turns", "input", "cacheRead", "cac
 
 type TableMetrics = Pick<Metrics, "uniqueSessions" | "assistantTurns" | "input" | "cacheRead" | "cacheWrite" | "output" | "reasoning" | "cost" | "cacheReadRate">;
 
-export function formatToken(value: number): string { return value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : value >= 10_000 ? `${Math.round(value / 1_000)}k` : value >= 1_000 ? `${(value / 1_000).toFixed(1)}k` : `${Math.round(value)}`; }
+export function formatToken(value: number): string {
+	if (value >= 999_500) return `${(value / 1_000_000).toFixed(1)}M`;
+	if (value >= 10_000) return `${Math.round(value / 1_000)}k`;
+	if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+	return `${Math.round(value)}`;
+}
 function pct(value?: number): string { return value === undefined ? "-" : `${(value * 100).toFixed(1)}%`; }
 function csv(value: unknown): string { const text = value === undefined || value === null ? "" : String(value); return /[",\n]/.test(text) ? `"${text.replaceAll('"','""')}"` : text; }
 

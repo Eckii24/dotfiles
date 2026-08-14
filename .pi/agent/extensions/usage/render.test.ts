@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { csvReport, textReport } from "./render.js";
+import { csvReport, formatToken, textReport } from "./render.js";
 import type { Row } from "./analytics.js";
 
 const row: Row = {
@@ -14,6 +14,15 @@ const row: Row = {
 const standard = ["Sessions", "Turns", "Input", "C.Read", "C.Write", "Output", "Reason", "Cost", "Cache"];
 
 describe("tabular usage reports", () => {
+	it("formats token quantities with explicit compact units at every boundary", () => {
+		expect(formatToken(999)).toBe("999");
+		expect(formatToken(1_000)).toBe("1.0k");
+		expect(formatToken(13_000)).toBe("13k");
+		expect(formatToken(999_499)).toBe("999k");
+		expect(formatToken(999_500)).toBe("1.0M");
+		expect(formatToken(1_000_000)).toBe("1.0M");
+	});
+
 	it("uses the same ordered data columns in flat text and CSV", () => {
 		const textHeader = textReport("Report", [row], { label: "test", startMs: 0, endMs: 1 }).split("\n")[2]!;
 		expect(textHeader.split(/ {2,}/)).toEqual(["Key", ...standard]);
