@@ -12,13 +12,13 @@ describe("readSessionUsage", () => {
 			JSON.stringify({ type: "session", id: "s1", cwd: "/repo", timestamp: "2026-07-01T10:00:00Z" }),
 			JSON.stringify({ type: "session_info", name: "Analytics test" }),
 			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:00:00Z", message: { role: "user", content: [{ type: "text", text: "/implement add analytics" }] } }),
-			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:01:00Z", message: { role: "assistant", provider: "openai", model: "gpt", usage: { input: 1, cacheRead: 2, cacheWrite: 3, output: 4, reasoning: 5, totalTokens: 15, cost: { total: 0.1 } } } }),
+			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:01:00Z", message: { role: "assistant", provider: "openai", model: "gpt", usage: { input: 1, cacheRead: 2, cacheWrite: 3, output: 4, reasoning: 5, totalTokens: 15, cost: { input: 0.01, cacheRead: 0.02, cacheWrite: 0.03, output: 0.04, total: 0.1 } } } }),
 			JSON.stringify({ type: "message", timestamp: "2026-07-17T10:02:00Z", message: { role: "toolResult", toolName: "bash", isError: true } }),
 		].join("\n"));
 		utimesSync(path, new Date("2026-08-01T00:00:00Z"), new Date("2026-08-01T00:00:00Z"));
 		const result = await readSessionUsage(root);
 		expect(result.events).toHaveLength(1);
-		expect(result.events[0]).toMatchObject({ sessionId: "s1", sessionTitle: "Analytics test", project: "/repo", workflow: "implement", input: 1, cacheRead: 2, cacheWrite: 3, output: 4, reasoning: 5, totalTokens: 15, cost: 0.1 });
+		expect(result.events[0]).toMatchObject({ sessionId: "s1", sessionTitle: "Analytics test", project: "/repo", workflow: "implement", input: 1, cacheRead: 2, cacheWrite: 3, output: 4, reasoning: 5, totalTokens: 15, costInput: 0.01, costCacheRead: 0.02, costCacheWrite: 0.03, costOutput: 0.04, cost: 0.1 });
 		expect(result.toolEvents).toMatchObject([{ sessionId: "s1", isError: true }]);
 		rmSync(root, { recursive: true, force: true });
 	});

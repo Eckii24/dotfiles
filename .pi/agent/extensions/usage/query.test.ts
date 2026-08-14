@@ -18,6 +18,11 @@ describe("parseUsageQuery", () => {
 		expect(q.sums).toEqual(["agent", "thread"]);
 	});
 
+	it("enables detailed cost buckets", () => {
+		const q = parseUsageQuery(["pi", "--usage", "--detailed"]);
+		expect(q.detailed).toBe(true);
+	});
+
 	it("rejects subtotal dimensions without descendants or grouping", () => {
 		expect(() => parseUsageQuery(["pi", "--usage", "--sum", "thread"])).toThrow("--group-by");
 		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent", "--sum", "agent"])).toThrow("descendant");

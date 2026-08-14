@@ -1,4 +1,4 @@
-import { DATA_HEADERS, tableDataCells } from "./render.js";
+import { tableDataCells, tableHeaders } from "./render.js";
 import type { GroupBy, SortOrder, UsageSort } from "./types.js";
 import type { UsageEvent } from "./session-reader.js";
 
@@ -6,6 +6,10 @@ export interface TreeNode {
 	key: string;
 	label: string;
 	cost: number;
+	costInput: number;
+	costCacheRead: number;
+	costCacheWrite: number;
+	costOutput: number;
 	input: number;
 	cacheRead: number;
 	cacheWrite: number;
@@ -48,11 +52,11 @@ export function usageTree(events: UsageEvent[], startMs: number, endMs: number, 
 			const label = value(event, group);
 			let node = map.get(label);
 			if (!node) {
-				node = { key: label, label, cost: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, turns: 0, uniqueSessions: 0, sessionIds: new Set(), children: [] };
+				node = { key: label, label, cost: 0, costInput: 0, costCacheRead: 0, costCacheWrite: 0, costOutput: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, turns: 0, uniqueSessions: 0, sessionIds: new Set(), children: [] };
 				map.set(label, node);
 				if (parent) parent.children.push(node);
 			}
-			node.cost += event.cost; node.input += event.input; node.cacheRead += event.cacheRead; node.cacheWrite += event.cacheWrite; node.output += event.output; node.reasoning += event.reasoning; node.turns++; node.sessionIds.add(event.sessionId);
+			node.cost += event.cost; node.costInput += event.costInput; node.costCacheRead += event.costCacheRead; node.costCacheWrite += event.costCacheWrite; node.costOutput += event.costOutput; node.input += event.input; node.cacheRead += event.cacheRead; node.cacheWrite += event.cacheWrite; node.output += event.output; node.reasoning += event.reasoning; node.turns++; node.sessionIds.add(event.sessionId);
 			parent = node;
 			map = new Map(node.children.map((child) => [child.key, child]));
 		}
@@ -62,7 +66,7 @@ export function usageTree(events: UsageEvent[], startMs: number, endMs: number, 
 		.sort((a, b) => sign * (score(a, sort) - score(b, sort)) || a.label.localeCompare(b.label))
 		.map((node) => {
 			const prompt = node.input + node.cacheRead + node.cacheWrite;
-			const output = { key: node.key, label: node.label, cost: node.cost, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, turns: node.turns, uniqueSessions: node.sessionIds.size, cacheReadRate: prompt ? node.cacheRead / prompt : undefined, children: finalize(node.children as InternalTreeNode[]) };
+			const output = { key: node.key, label: node.label, cost: node.cost, costInput: node.costInput, costCacheRead: node.costCacheRead, costCacheWrite: node.costCacheWrite, costOutput: node.costOutput, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, turns: node.turns, uniqueSessions: node.sessionIds.size, cacheReadRate: prompt ? node.cacheRead / prompt : undefined, children: finalize(node.children as InternalTreeNode[]) };
 			sessions.set(output, node.sessionIds);
 			return output;
 		});
@@ -74,12 +78,12 @@ function nodeSessions(node: TreeNode): Set<string> { return sessions.get(node) ?
 function aggregate(node: TreeNode, children: TreeNode[]): TreeNode {
 	if (!children.length) return node;
 	const ids = new Set<string>(); for (const child of children) for (const id of nodeSessions(child)) ids.add(id);
-	const output: TreeNode = { ...node, children, cost: children.reduce((sum, child) => sum + child.cost, 0), input: children.reduce((sum, child) => sum + child.input, 0), cacheRead: children.reduce((sum, child) => sum + child.cacheRead, 0), cacheWrite: children.reduce((sum, child) => sum + child.cacheWrite, 0), output: children.reduce((sum, child) => sum + child.output, 0), reasoning: children.reduce((sum, child) => sum + child.reasoning, 0), turns: children.reduce((sum, child) => sum + child.turns, 0), uniqueSessions: ids.size };
+	const output: TreeNode = { ...node, children, cost: children.reduce((sum, child) => sum + child.cost, 0), costInput: children.reduce((sum, child) => sum + child.costInput, 0), costCacheRead: children.reduce((sum, child) => sum + child.costCacheRead, 0), costCacheWrite: children.reduce((sum, child) => sum + child.costCacheWrite, 0), costOutput: children.reduce((sum, child) => sum + child.costOutput, 0), input: children.reduce((sum, child) => sum + child.input, 0), cacheRead: children.reduce((sum, child) => sum + child.cacheRead, 0), cacheWrite: children.reduce((sum, child) => sum + child.cacheWrite, 0), output: children.reduce((sum, child) => sum + child.output, 0), reasoning: children.reduce((sum, child) => sum + child.reasoning, 0), turns: children.reduce((sum, child) => sum + child.turns, 0), uniqueSessions: ids.size };
 	const prompt = output.input + output.cacheRead + output.cacheWrite; output.cacheReadRate = prompt ? output.cacheRead / prompt : undefined; sessions.set(output, ids);
 	return output;
 }
 
-export function renderTreeTable(nodes: TreeNode[], groups: GroupBy[], limit: number, subtotalGroups: GroupBy[] = []): string {
+export function renderTreeTable(nodes: TreeNode[], groups: GroupBy[], limit: number, subtotalGroups: GroupBy[] = [], detailed = false): string {
 	const visible = (node: TreeNode): TreeNode => aggregate(node, node.children.slice(0, limit).map(visible));
 	const rows: string[][] = [];
 	const visit = (items: TreeNode[], path: string[], depth: number) => {
@@ -87,15 +91,15 @@ export function renderTreeTable(nodes: TreeNode[], groups: GroupBy[], limit: num
 		for (const [index, node] of visibleItems.entries()) {
 			const next = [...path, node.label];
 			if (node.children.length) visit(node.children, next, depth + 1);
-			else rows.push([...next, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, cost: node.cost, cacheReadRate: node.cacheReadRate })]);
+			else rows.push([...next, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, costInput: node.costInput, costCacheRead: node.costCacheRead, costCacheWrite: node.costCacheWrite, costOutput: node.costOutput, cost: node.cost, cacheReadRate: node.cacheReadRate }, detailed)]);
 			if (!subtotalGroups.includes(groups[depth]!)) continue;
 			const labels = [...next]; labels[depth] = `${node.label} Σ`; while (labels.length < groups.length) labels.push("");
-			rows.push([...labels, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, cost: node.cost, cacheReadRate: node.cacheReadRate })]);
+			rows.push([...labels, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, costInput: node.costInput, costCacheRead: node.costCacheRead, costCacheWrite: node.costCacheWrite, costOutput: node.costOutput, cost: node.cost, cacheReadRate: node.cacheReadRate }, detailed)]);
 			if (index < visibleItems.length - 1) rows.push([]);
 		}
 	};
 	visit(nodes, [], 0);
-	const headers = [...groups.map(title), ...DATA_HEADERS];
+	const headers = [...groups.map(title), ...tableHeaders(detailed)];
 	const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => (row[index] ?? "").length)));
 	const format = (row: string[]) => row.length ? row.map((value, index) => index === 0 ? value.padEnd(widths[index]!) : value.padStart(widths[index]!)).join("  ") : "";
 	return [format(headers), widths.map((width) => "-".repeat(width)).join("  "), ...rows.map(format)].join("\n");

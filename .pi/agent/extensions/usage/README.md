@@ -21,6 +21,7 @@ pi --usage --group-by project,workflow,model --period 2026-07
 # Output formats
 pi --usage --group-by session,agent,model --format json --period 2026-07
 pi --usage --group-by model --format csv --period 2026-07
+pi --usage --group-by thread,agent,model --sum agent,thread --detailed --last 30d
 
 # Filter unusual session costs
 pi --usage --anomalies --group-by project,session --period 2026-07
@@ -41,6 +42,6 @@ Session titles are Pi-native: `pi --name "Title"` at startup or `/name Title` in
 
 ## Metrics and limits
 
-Input, cache read, cache write, output, reasoning, total tokens, Pi-recorded cost, assistant turns and technical tool-error signals are available in aggregate output. Costs are estimates, not provider invoice reconciliation. Date filtering uses message timestamps, not file mtimes. Herdr children persisted as their own Pi session files are linked from the parent's `piSession.path` and classified by their persisted profile name; embedded current child messages are recursively included once. Old legacy payload shapes are intentionally unsupported.
+Input, cache read, cache write, output, reasoning, total tokens, Pi-recorded cost, assistant turns and technical tool-error signals are available in aggregate output. `--detailed` adds Pi-recorded `costInput`, `costCacheRead`, `costCacheWrite`, and `costOutput` alongside total cost in text, JSON, and CSV; it works with text subtotals. Costs are estimates, not provider invoice reconciliation. Date filtering uses message timestamps, not file mtimes. Herdr children persisted as their own Pi session files are linked from the parent's `piSession.path` and classified by their persisted profile name; embedded current child messages are recursively included once. Old legacy payload shapes are intentionally unsupported.
 
 JSON is content-safe aggregate metadata/metrics. CSV permits exactly one grouping level so it stays a flat table.
