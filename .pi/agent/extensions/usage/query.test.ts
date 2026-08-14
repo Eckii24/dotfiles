@@ -12,9 +12,20 @@ describe("parseUsageQuery", () => {
 		expect(q.groupBy).toEqual(["session", "agent", "model"]);
 		expect(q.range.label).toBe("2026-07");
 	});
-	it("parses thread as a hierarchy dimension", () => {
-		const q = parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent,session"]);
+	it("parses comma-separated subtotal dimensions", () => {
+		const q = parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent,session", "--sum", "agent,thread"]);
 		expect(q.groupBy).toEqual(["thread", "agent", "session"]);
+		expect(q.sums).toEqual(["agent", "thread"]);
+	});
+
+	it("rejects subtotal dimensions without descendants or grouping", () => {
+		expect(() => parseUsageQuery(["pi", "--usage", "--sum", "thread"])).toThrow("--group-by");
+		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent", "--sum", "agent"])).toThrow("descendant");
+	});
+
+	it("rejects unsupported subtotal output and repeated selectors", () => {
+		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent", "--sum", "thread", "--format", "json"])).toThrow("text only");
+		expect(() => parseUsageQuery(["pi", "--usage", "--group-by", "thread,agent,session", "--sum", "thread", "--sum", "agent"])).toThrow("specified once");
 	});
 
 	it("rejects old mode syntax and invalid duplicate groups", () => {

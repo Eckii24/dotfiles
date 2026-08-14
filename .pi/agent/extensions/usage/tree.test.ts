@@ -15,4 +15,20 @@ describe("renderTreeTable", () => {
 		expect(report).not.toContain("undefined");
 		expect(report.split("\n")[0]!.split(/ {2,}/).slice(-9)).toEqual(["Sessions", "Turns", "Input", "C.Read", "C.Write", "Output", "Reason", "Cost", "Cache"]);
 	});
+	it("renders post-order subtotals without separating items from their sum", () => {
+		const leaf = (label: string, cost: number): TreeNode => ({ key: label, label, cost, input: 1, cacheRead: 0, cacheWrite: 0, output: 1, reasoning: 0, turns: 1, uniqueSessions: 1, cacheReadRate: 0, children: [] });
+		const worker: TreeNode = { ...leaf("worker", 3), children: [leaf("scout", 1), leaf("review", 2)] };
+		const main: TreeNode = { ...leaf("main", 4), children: [leaf("main-session", 4)] };
+		const thread: TreeNode = { ...leaf("Thread A", 7), children: [worker, main] };
+		const report = renderTreeTable([thread], ["thread", "agent", "session"], 20, ["agent", "thread"]);
+		const lines = report.split("\n");
+		const scout = lines.findIndex((line) => line.includes("scout"));
+		const workerTotal = lines.findIndex((line) => line.includes("worker Σ"));
+		const threadTotal = lines.findIndex((line) => line.includes("Thread A Σ"));
+		expect(scout).toBeGreaterThan(0);
+		expect(workerTotal).toBe(scout + 2);
+		expect(lines[workerTotal + 1]).toBe("");
+		expect(lines[workerTotal + 2]).toContain("main-session");
+		expect(threadTotal).toBe(lines.length - 1);
+	});
 });

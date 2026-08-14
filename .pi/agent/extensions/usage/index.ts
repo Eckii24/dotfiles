@@ -29,7 +29,7 @@ async function run(): Promise<void> {
 		const tree = usageTree(events, query.range.startMs, query.range.endMs, query.groupBy, query.sortBy, query.order);
 		if (query.format === "json") process.stdout.write(`${JSON.stringify({ schemaVersion: 1, range: query.range, groupBy: query.groupBy, anomalies: query.anomalies, dataQuality: quality, tree }, null, 2)}\n`);
 		else if (query.format === "csv") throw new Error("[--usage] CSV supports one --group-by level only.");
-		else process.stdout.write(`${anomalyTitle || "Pi usage"} (${query.range.label})\n${renderTreeTable(tree, query.groupBy, query.limit)}\n`);
+		else process.stdout.write(`${anomalyTitle || "Pi usage"} (${query.range.label})\n${renderTreeTable(tree, query.groupBy, query.limit, query.sums)}\n`);
 		return;
 	}
 	const group = query.groupBy[0] ?? (query.anomalies ? "session" : "model");
@@ -40,7 +40,7 @@ async function run(): Promise<void> {
 }
 
 export default async function (pi: ExtensionAPI) {
-	for (const [name, type] of [["usage", "string"], ["period", "string"], ["from", "string"], ["to", "string"], ["last", "string"], ["group-by", "string"], ["format", "string"], ["sort", "string"], ["order", "string"], ["limit", "string"], ["anomalies", "boolean"]] as const) pi.registerFlag(name, { description: "Usage analytics selector; use with --usage.", type });
+	for (const [name, type] of [["usage", "string"], ["period", "string"], ["from", "string"], ["to", "string"], ["last", "string"], ["group-by", "string"], ["sum", "string"], ["format", "string"], ["sort", "string"], ["order", "string"], ["limit", "string"], ["anomalies", "boolean"]] as const) pi.registerFlag(name, { description: "Usage analytics selector; use with --usage.", type });
 	if (!process.argv.some((arg) => arg === "--usage" || arg.startsWith("--usage="))) return;
 	try { await run(); process.exit(0); }
 	catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exit(1); }

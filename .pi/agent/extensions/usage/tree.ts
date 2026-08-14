@@ -1,4 +1,4 @@
-import { DATA_HEADERS, formatToken, tableDataCells } from "./render.js";
+import { DATA_HEADERS, tableDataCells } from "./render.js";
 import type { GroupBy, SortOrder, UsageSort } from "./types.js";
 import type { UsageEvent } from "./session-reader.js";
 
@@ -18,6 +18,7 @@ export interface TreeNode {
 }
 
 type InternalTreeNode = TreeNode & { sessionIds: Set<string> };
+const sessions = new WeakMap<TreeNode, Set<string>>();
 
 function value(event: UsageEvent, group: GroupBy): string {
 	if (group === "day") { const d = new Date(event.timestampMs); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -61,25 +62,41 @@ export function usageTree(events: UsageEvent[], startMs: number, endMs: number, 
 		.sort((a, b) => sign * (score(a, sort) - score(b, sort)) || a.label.localeCompare(b.label))
 		.map((node) => {
 			const prompt = node.input + node.cacheRead + node.cacheWrite;
-			return { key: node.key, label: node.label, cost: node.cost, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, turns: node.turns, uniqueSessions: node.sessionIds.size, cacheReadRate: prompt ? node.cacheRead / prompt : undefined, children: finalize(node.children as InternalTreeNode[]) };
+			const output = { key: node.key, label: node.label, cost: node.cost, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, turns: node.turns, uniqueSessions: node.sessionIds.size, cacheReadRate: prompt ? node.cacheRead / prompt : undefined, children: finalize(node.children as InternalTreeNode[]) };
+			sessions.set(output, node.sessionIds);
+			return output;
 		});
 	return finalize([...root.values()]);
 }
 
 function title(group: GroupBy): string { return group === "day" ? "Date" : group[0]!.toUpperCase() + group.slice(1); }
+function nodeSessions(node: TreeNode): Set<string> { return sessions.get(node) ?? new Set(Array.from({ length: node.uniqueSessions }, (_, index) => `${node.key}:${index}`)); }
+function aggregate(node: TreeNode, children: TreeNode[]): TreeNode {
+	if (!children.length) return node;
+	const ids = new Set<string>(); for (const child of children) for (const id of nodeSessions(child)) ids.add(id);
+	const output: TreeNode = { ...node, children, cost: children.reduce((sum, child) => sum + child.cost, 0), input: children.reduce((sum, child) => sum + child.input, 0), cacheRead: children.reduce((sum, child) => sum + child.cacheRead, 0), cacheWrite: children.reduce((sum, child) => sum + child.cacheWrite, 0), output: children.reduce((sum, child) => sum + child.output, 0), reasoning: children.reduce((sum, child) => sum + child.reasoning, 0), turns: children.reduce((sum, child) => sum + child.turns, 0), uniqueSessions: ids.size };
+	const prompt = output.input + output.cacheRead + output.cacheWrite; output.cacheReadRate = prompt ? output.cacheRead / prompt : undefined; sessions.set(output, ids);
+	return output;
+}
 
-export function renderTreeTable(nodes: TreeNode[], groups: GroupBy[], limit: number): string {
+export function renderTreeTable(nodes: TreeNode[], groups: GroupBy[], limit: number, subtotalGroups: GroupBy[] = []): string {
+	const visible = (node: TreeNode): TreeNode => aggregate(node, node.children.slice(0, limit).map(visible));
 	const rows: string[][] = [];
-	const visit = (items: TreeNode[], path: string[]) => {
-		for (const node of items.slice(0, limit)) {
+	const visit = (items: TreeNode[], path: string[], depth: number) => {
+		const visibleItems = items.slice(0, limit).map(visible);
+		for (const [index, node] of visibleItems.entries()) {
 			const next = [...path, node.label];
-			if (node.children.length) visit(node.children, next);
+			if (node.children.length) visit(node.children, next, depth + 1);
 			else rows.push([...next, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, cost: node.cost, cacheReadRate: node.cacheReadRate })]);
+			if (!subtotalGroups.includes(groups[depth]!)) continue;
+			const labels = [...next]; labels[depth] = `${node.label} Σ`; while (labels.length < groups.length) labels.push("");
+			rows.push([...labels, ...tableDataCells({ uniqueSessions: node.uniqueSessions, assistantTurns: node.turns, input: node.input, cacheRead: node.cacheRead, cacheWrite: node.cacheWrite, output: node.output, reasoning: node.reasoning, cost: node.cost, cacheReadRate: node.cacheReadRate })]);
+			if (index < visibleItems.length - 1) rows.push([]);
 		}
 	};
-	visit(nodes, []);
+	visit(nodes, [], 0);
 	const headers = [...groups.map(title), ...DATA_HEADERS];
 	const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => (row[index] ?? "").length)));
-	const format = (row: string[]) => row.map((value, index) => index === 0 ? value.padEnd(widths[index]!) : value.padStart(widths[index]!)).join("  ");
+	const format = (row: string[]) => row.length ? row.map((value, index) => index === 0 ? value.padEnd(widths[index]!) : value.padStart(widths[index]!)).join("  ") : "";
 	return [format(headers), widths.map((width) => "-".repeat(width)).join("  "), ...rows.map(format)].join("\n");
 }
