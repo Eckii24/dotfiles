@@ -22,7 +22,7 @@ export const MAX_SANDBOX_SESSION_POLICY_BYTES = 64 * 1024;
 export type PiLaunchInput = {
 	piExecutable: string;
 	cwd: string;
-	profile: Pick<AgentProfile, "name" | "model" | "tools" | "systemPrompt">;
+	profile: Pick<AgentProfile, "name" | "model" | "thinking" | "tools" | "systemPrompt">;
 	rootRunId: string;
 	leafRunId: string;
 	parentRootRunId?: string;
@@ -82,6 +82,7 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	const argv = [
 		"--name", name,
 		...(input.profile.model ? ["--model", input.profile.model] : []),
+		...(input.profile.thinking ? ["--thinking", input.profile.thinking] : []),
 		...(input.profile.tools ? ["--tools", input.profile.tools.join(",")] : []),
 		"--append-system-prompt", promptFilePath,
 	];

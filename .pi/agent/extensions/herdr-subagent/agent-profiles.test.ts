@@ -37,10 +37,10 @@ function withAgentDir<T>(agentDir: string, run: () => T): T {
 	}
 }
 
-function profile(agent: { name: string; description: string; tools?: string[]; model?: string; systemPrompt: string; source: string; filePath: string }) {
+function profile(agent: { name: string; description: string; tools?: string[]; model?: string; thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"; systemPrompt: string; source: string; filePath: string }) {
 	return {
 		name: agent.name, description: agent.description, ...(agent.tools === undefined ? {} : { tools: agent.tools }),
-		...(agent.model === undefined ? {} : { model: agent.model }), systemPrompt: agent.systemPrompt,
+		...(agent.model === undefined ? {} : { model: agent.model }), ...(agent.thinking === undefined ? {} : { thinking: agent.thinking }), systemPrompt: agent.systemPrompt,
 		source: agent.source, filePath: agent.filePath.slice(agent.filePath.lastIndexOf("/agents/") + 1),
 	};
 }
@@ -75,7 +75,7 @@ test("golden parity preserves user, project, and both discovery semantics", () =
 	}
 });
 
-test("orchestrator profile parses with exact nested tools and large model", () => {
+test("orchestrator profile parses with exact nested tools, medium model, and high thinking", () => {
 	const { root, agentDir, cwd } = setup();
 	try {
 		for (const name of ["orchestrator", "worker", "scout"]) cpSync(join(import.meta.dir, "..", "..", "agents", `${name}.md`), join(agentDir, "agents", `${name}.md`));
@@ -85,9 +85,27 @@ test("orchestrator profile parses with exact nested tools and large model", () =
 			expect(agent).toMatchObject({
 				name: "orchestrator",
 				tools: ["subagent", "subagent_control"],
-				model: "openai-codex/large-model",
+				model: "openai-codex/medium-model",
+				thinking: "high",
 			});
 			for (const name of ["worker", "scout"]) expect(agents.find(value => value.name === name)?.tools).not.toContain("subagent");
+		});
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("parses supported profile thinking and ignores malformed or unsupported thinking", () => {
+	const { root, agentDir, cwd } = setup();
+	try {
+		writeFileSync(join(agentDir, "agents", "thinking-valid.md"), "---\nname: thinking-valid\ndescription: Valid thinking profile\nthinking: high\n---\nValid body.\n");
+		writeFileSync(join(agentDir, "agents", "thinking-invalid.md"), "---\nname: thinking-invalid\ndescription: Invalid thinking profile\nthinking: max\n---\nInvalid body.\n");
+		writeFileSync(join(agentDir, "agents", "thinking-malformed.md"), "---\nname: thinking-malformed\ndescription: Malformed thinking profile\nthinking: 3\n---\nMalformed body.\n");
+		withAgentDir(agentDir, () => {
+			const agents = discoverAgentProfiles(cwd, "user").agents;
+			expect(agents.find(agent => agent.name === "thinking-valid")).toMatchObject({ thinking: "high" });
+			expect(agents.find(agent => agent.name === "thinking-invalid")).toBeUndefined();
+			expect(agents.find(agent => agent.name === "thinking-malformed")).toBeUndefined();
 		});
 	} finally {
 		rmSync(root, { recursive: true, force: true });

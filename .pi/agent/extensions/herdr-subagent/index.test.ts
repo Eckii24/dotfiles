@@ -47,13 +47,13 @@ const params = (more = {}) => ({ group: "x", agent: "scout", task: "task", cwd: 
 
 test("prompt and tool description prevent accidental same-cwd parallel writers", () => {
 	const guidance = formatSubagentPrompt([
-		{ ...profile("user", ["read", "edit"]), name: "worker", description: "Makes changes." },
-		{ ...profile("user", ["read", "bash"]), name: "scout", description: "Maps code." },
+		{ ...profile("user", ["read", "edit"]), name: "worker", description: "Makes changes.", model: "openai-codex/terra", thinking: "medium" },
+		{ ...profile("user", ["read", "bash"]), name: "scout", description: "Maps code.", thinking: "low" },
 		{ name: "default", description: "Uses Pi defaults.", systemPrompt: "body", source: "user", filePath: "/default.md" },
 	] as any);
-	expect(guidance).toContain("worker [writer: edit/write/bash]");
-	expect(guidance).toContain("scout [writer: edit/write/bash]");
-	expect(guidance).toContain("default [writer: Pi default tools]");
+	expect(guidance).toContain("worker [writer: edit/write/bash; model: openai-codex/terra; thinking: medium]");
+	expect(guidance).toContain("scout [writer: edit/write/bash; model: inherit; thinking: low]");
+	expect(guidance).toContain("default [writer: Pi default tools; model: inherit; thinking: inherit]");
 	expect(guidance).toContain("Profiles omitting `tools` use Pi defaults and are writers");
 	expect(guidance).toContain("Profiles declaring `edit`, `write`, or `bash` are also writers");
 	expect(guidance).toContain("Omit `cwd` unless an exact existing path is known");

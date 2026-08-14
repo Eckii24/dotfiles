@@ -239,7 +239,7 @@ function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 	if (!leaf.error && life.status !== "succeeded" && life.status !== "blocked") leaf.error = makeError(lifecycleCode(life.status), life.reason ?? `Child ${life.status}.`);
 }
 export function formatSubagentPrompt(agents: readonly AgentProfile[]): string {
-	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? agent.tools === undefined ? "writer: Pi default tools" : "writer: edit/write/bash" : "no writer tools"}]: ${agent.description}`).join("\n")}` : "";
+	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? agent.tools === undefined ? "writer: Pi default tools" : "writer: edit/write/bash" : "no writer tools"}; model: ${agent.model ?? "inherit"}; thinking: ${agent.thinking ?? "inherit"}]: ${agent.description}`).join("\n")}` : "";
 	return `## Subagents
 Use \`subagent\` only inside managed Pi for interactive child panes.
 Before parallel launch:

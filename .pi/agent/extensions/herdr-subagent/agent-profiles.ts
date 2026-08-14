@@ -6,12 +6,16 @@ import { CONFIG_DIR_NAME, getAgentDir, parseFrontmatter } from "@earendil-works/
 import { resolveModelReference } from "../shared/model-reference.js";
 
 export type AgentScope = "user" | "project" | "both";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
 
 export interface AgentProfile {
 	name: string;
 	description: string;
 	tools?: string[];
 	model?: string;
+	thinking?: ThinkingLevel;
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
@@ -63,6 +67,9 @@ function loadProfilesFromDir(dir: string, source: AgentProfile["source"]): Agent
 		const modelValue = frontmatter.model;
 		if (modelValue !== undefined && (typeof modelValue !== "string" || !modelValue.trim())) continue;
 
+		const thinkingValue = frontmatter.thinking;
+		if (thinkingValue !== undefined && (typeof thinkingValue !== "string" || !THINKING_LEVELS.has(thinkingValue as ThinkingLevel))) continue;
+
 		let model: string | undefined;
 		try {
 			model = typeof modelValue === "string" ? resolveModelReference(modelValue.trim()) : undefined;
@@ -70,7 +77,8 @@ function loadProfilesFromDir(dir: string, source: AgentProfile["source"]): Agent
 			continue;
 		}
 
-		agents.push({ name: name.trim(), description: description.trim(), tools, model, systemPrompt: body, source, filePath });
+		const thinking = thinkingValue as ThinkingLevel | undefined;
+		agents.push({ name: name.trim(), description: description.trim(), tools, model, thinking, systemPrompt: body, source, filePath });
 	}
 	return agents;
 }

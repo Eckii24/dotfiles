@@ -28,18 +28,18 @@ function fixtureRoot() {
 function input(cwd: string, extra: Record<string, unknown> = {}) {
 	return {
 		piExecutable: process.execPath, cwd, rootRunId: "root-123", leafRunId: "leaf-456789", nestingDepth: 0, group: "safe group",
-		profile: { name: "orchestrator", model: "openai-codex/gpt-test", tools: ["subagent", "subagent_control"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
+		profile: { name: "orchestrator", model: "openai-codex/gpt-test", thinking: "high", tools: ["subagent", "subagent_control"], systemPrompt: "PRIVATE PROFILE BODY\nDo not leak." },
 		...extra,
 	};
 }
 
-test("builds persisted interactive argv with exact model and tools, never task or prompt body", async () => {
+test("builds persisted interactive argv with exact model, thinking, and tools, never task or prompt body", async () => {
 	const value = fixtureRoot();
 	try {
 		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { SECRET: "must-not-inherit" } });
 		expect(launch.executable).toBe(process.execPath);
 		expect(launch.cwd).toBe(realpathSync(value.cwd));
-		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--tools", "subagent,subagent_control", "--append-system-prompt", launch.promptFilePath]);
+		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--thinking", "high", "--tools", "subagent,subagent_control", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv).not.toContain("--mode");
 		expect(launch.argv).not.toContain("rpc");
 		expect(launch.argv).not.toContain("--print");
@@ -127,6 +127,16 @@ test("worker/scout-like profiles receive no nested tools, and cwd is canonicaliz
 		expect(launch.cwd).toBe(realpathSync(value.cwd));
 		expect(launch.argv).toEqual(["--name", launch.name, "--tools", "read", "--append-system-prompt", launch.promptFilePath]);
 		expect(launch.argv.join(" ")).not.toContain("herdr_subagent");
+		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("omits thinking argv when a profile does not set it", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd, { profile: { name: "reader", tools: ["read"], systemPrompt: "body" } }), { runtimeRoot: value.runtime });
+		expect(launch.argv).toEqual(["--name", launch.name, "--tools", "read", "--append-system-prompt", launch.promptFilePath]);
+		expect(launch.argv).not.toContain("--thinking");
 		await launch.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });

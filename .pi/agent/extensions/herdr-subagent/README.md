@@ -142,6 +142,7 @@ tools:
   - read
   - bash
 model: anthropic/claude-sonnet-4-5
+thinking: medium
 ---
 
 Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
@@ -153,9 +154,12 @@ Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
 | `description` | ja | Wird dem aufrufenden Modell im Prompt angezeigt |
 | `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben; ohne Feld nutzt Pi seine mutation-fähigen Default-Tools |
 | `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert |
+| `thinking` | nein | Einer von `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; wird als `pi --thinking …` an Child übergeben. Ohne Feld bleibt Pi-Default erhalten. |
 | Markdown-Body | nein | temporär als Datei geschrieben und via `--append-system-prompt <datei>` angehängt |
 
 Ungültige/unlesbare Profile werden bei Discovery verworfen. Jedes Item entdeckt Profile relativ zu seinem kanonischen CWD; parallele Items können daher verschiedene Projektprofile wählen. Ausgewählte Projektprofile werden über `source` und kanonischen Profilpfad dedupliziert und standardmäßig in einer gemeinsamen UI-Bestätigung bestätigt. In Non-UI-Modi schlägt jede solche Auswahl mit `project_agent_not_confirmed` fehl; nur explizites `confirmProjectAgents: false` umgeht dies.
+
+`thinking` ist eine Rollenentscheidung, keine Vererbung vom Parent: Ein Mode kann den Parent auf Terra/high setzen, während Scout, Worker und Reviewer ihren eigenen expliziten Profilwert erhalten. So wird weder ein globaler Default noch ein langlebiger Parent-Kontext versehentlich zur Kostenpolicy jedes Childs.
 
 Temporäre Prompt-Dateien liegen in einem neuen `0700`-Runtime-Unterordner, werden exklusiv als `0600` erzeugt und nach stabiler Child-Bereitschaft oder Startfehler gelöscht.
 
