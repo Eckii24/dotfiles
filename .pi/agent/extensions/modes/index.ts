@@ -34,7 +34,7 @@ function describeModeValue(value: string | string[] | undefined): string {
 }
 
 function buildModePrompt(mode: ModeDefinition, systemPrompt: string): string {
-	return `${systemPrompt}\n\n<active_mode command="${mode.command}" model="${mode.model}">\n${mode.systemPrompt}\n</active_mode>`;
+	return `${systemPrompt}\n\n<active_mode command="${mode.command}">\n${mode.systemPrompt}\n</active_mode>`;
 }
 
 async function activateMode(

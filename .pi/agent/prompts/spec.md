@@ -25,7 +25,7 @@ Default to the lightest workflow that can succeed.
    - output path if known
    - current-work path only in tracked mode
 3. Read back the spec result.
-4. If only small wording/scope fixes are needed, edit directly instead of re-running the full loop.
+4. If only minor wording/scope fixes are needed, edit directly instead of re-running the full loop.
 5. Tracked mode only:
    - update `.ai/current-work.md` with spec path, current state, next restart step
    - ask about archive only if this is genuinely tracked work

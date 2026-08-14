@@ -26,7 +26,7 @@ Use live/evidence gates only where they retire a real uncertainty. A failed gate
 
 1. Resolve source: approved bounded spec or direct request.
 2. Read back plan result.
-3. Fix small wording/scope defects directly; do not restart planning loop.
+3. Fix minor wording/scope defects directly; do not restart planning loop.
 4. In tracked mode, update anchor only with plan path, phase, acceptance target, and next restart step.
 
 ## Final summary

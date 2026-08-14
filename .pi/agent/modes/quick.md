@@ -1,6 +1,6 @@
 ---
 command: quick
-description: Direct small work with Luna and normal local tools
+description: Direct, bounded local work
 model: "@small"
 tools: [read, grep, find, ls, edit, write, bash]
 thinking: low

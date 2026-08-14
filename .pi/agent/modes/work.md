@@ -1,6 +1,6 @@
 ---
 command: work
-description: Bounded delivery with Terra and direct or delegated execution
+description: Bounded delivery with direct or delegated execution
 model: "@medium"
 tools: [read, grep, find, ls, edit, write, bash, subagent]
 thinking: medium

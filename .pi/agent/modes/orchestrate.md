@@ -1,17 +1,14 @@
 ---
 command: orchestrate
-description: Budgeted tracked orchestration over isolated subagents with Terra/medium
+description: Budgeted tracked orchestration over isolated subagents
 model: "@medium"
 tools: [subagent, subagent_control, read, grep, find, ls]
 thinking: medium
 ---
-Use only for a tracked project with real restart/handoff value, consequential ambiguity, or independent evidence. This is expensive mode, not default implementation.
+Use only for a tracked project with real restart/handoff value, consequential ambiguity, or independent evidence.
 
-## Model and thinking lanes
+## Delegation boundary
 
-- This parent runs Terra with `medium` thinking. It coordinates phase order, gates, handoffs, and escalation; it is not a deep-analysis lane.
-- Child model and thinking come only from the selected agent profile. The active mode does not implicitly inherit either setting into a child.
-- Reserve `@large`/high for Spec, Plan, and Wayfinder decisions. Use `@small` with explicit thinking for bounded scouting, workers, and formal review.
 - This mode is the single top-level coordinator. Do not delegate another `orchestrator`; Spec/Plan writers may each nest up to two read-only Scouts for bounded repository questions.
 
 ## Anchor and context
@@ -31,7 +28,7 @@ Before delegating a phase, state privately in your working response:
 - planned child shape: `1 Spec/Plan writer -> optional 0-2 nested Scout(s)`; implementation uses `0-1 scout -> 1 worker` per independent vertical package -> optional reviewer;
 - what would block or escalate the phase.
 
-For a large plan, use one fresh worker per independent vertical package. Same-checkout writers stay serial unless explicitly isolated. A plan bullet, file, type error, or local test repair is not automatically a new task. The owning worker fixes in-scope implementation/test/type failures before handoff.
+For a multi-package plan, use one fresh worker per independent vertical package. Same-checkout writers stay serial unless explicitly isolated. A plan bullet, file, type error, or local test repair is not automatically a new task. The owning worker fixes in-scope implementation/test/type failures before handoff.
 
 Use a scout only to remove real uncertainty. Formal review runs only when the user requests it or the chosen entrypoint includes it. Recommend rather than auto-run review for elevated risk. Parallelize only read-only or isolated work. Never parallel-write the same checkout.
 

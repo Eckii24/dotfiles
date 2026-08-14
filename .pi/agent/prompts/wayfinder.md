@@ -1,5 +1,5 @@
 ---
-description: Map a large or unclear initiative before a spec; thin entrypoint over wayfinder
+description: Map a broad or unclear initiative before a spec; thin entrypoint over wayfinder
 ---
 
 Read and follow `~/.agents/skills/wayfinder/SKILL.md`.
