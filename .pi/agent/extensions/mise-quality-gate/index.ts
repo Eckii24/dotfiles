@@ -1,10 +1,13 @@
-import { matchesGlob } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, matchesGlob, relative, resolve } from "node:path";
 import {
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
 const QUALITY_TASK = "verify";
+const PROJECT_ROOT_RESOLVER_TASK = "pi:quality-gate:project-root";
+const PROJECT_ROOT_RESOLVER_SOURCE = resolve(homedir(), ".config/mise/config.toml");
 const QUALITY_TIMEOUT_MS = 10 * 60 * 1000;
 const REQUIRED_PROJECT_TASKS = ["format", "lint", "build", "test"];
 const INCLUDE_ENV = "PI_QUALITY_GATE_INCLUDE";
@@ -103,6 +106,43 @@ async function relevantGitPaths(
   return [...paths].sort();
 }
 
+function isPathInside(repoRoot: string, candidate: string): boolean {
+  const relativePath = relative(resolve(repoRoot), resolve(repoRoot, candidate));
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+async function resolveProjectRoot(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  repoRoot: string,
+): Promise<{ projectRoot: string } | { reason: "unavailable" | "outside-repository" | "overridden" }> {
+  const info = await pi.exec("mise", ["tasks", "info", "--json", PROJECT_ROOT_RESOLVER_TASK], {
+    cwd: ctx.cwd,
+    signal: ctx.signal,
+    timeout: 2_000,
+  });
+  if (info.code !== 0) return { reason: "unavailable" };
+
+  try {
+    if (JSON.parse(info.stdout).source !== PROJECT_ROOT_RESOLVER_SOURCE) return { reason: "overridden" };
+  } catch {
+    return { reason: "unavailable" };
+  }
+
+  const task = await pi.exec("mise", ["run", "--quiet", "--output", "interleave", PROJECT_ROOT_RESOLVER_TASK], {
+    cwd: ctx.cwd,
+    signal: ctx.signal,
+    timeout: 2_000,
+    env: { MISE_TASK_RUN_AUTO_INSTALL: "false" },
+  });
+  if (task.code !== 0) return { reason: "unavailable" };
+
+  const projectRoot = task.stdout.trim();
+  if (!projectRoot) return { reason: "unavailable" };
+  if (!isPathInside(repoRoot, projectRoot)) return { reason: "outside-repository" };
+  return { projectRoot };
+}
+
 async function isProjectTask(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
@@ -119,7 +159,7 @@ async function isProjectTask(
 
   try {
     const source = JSON.parse(task.stdout).source;
-    return typeof source === "string" && (source === repoRoot || source.startsWith(`${repoRoot}/`));
+    return typeof source === "string" && isPathInside(repoRoot, source);
   } catch {
     return false;
   }
@@ -172,19 +212,8 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       }
       const repoRoot = root.stdout.trim();
 
-      const target = await pi.exec("dotnet-in-repo", ["--probe"], {
-        cwd: repoRoot,
-        signal: ctx.signal,
-        timeout: 2_000,
-      });
-      const projectRoot = target.stdout.trim();
-      if (target.code !== 0 || !projectRoot) {
-        setAvailabilityStatus(ctx, "disabled — dotnet-in-repo could not resolve a project root");
-        return;
-      }
-
       const mise = await pi.exec("mise", ["--version"], {
-        cwd: projectRoot,
+        cwd: ctx.cwd,
         signal: ctx.signal,
         timeout: 2_000,
       });
@@ -192,6 +221,20 @@ export default function miseQualityGate(pi: ExtensionAPI) {
         setAvailabilityStatus(ctx, "disabled — mise is unavailable");
         return;
       }
+
+      const target = await resolveProjectRoot(pi, ctx, repoRoot);
+      if ("reason" in target) {
+        setAvailabilityStatus(
+          ctx,
+          target.reason === "outside-repository"
+            ? "disabled — mise resolved a project root outside this repository"
+            : target.reason === "overridden"
+              ? "disabled — global project-root resolver is overridden"
+              : "disabled — mise could not resolve a project root",
+        );
+        return;
+      }
+      const projectRoot = target.projectRoot;
 
       const resolvedPolicy = await resolvePolicy(pi, ctx, projectRoot);
       if ("reason" in resolvedPolicy) {

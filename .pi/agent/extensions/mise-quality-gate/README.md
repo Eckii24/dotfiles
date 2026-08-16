@@ -1,6 +1,6 @@
 # mise quality gate
 
-Deterministic Pi quality gate for convention-based .NET repositories.
+Deterministic Pi quality gate for repositories that expose a mise task contract.
 
 ```text
 Pi agent_end
@@ -18,13 +18,15 @@ The LLM never decides whether the gate should run.
 The extension enables itself once at `session_start` only when all conditions hold:
 
 1. Current directory is inside a Git repository.
-2. `dotnet-in-repo --probe` resolves a project or wrapper root.
-3. `mise` is available.
+2. `mise` is available.
+3. The protected global mise task `pi:quality-gate:project-root` resolves a project root inside that Git repository.
 4. `mise env --json` at that root resolves a valid `PI_QUALITY_GATE_INCLUDE` policy.
 5. The repository defines `format`, `lint`, `build`, and `test` tasks in a mise config file inside that repository.
 6. `verify` is resolvable.
 
 Global fallback tasks do **not** satisfy condition 5. This prevents accidentally running an arbitrary stack in a repository without an explicit local quality policy.
+
+Before Pi executes `pi:quality-gate:project-root`, it verifies that the task's source is exactly `~/.config/mise/config.toml`. A repository-local override disables the gate instead of running project-provided discovery code during session startup.
 
 The Pi UI shows the resulting state, for example:
 
@@ -40,15 +42,15 @@ A project `mise.toml` must be trusted by mise. If it is not trusted, `mise env -
 mise trust mise.toml
 ```
 
-## .NET setup
+## .NET example setup
 
-Global generic task orchestration lives in:
+The extension is stack-agnostic. This repository includes a .NET template as one example. Global generic task orchestration lives in:
 
 ```text
 ~/.config/mise/config.toml
 ```
 
-It provides `verify` and `verify:full`. Leaf tasks intentionally fail closed until a project defines them.
+It provides `pi:quality-gate:project-root`, `verify`, and `verify:full`. The protected resolver prints mise's `MISE_PROJECT_ROOT`; leaf tasks intentionally fail closed until a project defines them.
 
 Copy the .NET template into the project or wrapper root:
 
@@ -154,6 +156,9 @@ Redaction is defense in depth, not a complete secret-scanning guarantee. Command
 # Inspect resolved policy at the project or wrapper root.
 mise env --json
 
+# Resolve project root through the protected generic contract.
+mise run --quiet pi:quality-gate:project-root
+
 # Inspect task origin; leaf tasks must originate inside the repository.
 mise tasks info --json format
 mise tasks info --json lint
@@ -161,7 +166,7 @@ mise tasks info --json build
 mise tasks info --json test
 mise tasks info verify
 
-# Validate task graph without running .NET.
+# Validate task graph without running checks.
 mise tasks validate
 
 # Run the same default gate manually.
@@ -173,7 +178,7 @@ mise run --jobs 1 verify:full
 
 ## Non-goals
 
-- No automatic .NET SDK or tool installation.
+- No automatic SDK, runtime, or tool installation.
 - No formatting mutation during the automatic gate.
 - No integration tests in default `verify`.
-- No stack-agnostic activation yet: `dotnet-in-repo --probe` deliberately scopes this extension to .NET projects. The mise task contract itself is generic and can be reused by another stack-specific template later.
+- No stack-specific task implementation; projects own `format`, `lint`, `build`, `test`, and `verify`.

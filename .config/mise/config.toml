@@ -4,6 +4,12 @@ task.run_auto_install = false
 
 # Generic contract. A project-root mise.toml must override every leaf task.
 # The defaults fail closed, so a project cannot accidentally run the wrong stack.
+# Integrations use this to resolve the nearest mise project root without a
+# stack-specific helper.
+[tasks."pi:quality-gate:project-root"]
+description = "Print the current mise project root for the Pi quality gate"
+run = 'printf "%s\\n" "$MISE_PROJECT_ROOT"'
+
 [tasks.format]
 description = "Project formatting check (override in project root)"
 run = "printf 'Project must define task: format\\n' >&2; exit 2"
