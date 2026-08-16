@@ -8,8 +8,8 @@ Default to the lightest workflow that can succeed.
 
 1. Track only for real multi-session/restart value or explicit request; otherwise stay untracked.
 2. In tracked mode, follow `project-memory`; read only the relevant artifact sections.
-3. Delegate once to `plan-writer` with concise source, existing repository findings, repository paths, constraints, and output path. The writer may launch at most two nested, read-only `scout`s for independent, named repository questions; give it known context so it does not scout mechanically.
-5. Ask only blocking questions.
+3. Delegate once to `plan-writer` with concise source, findings, paths, constraints, and output path. Its profile owns the scout contract; scout only for named blocking questions.
+4. Ask only blocking questions.
 
 ## Plan contract
 

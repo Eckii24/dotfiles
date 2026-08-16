@@ -12,10 +12,10 @@ Use for code delivery. Optimize for evidence and signal density, not ceremony.
 | Mode | Use when | Default shape |
 |---|---|---|
 | Quick Task | Small/local, obvious scope | Direct work; no artifacts/subagents |
-| Bounded Delivery | Clear change across ~1-3 areas | One worker by default; `0-1 scout -> 1 worker -> optional review` |
+| Bounded Delivery | Clear change across ~1-3 areas | Direct work; delegate only at a real responsibility boundary |
 | Tracked Project | Multi-session, expensive restart/handoff, or explicitly requested | Phase contracts + `.ai/current-work.md` pointer |
 
-Default Quick/Bounded. Quick stays direct. Bounded uses one worker by default for nontrivial code work; direct execution only for obvious one-file, low-risk changes. Do not inherit a stale/completed/unrelated anchor.
+Default Quick/Bounded. Direct work is normal in both. Delegate only for independent evidence, a separately owned deliverable, isolated review, or a context boundary; file count, routine tests, and ordinary diagnosis are not enough. Do not inherit a stale/completed/unrelated anchor.
 
 ## Compact inputs
 
@@ -25,9 +25,7 @@ Use a scout only to answer a real uncertainty. Good output: exact paths, symbols
 
 ## Delivery shape
 
-Give one worker a coherent vertical slice with owned acceptance tests. A plan bullet, file, type error, or local repair is not automatically another delegation.
-
-The worker should implement, run relevant evals, and fix in-scope implementation/type/test failures before returning. It returns: status, changed paths, eval evidence, one decision/blocker, and one next action.
+When a real boundary exists, give one worker a coherent vertical slice with owned acceptance tests. A plan bullet, file, type error, or local repair is not automatically a boundary. The worker implements, evaluates, and fixes in-scope failures before returning a compact status packet.
 
 Parallelize only read-only or isolated work. Never share a mutable checkout between concurrent workers unless the caller explicitly provides safe isolation.
 
@@ -35,14 +33,8 @@ Parallelize only read-only or isolated work. Never share a mutable checkout betw
 
 For each phase state: objective, acceptance evidence, child shape, and escalation condition.
 
-- Default phase budget: `0-1 scout -> 1 worker -> optional 1 reviewer`.
-- For bounded code work, launch one worker by default. Direct execution is reserved for obvious one-file, low-risk changes.
-- More than three child runs in a phase needs an explicit evidence-based reason.
-- Global orchestration budget: 12 delegation calls or 60 minutes wall time per run, whichever comes first. Count scouts, workers, reviewers, follow-ups, and state updates.
-- At the global limit, collect any useful in-flight result, create a compact phase handoff, then stop before another delegation. Explicit user continuation starts a new budget.
-- After two repair handoffs for the same slice, stop. Synthesize root cause and revise the plan/spec or surface a blocker.
+- In tracked orchestration, the `/orchestrate` mode owns delegation budgets and stop rules; do not copy them into workers or entrypoints.
 - A live/evidence gate gets one diagnosis, one explicit decision, then one rerun. Do not create an artifact-edit chain around the gate.
-- Do not advance until previous phase acceptance evidence exists.
 - Formal review runs only when the user requests it or the chosen entrypoint includes it. For elevated risk, recommend review; do not auto-run or auto-fix it.
 
 ## Tracked-project integration

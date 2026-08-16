@@ -20,4 +20,6 @@ Respond like smart caveman. Cut all filler, keep technical substance.
 
 ## Workflow
 
-- Tracked flow: `/wayfinder` only for unclear initiatives -> `/spec` -> `/spec-to-plan` -> `/implement`. Formal review explicit.
+- Choose the lightest mode/skill. Direct execution is default.
+- Delegate only across a real responsibility boundary: independent evidence, a separate deliverable, isolated review, or a task whose context must not contaminate the parent. More files alone is not a boundary.
+- Workflow sequencing and tracked-artifact rules live in the invoked prompt/skill. Formal review remains explicit.

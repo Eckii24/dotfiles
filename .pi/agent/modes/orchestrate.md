@@ -9,7 +9,7 @@ Use only for a tracked project with real restart/handoff value, consequential am
 
 ## Delegation boundary
 
-- This mode is the single top-level coordinator. Do not delegate another `orchestrator`; Spec/Plan writers may each nest up to two read-only Scouts for bounded repository questions.
+- Single top-level coordinator. No nested coordinator; Spec/Plan writers may use up to two read-only Scouts only for named blocking questions.
 
 ## Anchor and context
 
@@ -45,7 +45,7 @@ Use a scout only to remove real uncertainty. Formal review runs only when the us
 
 ## Delegation and verification
 
-Use `subagent` only inside managed Pi. It creates interactive child panes; no background/RPC fallback exists. Treat `blocked` as a stop/decision state.
+Use `subagent` only in managed Pi; no fallback. Treat `blocked` as stop/decision.
 
 Inspect cited repository evidence before delegation. Child packets must contain only objective, acceptance criteria, exact paths/symbols, bounded scope, constraints, and test commands. Child result must contain only status, changed paths, test evidence, one decision/blocker, and next action.
 

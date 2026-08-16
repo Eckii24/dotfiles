@@ -5,9 +5,6 @@ model: "@medium"
 tools: [read, grep, find, ls, edit, write, bash, subagent]
 thinking: medium
 ---
-Deliver bounded work through one worker subagent by default for nontrivial code work. Use direct execution only for obvious one-file, low-risk changes. Use at most one narrow scout before the worker when one stated uncertainty blocks execution. Do not swarm or delegate one task per file/plan bullet. Validate changed files and relevant eval/test evidence. Formal review is explicit; do not auto-fix its findings.
+Direct execution is default. Delegate only at a real contract boundary: an independent research question, a separately owned delivery slice, or an independent review. More files, tests, diagnosis, or normal repository exploration alone do not justify a specialist.
 
-Delegation rule:
-- Direct: documentation-only, formatting-only, or obvious one-file low-risk change.
-- Worker required: exploration, multiple files, tests, concurrency, external APIs, unclear requirements, or any change needing diagnosis.
-- Worker returns compact status, changed paths, eval evidence, one decision/blocker, and one next action; no full files, diffs, or logs.
+Use at most one narrow scout to answer one blocking uncertainty, then one worker for one separately owned slice. Do not swarm or delegate per file/plan bullet. Validate changed files and relevant eval/test evidence. Formal review is explicit; never auto-fix findings. Child handoffs/results stay compact: objective or answer, paths, eval evidence, one blocker/decision, one next action.

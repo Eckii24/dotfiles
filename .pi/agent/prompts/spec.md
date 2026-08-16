@@ -11,8 +11,8 @@ Default to the lightest workflow that can succeed.
    - Track only when the work is clearly multi-session, there is real restart/handoff value, or the user explicitly wants `.ai/` artifacts.
 2. If tracked work is selected or a relevant `.ai/current-work.md` exists, read and follow `~/.agents/skills/project-memory/SKILL.md`.
 3. If `.ai/current-work.md` exists and is relevant to this exact task, read it. If stale/completed/unrelated, ignore it.
-4. Delegate once to `spec-writer` and rely on `~/.agents/skills/to-spec/SKILL.md` for the actual spec contract. The writer may launch at most two nested, read-only `scout`s for independent, named repository questions; give it known repository context so it does not scout mechanically.
-6. Ask only blocking questions. Prefer repository/context inspection and the existing `questionnaire` over unnecessary interviewing.
+4. Delegate once to `spec-writer`; its profile and `to-spec` own the spec and scout contract. Pass known repository context; scout only for named blocking questions.
+5. Ask only blocking questions. Prefer repository/context inspection and the existing `questionnaire`.
 
 ## Workflow
 
