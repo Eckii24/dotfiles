@@ -1,0 +1,143 @@
+#!/usr/bin/env zsh
+# Resolve the conventional .NET target for the current repository and run dotnet
+# through 1Password. This is the only project-discovery implementation used by
+# interactive Zsh, mise tasks, and Pi quality gates.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: dotnet-in-repo [dotnet-args...]
+       dotnet-in-repo --probe
+       dotnet-in-repo test-kind <unit|integration> [-- dotnet-test-args...]
+
+Target resolution:
+  1. DOTNET_IN_REPO_TARGET, when set
+  2. current directory, when it contains a solution or project
+  3. highest direct src/v<N> directory containing a solution or project
+
+The command runs dotnet through `op run`.
+EOF
+}
+
+has_dotnet_artifact() {
+  local directory="$1"
+  local -a matches
+  matches=(
+    "$directory"/*.sln(N)
+    "$directory"/*.slnx(N)
+    "$directory"/*.csproj(N)
+    "$directory"/*.fsproj(N)
+    "$directory"/*.vbproj(N)
+  )
+  (( ${#matches[@]} > 0 ))
+}
+
+resolve_target_dir() {
+  local root="$1"
+  local target=""
+  local highest_version=-1
+  local version_dir version_name version_number
+
+  if [[ -n "${DOTNET_IN_REPO_TARGET:-}" ]]; then
+    if [[ "$DOTNET_IN_REPO_TARGET" = /* ]]; then
+      target="$DOTNET_IN_REPO_TARGET"
+    else
+      target="$root/$DOTNET_IN_REPO_TARGET"
+    fi
+    [[ -d "$target" ]] || { print -u2 -- "DOTNET_IN_REPO_TARGET is not a directory: $target"; return 1; }
+    has_dotnet_artifact "$target" || { print -u2 -- "DOTNET_IN_REPO_TARGET has no direct .NET artifact: $target"; return 1; }
+    print -r -- "$target"
+    return
+  fi
+
+  if has_dotnet_artifact "$root"; then
+    print -r -- "$root"
+    return
+  fi
+
+  for version_dir in "$root"/src/v<->(N/); do
+    has_dotnet_artifact "$version_dir" || continue
+    version_name="${version_dir:t}"
+    version_number="${version_name#v}"
+    if (( version_number > highest_version )); then
+      highest_version=$version_number
+      target="$version_dir"
+    fi
+  done
+
+  [[ -n "$target" ]] || { print -u2 -- "No .NET solution or project found in $root or direct src/v<N> directories"; return 1; }
+  print -r -- "$target"
+}
+
+run_dotnet() {
+  local target_dir="$1"
+  shift
+  local -a op_run_args
+  op_run_args=( run -- )
+  if [[ -t 1 && -t 2 ]]; then
+    op_run_args=( run --no-masking -- )
+  fi
+
+  (
+    cd "$target_dir"
+    command op "${op_run_args[@]}" dotnet "$@"
+  )
+}
+
+run_test_kind() {
+  local target_dir="$1"
+  local kind="$2"
+  shift 2
+  local suffix
+  case "$kind" in
+    unit) suffix="UnitTests" ;;
+    integration) suffix="IntegrationTests" ;;
+    *) print -u2 -- "Unknown test kind: $kind (expected unit or integration)"; return 2 ;;
+  esac
+
+  local -a solutions projects
+  solutions=( "$target_dir"/*.sln(N) "$target_dir"/*.slnx(N) )
+  (( ${#solutions[@]} == 1 )) || {
+    print -u2 -- "test-kind requires exactly one direct solution in $target_dir; found ${#solutions[@]}"
+    return 1
+  }
+
+  local solution_stem="${solutions[1]:t:r}"
+  projects=( "${(@f)$(find "$target_dir" -type f -name "${solution_stem}.${suffix}.csproj" -print)}" )
+  (( ${#projects[@]} == 1 )) || {
+    print -u2 -- "Expected exactly one ${solution_stem}.${suffix}.csproj below $target_dir; found ${#projects[@]}"
+    return 1
+  }
+
+  run_dotnet "$target_dir" test "$projects[1]" "$@"
+}
+
+main() {
+  if [[ "${1:-}" == "--wrapper-help" || "${1:-}" == "--help" ]]; then
+    usage
+    return 0
+  fi
+
+  local root="$PWD"
+  local target_dir
+  target_dir="$(resolve_target_dir "$root")"
+
+  if [[ "${1:-}" == "--probe" ]]; then
+    print -r -- "$target_dir"
+    return 0
+  fi
+
+  if [[ "${1:-}" == "test-kind" ]]; then
+    shift
+    local kind="${1:-}"
+    [[ -n "$kind" ]] || { usage >&2; return 2; }
+    shift
+    [[ "${1:-}" == "--" ]] && shift
+    run_test_kind "$target_dir" "$kind" "$@"
+    return
+  fi
+
+  run_dotnet "$target_dir" "$@"
+}
+
+main "$@"
