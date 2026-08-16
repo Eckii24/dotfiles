@@ -1,0 +1,91 @@
+#compdef h
+
+# Completion for the Finance wrapper at $FINANCE_ROOT/bin/h.
+# It deliberately covers only the everyday hledger surface and gets dynamic
+# values through the wrapper, so account completion uses the correct journal.
+
+_h_wrapper_values() {
+  local source_command=$1
+  local completion_prefix=$2
+  local -a values
+
+  (( $+commands[h] )) || return 1
+
+  values=("${(@f)$(h "$source_command" 2>/dev/null)}")
+  (( ${#values} )) || return 1
+
+  compadd -P "$completion_prefix" -S '' -- "${values[@]}"
+}
+
+_h() {
+  local state
+  local -a subcommands query_prefixes
+
+  subcommands=(
+    'accounts:Konten anzeigen'
+    'activity:Buchungsaktivität anzeigen'
+    'balance:Kontensalden anzeigen'
+    'bal:Kontensalden anzeigen'
+    'balancesheet:Bilanz anzeigen'
+    'bs:Bilanz anzeigen'
+    'cashflow:Cashflow-Statement anzeigen'
+    'cf:Cashflow-Statement anzeigen'
+    'check:Journal prüfen'
+    'incomestatement:Ergebnisrechnung anzeigen'
+    'is:Ergebnisrechnung anzeigen'
+    'notes:Notizen anzeigen'
+    'payees:Zahlungsempfänger anzeigen'
+    'print:vollständige Transaktionen anzeigen'
+    'reg:Postings mit laufendem Saldo anzeigen'
+    'register:Postings mit laufendem Saldo anzeigen'
+    'stats:Journal-Statistiken anzeigen'
+    'tags:Tags anzeigen'
+  )
+
+  query_prefixes=(
+    'acct\::Konto-Filter'
+    'date\::Zeitraum-Filter'
+    'desc\::Transaktionskopf-Filter'
+    'payee\::Zahlungsempfänger-Filter'
+    'note\::Notiz-Filter'
+    'tag\::Tag-Filter'
+    'not\::Filter ausschließen'
+    'expr\::komplexer Boolean-Filter'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'hledger command' subcommands
+    return
+  fi
+
+  _arguments -C -S \
+    '(-b --begin)'{-b,--begin}'=[Postings ab diesem Datum]:Startdatum:' \
+    '(-e --end)'{-e,--end}'=[Postings vor diesem Datum]:Enddatum:' \
+    '(-D --daily)'{-D,--daily}'[tägliche Spalten]' \
+    '(-W --weekly)'{-W,--weekly}'[wöchentliche Spalten]' \
+    '(-M --monthly)'{-M,--monthly}'[monatliche Spalten]' \
+    '(-Q --quarterly)'{-Q,--quarterly}'[vierteljährliche Spalten]' \
+    '(-Y --yearly)'{-Y,--yearly}'[jährliche Spalten]' \
+    '(-p --period)'{-p,--period}'=[Zeitraum-Ausdruck]:Zeitraum:' \
+    '--depth=[Kontentiefe]:Tiefe:' \
+    '--tree[Konten als Baum anzeigen]' \
+    '--flat[Konten flach anzeigen]' \
+    '--output-format=[Ausgabeformat]:Format:(txt csv html json)' \
+    '--output-file=[Ausgabe in Datei schreiben]:Datei:_files' \
+    '(-h --help)'{-h,--help}'[Hilfe anzeigen]' \
+    '*:Filter:->filter'
+
+  case $state in
+    filter)
+      case $PREFIX in
+        acct:*) _h_wrapper_values accounts 'acct:' ;;
+        not:acct:*) _h_wrapper_values accounts 'not:acct:' ;;
+        tag:*) _h_wrapper_values tags 'tag:' ;;
+        not:tag:*) _h_wrapper_values tags 'not:tag:' ;;
+        payee:*) _h_wrapper_values payees 'payee:' ;;
+        not:payee:*) _h_wrapper_values payees 'not:payee:' ;;
+        *) _describe -t query-prefixes 'Filterpräfix' query_prefixes ;;
+      esac
+      ;;
+  esac
+}
