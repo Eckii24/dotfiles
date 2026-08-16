@@ -19,7 +19,7 @@
     "keepRecentTokens": 12000
   },
   "enableInstallTelemetry": false,
-  "enableAnalystics": false,
+  "enableAnalytics": false,
   "packages": [],
   "npmCommand": [
     "bun"
