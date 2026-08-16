@@ -1,0 +1,38 @@
+[settings]
+task.output = "prefix"
+task.run_auto_install = false
+
+# Generic contract. A project-root mise.toml must override every leaf task.
+# The defaults fail closed, so a project cannot accidentally run the wrong stack.
+[tasks.format]
+description = "Project formatting check (override in project root)"
+run = "printf 'Project must define task: format\\n' >&2; exit 2"
+
+[tasks.lint]
+description = "Project lint check (override in project root)"
+run = "printf 'Project must define task: lint\\n' >&2; exit 2"
+
+[tasks.build]
+description = "Project build (override in project root)"
+run = "printf 'Project must define task: build\\n' >&2; exit 2"
+
+[tasks.test]
+description = "Project test suite (override in project root)"
+run = "printf 'Project must define task: test\\n' >&2; exit 2"
+
+[tasks."test:integration"]
+description = "Project integration-test suite (override in project root)"
+run = "printf 'Project must define task: test:integration\\n' >&2; exit 2"
+
+[tasks.verify]
+description = "Run project formatting, linting, build, and tests serially"
+run = [
+  { task = "format" },
+  { task = "lint" },
+  { task = "build" },
+  { task = "test" },
+]
+
+[tasks."verify:full"]
+description = "Run the complete project verification suite"
+run = [{ task = "verify" }, { task = "test:integration" }]

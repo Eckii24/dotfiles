@@ -1,0 +1,56 @@
+# Copy this file to <project-root>/mise.toml for a convention-based .NET project.
+# Global ~/.config/mise/config.toml supplies `verify` and `verify:full`.
+# Override any task or quality-gate policy here when this repository's conventions differ.
+# Pi reads the resolved values through `mise env --json`, so parent mise.toml
+# files provide defaults and a nested project can override either variable.
+
+[env]
+PI_QUALITY_GATE_INCLUDE = '''
+[
+  "**/*.cs",
+  "**/*.csproj",
+  "**/*.props",
+  "**/*.targets",
+  "**/*.sln",
+  "**/*.slnx",
+  "**/.editorconfig",
+  "Directory.Build.props",
+  "Directory.Build.targets",
+  "Directory.Packages.props",
+  "global.json",
+  "NuGet.config",
+  "nuget.config",
+  "packages.lock.json"
+]
+'''
+PI_QUALITY_GATE_EXCLUDE = '''
+[
+  "**/bin/**",
+  "**/obj/**"
+]
+'''
+
+[tasks.format]
+description = "Verify .NET formatting without modifying files"
+run = "dotnet-in-repo format --verify-no-changes"
+
+[tasks."format:apply"]
+description = "Apply .NET formatting changes"
+confirm = "Apply dotnet formatting changes?"
+run = "dotnet-in-repo format"
+
+[tasks.lint]
+description = "Verify .NET analyzer diagnostics without modifying files"
+run = "dotnet-in-repo format analyzers --verify-no-changes"
+
+[tasks.build]
+description = "Build the convention-resolved .NET target"
+run = "dotnet-in-repo build"
+
+[tasks.test]
+description = "Run the convention-resolved unit-test project"
+run = "dotnet-in-repo test-kind unit"
+
+[tasks."test:integration"]
+description = "Run the convention-resolved integration-test project"
+run = "dotnet-in-repo test-kind integration"

@@ -7,6 +7,8 @@ brew "bat"
 brew "ast-grep"
 # Version manager for neovim
 brew "bob"
+# Development environment manager and task runner
+brew "mise"
 # Resource monitor. C++ version and continuation of bashtop and bpytop
 brew "btop"
 # Modern, maintained replacement for ls
