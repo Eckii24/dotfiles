@@ -1,0 +1,29 @@
+{
+  "skill_name": "document-conversion",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a file at ~/Downloads/Q4-board-deck.pptx and I want it converted to Markdown so I can feed it into an LLM. Save the output next to the deck, and tell me exactly what you ran.",
+      "expected_output": "Uses Docling CLI for a one-off PPTX, passes an output directory beside the deck, and reports the exact command and expected output filename.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "My 40-page scanned PDF has poor extracted text. Convert pages 5 through 12 into Markdown, preserve tables where possible, and explain the first escalation if default OCR is not enough.",
+      "expected_output": "Uses bounded Docling PDF conversion with --page-range, recognizes default OCR/tables, and proposes an explicit OCR/pipeline escalation rather than claiming perfect fidelity.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I need semantic Markdown and a separate PNG for every original page of this PDF. Can Docling do both?",
+      "expected_output": "Uses Docling for Markdown, correctly distinguishes referenced document images from original page PNGs, and selects pdftocairo/pdftoppm for per-page rendering.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Please extract a YouTube URL to Markdown without adding a heavyweight PDF pipeline.",
+      "expected_output": "Routes the special case to isolated MarkItDown via uvx rather than claiming Docling handles YouTube URLs.",
+      "files": []
+    }
+  ]
+}
