@@ -102,10 +102,11 @@ run_test_kind() {
     return 1
   }
 
-  local solution_stem="${solutions[1]:t:r}"
-  projects=( "${(@f)$(find "$target_dir" -type f -name "${solution_stem}.${suffix}.csproj" -print)}" )
-  (( ${#projects[@]} == 1 )) || {
-    print -u2 -- "Expected exactly one ${solution_stem}.${suffix}.csproj below $target_dir; found ${#projects[@]}"
+  projects=(
+    "${(@f)$(find "$target_dir" -type f -name "*.${suffix}.csproj" -print)}"
+  )
+  (( ${#projects[@]} == 1 )) && [[ -n "${projects[1]}" ]] || {
+    print -u2 -- "Expected exactly one *.${suffix}.csproj below $target_dir; found ${#projects[@]}"
     return 1
   }
 
