@@ -112,11 +112,31 @@ describe("mise quality gate lifecycle", () => {
     expect(executions).toHaveLength(0);
   });
 
-  test("toggles the quality gate from chat for the current session", async () => {
+  test("uses any Mise task target from a CLI flag", async () => {
+    const { ctx, executions, flags, handlers, pi } = createHarness(["src/Foo.cs"]);
+    flags.set("quality-gate-task", "verify:full");
+    miseQualityGate(pi);
+
+    await handlers.get("session_start")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "tasks" && entry.args.at(-1) === "verify:full")).toBeDefined();
+    expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toMatchObject({
+      args: ["run", "--jobs", "1", "verify:full"],
+    });
+  });
+
+  test("changes the task target from chat for the current session", async () => {
     const { commands, ctx, executions, handlers, notices, pi, statuses } = createHarness(["src/Foo.cs"]);
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
+    await commands.get("quality-gate")!.handler("task verify:full", ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(notices).toContain("Quality gate task set to verify:full");
+    expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toHaveLength(1);
+
     await commands.get("quality-gate")!.handler("off", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
@@ -124,6 +144,7 @@ describe("mise quality gate lifecycle", () => {
     expect(notices).toContain("Quality gate disabled for this session");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
 
+    await commands.get("quality-gate")!.handler("reset", ctx);
     await commands.get("quality-gate")!.handler("on", ctx);
     await handlers.get("agent_end")!({}, ctx);
 

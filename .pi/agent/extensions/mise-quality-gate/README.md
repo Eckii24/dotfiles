@@ -44,15 +44,23 @@ Disable the gate when starting Pi:
 pi --no-quality-gate
 ```
 
+Set any Mise task as its target when starting Pi:
+
+```zsh
+pi --quality-gate-task verify:full
+```
+
 Control it from Pi chat for the current session:
 
 ```text
 /quality-gate off
 /quality-gate on
+/quality-gate task verify:full
+/quality-gate reset
 /quality-gate status
 ```
 
-`--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. The setting is session-only.
+The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. `task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. `reset` restores `verify`. All settings are session-only.
 
 Every stack config must be trusted by mise. Parent configs are intentional and inherited by all repositories below them. Inspect and trust the reviewed stack config explicitly:
 

@@ -31,6 +31,7 @@ type QualityGateState = {
   repoRoot?: string;
   projectRoot?: string;
   policy?: QualityGatePolicy;
+  taskName: string;
   enabled: boolean;
   available: boolean;
   repairFollowUpQueued: boolean;
@@ -200,8 +201,15 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     type: "boolean",
     default: false,
   });
+  pi.registerFlag("quality-gate-task", {
+    description: "Set the mise task run by the quality gate for this session",
+    type: "string",
+    default: QUALITY_TASK,
+  });
 
+  const requestedTask = pi.getFlag("quality-gate-task");
   const state: QualityGateState = {
+    taskName: typeof requestedTask === "string" && requestedTask.trim() ? requestedTask.trim() : QUALITY_TASK,
     enabled: !Boolean(pi.getFlag("no-quality-gate")),
     available: false,
     repairFollowUpQueued: false,
@@ -269,8 +277,8 @@ export default function miseQualityGate(pi: ExtensionAPI) {
           return;
         }
       }
-      if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, QUALITY_TASK)) {
-        setAvailabilityStatus(ctx, `disabled — quality task ${QUALITY_TASK} is unavailable`);
+      if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, state.taskName)) {
+        setAvailabilityStatus(ctx, `disabled — quality task ${state.taskName} is unavailable`);
         return;
       }
 
@@ -290,9 +298,10 @@ export default function miseQualityGate(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("quality-gate", {
-    description: "Control this session's quality gate: on|off|status",
+    description: "Control this session's quality gate: on|off|status|task <name>|reset",
     handler: async (args, ctx) => {
-      const action = args.trim().toLowerCase();
+      const raw = args.trim();
+      const action = raw.toLowerCase();
       if (action === "off") {
         state.enabled = false;
         state.available = false;
@@ -306,25 +315,43 @@ export default function miseQualityGate(pi: ExtensionAPI) {
         notify(ctx, state.available ? "Quality gate enabled for this session" : "Quality gate could not be enabled; see status", state.available ? "info" : "warning");
         return;
       }
-      if (action === "status" || !action) {
-        notify(ctx, `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}\nUsage: /quality-gate [on|off|status]`);
+      if (action === "reset") {
+        state.taskName = QUALITY_TASK;
+      } else if (action.startsWith("task ")) {
+        const taskName = raw.slice("task".length).trim();
+        if (!taskName) {
+          notify(ctx, "Usage: /quality-gate task <mise-task>", "warning");
+          return;
+        }
+        state.taskName = taskName;
+      } else if (action === "status" || !action) {
+        notify(ctx, `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}\nTask: ${state.taskName}\nUsage: /quality-gate [on|off|status|task <name>|reset]`);
+        return;
+      } else {
+        notify(ctx, "Usage: /quality-gate [on|off|status|task <name>|reset]", "warning");
         return;
       }
-      notify(ctx, "Usage: /quality-gate [on|off|status]", "warning");
+
+      if (state.enabled) await initialize(ctx);
+      notify(ctx, state.enabled && !state.available
+        ? `Quality gate task ${state.taskName} could not be enabled; see status`
+        : `Quality gate task set to ${state.taskName}`,
+        state.enabled && !state.available ? "warning" : "info");
     },
   });
 
   pi.on("agent_end", async (_event, ctx) => {
     if (!state.enabled || !state.available || state.running || !state.repoRoot || !state.projectRoot || !state.policy) return;
 
+    const { policy, projectRoot, repoRoot, taskName } = state;
     state.running = true;
     try {
-      const changed = await relevantGitPaths(pi, ctx, state.repoRoot, state.policy);
+      const changed = await relevantGitPaths(pi, ctx, repoRoot, policy);
       if (changed.length === 0) return;
 
-      if (ctx.hasUI) ctx.ui.setStatus("mise-quality-gate", "Running mise verify…");
-      const result = await pi.exec("mise", ["run", "--jobs", "1", QUALITY_TASK], {
-        cwd: state.projectRoot,
+      if (ctx.hasUI) ctx.ui.setStatus("mise-quality-gate", `Running mise ${taskName}…`);
+      const result = await pi.exec("mise", ["run", "--jobs", "1", taskName], {
+        cwd: projectRoot,
         signal: ctx.signal,
         timeout: QUALITY_TIMEOUT_MS,
         env: { MISE_TASK_RUN_AUTO_INSTALL: "false" },
@@ -336,7 +363,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       }
 
       const output = compactOutput(result.stdout, result.stderr);
-      const failure = `Quality gate failed (${QUALITY_TASK}, exit ${result.code})\n${changed.join(", ")}\n${output}`;
+      const failure = `Quality gate failed (${taskName}, exit ${result.code})\n${changed.join(", ")}\n${output}`;
       notify(ctx, failure, "warning");
       if (!state.repairFollowUpQueued) {
         state.repairFollowUpQueued = true;
