@@ -2,32 +2,32 @@
 task.output = "prefix"
 task.run_auto_install = false
 
-# Generic contract. A project-root mise.toml must override every leaf task.
-# The defaults fail closed, so a project cannot accidentally run the wrong stack.
-# Integrations use this to resolve the nearest mise project root without a
-# stack-specific helper.
+# Protected resolver for Pi. Stack-specific policy and tasks live in
+# directory-level mise.toml files (for example ~/Development/Repos/mise.toml).
 [tasks."pi:quality-gate:project-root"]
-description = "Print the current mise project root for the Pi quality gate"
-run = 'printf "%s\\n" "$MISE_PROJECT_ROOT"'
+description = "Print the current Git repository root for the Pi quality gate"
+run = 'git -C "$MISE_ORIGINAL_CWD" rev-parse --show-toplevel'
 
+# Fail-closed diagnostics for directories without a stack config. Pi rejects
+# these global task sources as a quality-gate contract.
 [tasks.format]
-description = "Project formatting check (override in project root)"
+description = "Project must define task: format"
 run = "printf 'Project must define task: format\\n' >&2; exit 2"
 
 [tasks.lint]
-description = "Project lint check (override in project root)"
+description = "Project must define task: lint"
 run = "printf 'Project must define task: lint\\n' >&2; exit 2"
 
 [tasks.build]
-description = "Project build (override in project root)"
+description = "Project must define task: build"
 run = "printf 'Project must define task: build\\n' >&2; exit 2"
 
 [tasks.test]
-description = "Project test suite (override in project root)"
+description = "Project must define task: test"
 run = "printf 'Project must define task: test\\n' >&2; exit 2"
 
 [tasks."test:integration"]
-description = "Project integration-test suite (override in project root)"
+description = "Project must define task: test:integration"
 run = "printf 'Project must define task: test:integration\\n' >&2; exit 2"
 
 [tasks.verify]

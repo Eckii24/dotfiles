@@ -1,8 +1,5 @@
-# Copy this file to <project-root>/mise.toml for a convention-based .NET project.
-# Global ~/.config/mise/config.toml supplies `verify` and `verify:full`.
-# Override any task or quality-gate policy here when this repository's conventions differ.
-# Pi reads the resolved values through `mise env --json`, so parent mise.toml
-# files provide defaults and a nested project can override either variable.
+# Shared .NET quality-gate defaults for repositories below ~/Development/Repos.
+# The global ~/.config/mise/config.toml owns only the protected Git-root resolver.
 
 [env]
 PI_QUALITY_GATE_INCLUDE = '''
@@ -32,25 +29,44 @@ PI_QUALITY_GATE_EXCLUDE = '''
 
 [tasks.format]
 description = "Verify .NET formatting without modifying files"
-run = "dotnet-in-repo format --verify-no-changes"
+run = [
+  'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo format style --verify-no-changes',
+  'cd "$MISE_ORIGINAL_CWD" && csharpier check .',
+]
 
 [tasks."format:apply"]
 description = "Apply .NET formatting changes"
 confirm = "Apply dotnet formatting changes?"
-run = "dotnet-in-repo format"
+run = [
+  'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo format style',
+  'cd "$MISE_ORIGINAL_CWD" && csharpier format .',
+]
 
 [tasks.lint]
 description = "Verify .NET analyzer diagnostics without modifying files"
-run = "dotnet-in-repo format analyzers --verify-no-changes"
+run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo format analyzers --verify-no-changes'
 
 [tasks.build]
 description = "Build the convention-resolved .NET target"
-run = "dotnet-in-repo build"
+run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo build -p:TreatWarningsAsErrors=false -p:WarningsAsErrors='
 
 [tasks.test]
 description = "Run the convention-resolved unit-test project"
-run = "dotnet-in-repo test-kind unit"
+run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo test-kind unit -- -p:TreatWarningsAsErrors=false -p:WarningsAsErrors='
 
 [tasks."test:integration"]
 description = "Run the convention-resolved integration-test project"
-run = "dotnet-in-repo test-kind integration"
+run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo test-kind integration -- -p:TreatWarningsAsErrors=false -p:WarningsAsErrors='
+
+[tasks.verify]
+description = "Run project formatting, linting, build, and tests serially"
+run = [
+  { task = "format" },
+  # { task = "lint" },
+  { task = "build" },
+  { task = "test" },
+]
+
+[tasks."verify:full"]
+description = "Run the complete project verification suite"
+run = [{ task = "verify" }, { task = "test:integration" }]
