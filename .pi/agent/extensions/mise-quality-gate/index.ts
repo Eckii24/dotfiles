@@ -315,56 +315,97 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     await initialize(ctx);
   });
 
+  const usage = [
+    "Quality Gate",
+    "",
+    "Session controls:",
+    "  /quality-gate status",
+    "  /quality-gate enable|disable",
+    "  /quality-gate configure task <mise-task>",
+    "  /quality-gate configure attempts <non-negative-integer>",
+    "  /quality-gate reset",
+    "  /quality-gate help",
+  ].join("\n");
+  const status = () => [
+    `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}`,
+    `Task: ${state.taskName}`,
+    `Automatic repair attempts: ${state.maxRepairAttempts}`,
+    "",
+    "Commands: status, enable, disable, configure, reset, help",
+  ].join("\n");
+
   pi.registerCommand("quality-gate", {
-    description: "Control this session's quality gate: on|off|status|task <name>|attempts <count>|reset",
+    description: "Control the current session quality gate",
+    getArgumentCompletions: (prefix) => {
+      const values = [
+        ["status", "Show gate state"], ["enable", "Enable for this session"], ["disable", "Disable for this session"],
+        ["configure", "Set task or repair attempts"], ["reset", "Restore configured defaults"], ["help", "Show command syntax"],
+        ["configure task", "Set mise task"], ["configure attempts", "Set automatic repair attempts"],
+      ] as const;
+      const normalized = prefix.trimStart().toLowerCase();
+      const matches = values.filter(([value]) => value.startsWith(normalized));
+      return matches.length ? matches.map(([value, description]) => ({ value, label: value, description })) : null;
+    },
     handler: async (args, ctx) => {
       const raw = args.trim();
       const action = raw.toLowerCase();
-      if (action === "off") {
+      if (!action) {
+        notify(ctx, status());
+        return;
+      }
+      if (action === "help") {
+        notify(ctx, usage);
+        return;
+      }
+      if (action === "status") {
+        notify(ctx, status());
+        return;
+      }
+      if (action === "disable") {
         state.enabled = false;
         state.available = false;
         setAvailabilityStatus(ctx, "disabled — disabled for this session");
         notify(ctx, "Quality gate disabled for this session");
         return;
       }
-      if (action === "on") {
+      if (action === "enable") {
         state.enabled = true;
         await initialize(ctx);
         notify(ctx, state.available ? "Quality gate enabled for this session" : "Quality gate could not be enabled; see status", state.available ? "info" : "warning");
         return;
       }
+      let setting: string | undefined;
       if (action === "reset") {
         state.taskOverridden = false;
         state.repairAttemptsOverridden = false;
         state.taskName = state.configuredTaskName;
         state.maxRepairAttempts = state.configuredMaxRepairAttempts;
-      } else if (action.startsWith("task ")) {
-        const taskName = raw.slice("task".length).trim();
+        setting = "settings restored";
+      } else if (action.startsWith("configure task ")) {
+        const taskName = raw.slice("configure task".length).trim();
         if (!taskName) {
-          notify(ctx, "Usage: /quality-gate task <mise-task>", "warning");
+          notify(ctx, "Usage: /quality-gate configure task <mise-task>", "warning");
           return;
         }
         state.taskName = taskName;
         state.taskOverridden = true;
-      } else if (action.startsWith("attempts ")) {
-        const value = raw.slice("attempts".length).trim();
+        setting = `task set to ${state.taskName}`;
+      } else if (action.startsWith("configure attempts ")) {
+        const value = raw.slice("configure attempts".length).trim();
         const attempts = Number(value);
         if (!/^\d+$/.test(value) || !Number.isSafeInteger(attempts)) {
-          notify(ctx, "Usage: /quality-gate attempts <non-negative-integer>", "warning");
+          notify(ctx, "Usage: /quality-gate configure attempts <non-negative-integer>", "warning");
           return;
         }
         state.maxRepairAttempts = attempts;
         state.repairAttemptsOverridden = true;
-      } else if (action === "status" || !action) {
-        notify(ctx, `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}\nTask: ${state.taskName}\nAutomatic repair attempts: ${state.maxRepairAttempts}\nUsage: /quality-gate [on|off|status|task <name>|attempts <count>|reset]`);
-        return;
+        setting = `automatic repair attempts set to ${state.maxRepairAttempts}`;
       } else {
-        notify(ctx, "Usage: /quality-gate [on|off|status|task <name>|attempts <count>|reset]", "warning");
+        notify(ctx, `Unknown quality-gate command: ${raw}\n\n${usage}`, "warning");
         return;
       }
 
       if (state.enabled) await initialize(ctx);
-      const setting = action === "reset" ? "settings restored" : action.startsWith("task ") ? `task set to ${state.taskName}` : `automatic repair attempts set to ${state.maxRepairAttempts}`;
       notify(ctx, state.enabled && !state.available
         ? `Quality gate ${setting} but could not be enabled; see status`
         : `Quality gate ${setting}`,

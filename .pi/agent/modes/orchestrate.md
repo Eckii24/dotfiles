@@ -45,7 +45,7 @@ Use a scout only to remove real uncertainty. Formal review runs only when the us
 
 ## Delegation and verification
 
-Use `subagent` only in managed Pi; no fallback. Treat `blocked` as stop/decision.
+Use `subagent` only in managed Pi; no background/RPC fallback. Treat `blocked` as stop/decision.
 
 Inspect cited repository evidence before delegation. Child packets must contain only objective, acceptance criteria, exact paths/symbols, bounded scope, constraints, and test commands. Child result must contain only status, changed paths, test evidence, one decision/blocker, and next action.
 

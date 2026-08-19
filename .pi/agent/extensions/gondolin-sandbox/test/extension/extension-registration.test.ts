@@ -67,6 +67,7 @@ test("factory registers dormant wrappers before CLI values exist", () => {
   assert.equal(pi.getFlagCalls, 0);
   assert.deepEqual([...pi.tools.keys()].sort(), ["bash", "edit", "find", "grep", "ls", "read", "write"]);
   assert.deepEqual(pi.flags, ["sandbox", "sandbox-mount-ro", "sandbox-mount-rw", "sandbox-network-allow", "sandbox-network-deny"]);
+  assert.deepEqual([...pi.commands.keys()], ["sandbox"]);
 });
 
 test("session_start latches the real --sandbox flag and starts exactly one VM", async () => {
@@ -104,7 +105,7 @@ test("session-only CLI policy is effective now, exported after startup, and rest
     mounts: { readOnly: [{ hostPath: canonicalTmp, guestPath: canonicalTmp, required: false }] },
     network: { allow: ["*.example.org", "api.example.com"], deny: ["blocked.example.org"] },
   });
-  await pi.commands.get("sandbox-status").handler("", pi.ctx());
+  await pi.commands.get("sandbox").handler("status", pi.ctx());
   assert.ok(pi.notices.some((value) => value.includes(`${canonicalTmp} -> ${canonicalTmp} (ro)`) && value.includes('network={"allow":["*.example.org","api.example.com"],"deny":["blocked.example.org"]}')));
   await pi.handlers.get("session_shutdown")!({}, pi.ctx());
   assert.equal(process.env.PI_SANDBOX, undefined); assert.equal(process.env[SANDBOX_SESSION_POLICY_ENV], undefined);

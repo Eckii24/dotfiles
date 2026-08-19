@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildEvaluatorArgs } from "../goal/evaluator-cli.ts";
-import goalExtension, { pauseGoalState, resumeGoalState } from "../goal/index.ts";
+import goalExtension, {
+  parseGoalCommand,
+  pauseGoalState,
+  resumeGoalState,
+} from "../goal/index.ts";
 
 const tempDirs: string[] = [];
 const previousAgentDir = process.env.PI_AGENT_DIR;
@@ -50,6 +54,31 @@ describe("Goal evaluator CLI arguments", () => {
     expect(args).not.toContain("edit");
     expect(args).not.toContain("write");
     expect(args).not.toContain("bash");
+  });
+});
+
+describe("Goal command parser", () => {
+  test("parses only canonical commands", () => {
+    expect(parseGoalCommand("")).toEqual({ type: "status", showNavigation: true });
+    expect(parseGoalCommand("status")).toEqual({ type: "status", showNavigation: false });
+    expect(parseGoalCommand("help")).toEqual({ type: "help" });
+    expect(parseGoalCommand("configure")).toEqual({ type: "configure" });
+    expect(parseGoalCommand("pause")).toEqual({ type: "pause" });
+    expect(parseGoalCommand("resume")).toEqual({ type: "resume" });
+    expect(parseGoalCommand("cancel")).toEqual({ type: "cancel" });
+    expect(parseGoalCommand("start all tests pass")).toEqual({
+      type: "start",
+      condition: "all tests pass",
+    });
+  });
+
+  test("rejects legacy aliases, implicit starts, and malformed commands", () => {
+    for (const input of ["clear", "stop", "off", "reset", "none", "hold", "continue", "all tests pass"]) {
+      expect(parseGoalCommand(input).type).toBe("invalid");
+    }
+    expect(parseGoalCommand("start").type).toBe("invalid");
+    expect(parseGoalCommand("status extra").type).toBe("invalid");
+    expect(parseGoalCommand("pause now").type).toBe("invalid");
   });
 });
 
@@ -142,5 +171,14 @@ describe("Goal pause and resume command", () => {
     expect(entries.at(-1).data).toMatchObject({ status: "active", currentTurn: 1 });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toContain("Goal resumed by user.");
+
+    const entriesAfterResume = entries.length;
+    await command.handler("all tests pass", ctx);
+    expect(entries).toHaveLength(entriesAfterResume);
+    expect(notices.at(-1)).toContain("Unknown Goal command");
+
+    await command.handler("", ctx);
+    expect(notices.at(-1)).toContain("Condition: all tests pass");
+    expect(notices.at(-1)).toContain("/goal start <condition>");
   });
 });

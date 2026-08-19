@@ -53,14 +53,17 @@ pi --quality-gate-task verify:full
 Control it from Pi chat for the current session:
 
 ```text
-/quality-gate off
-/quality-gate on
-/quality-gate task verify:full
-/quality-gate reset
+/quality-gate
 /quality-gate status
+/quality-gate enable
+/quality-gate disable
+/quality-gate configure task verify:full
+/quality-gate configure attempts 2
+/quality-gate reset
+/quality-gate help
 ```
 
-The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. `task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. All command settings are session-only.
+The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate enable` re-checks the activation contract before enabling it. `configure task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. All command settings are session-only.
 
 ### Settings
 
@@ -77,8 +80,9 @@ Set defaults globally in `~/.pi/agent/settings.json`, or per repository in `.pi/
 
 - `task`: default Mise task. Falls back to `verify`.
 - `maxRepairAttempts`: non-negative count of failed gate runs that queue an automatic repair follow-up for the model. Falls back to `1`; `0` disables automatic repair follow-ups.
-- `/quality-gate task <name>` and `/quality-gate attempts <count>` override these defaults for the active session.
+- `/quality-gate configure task <name>` and `/quality-gate configure attempts <count>` override these defaults for the active session.
 - `/quality-gate reset` removes both session overrides and restores current settings defaults.
+- `/quality-gate` shows current state and compact navigation; `/quality-gate help` shows the full syntax.
 
 Every stack config must be trusted by mise. Parent configs are intentional and inherited by all repositories below them. Inspect and trust the reviewed stack config explicitly:
 

@@ -826,57 +826,113 @@ export default function (pi: ExtensionAPI) {
     return undefined;
   });
 
-  // ─── /guardrails command ───
+  const help = [
+    "Guardrails",
+    "",
+    "Session controls:",
+    "  /guardrails status",
+    "  /guardrails enable|disable",
+    "  /guardrails preflight status",
+    "  /guardrails preflight enable|disable",
+    "  /guardrails preflight rule add <text>",
+    "  /guardrails preflight rule list",
+    "  /guardrails preflight help",
+    "  /guardrails help",
+  ].join("\n");
+  const showStatus = (ctx: Parameters<Parameters<ExtensionAPI["registerCommand"]>[1]["handler"]>[1], navigation: boolean) => {
+    const cfg = refreshConfig(ctx.cwd, true);
+    const astAvailable = isShfmtAvailable();
+    const lines = [
+      "🛡️ Guardrails Configuration",
+      "",
+      `Session: ${guardrailsEnabled ? "enabled" : "disabled"}`,
+      `Gate 2: ${preflightDisabled() ? "disabled" : "enabled"}`,
+      `Scope: ${scopeLabel(ctx.cwd)}`,
+      `Config source: ${configSourceLabel(ctx.cwd)}`,
+      `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
+      `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
+      `Session command allows: ${sessionAllow.commandSize}`,
+      `Session read scopes: ${sessionAllow.readScopeSize}`,
+      `Session write scopes: ${sessionAllow.writeScopeSize}`,
+      `Session preflight approvals: ${sessionPreflightApprovals.size}`,
+      "",
+      "─── Paths ───",
+      `Confirm Read:   ${cfg.paths?.confirmRead?.length ? cfg.paths.confirmRead.join(", ") : "(none)"}`,
+      `Allow Write: ${allowWriteLabel(cfg)}`,
+      `Confirm Write:  ${cfg.paths?.confirmWrite?.length ? cfg.paths.confirmWrite.join(", ") : "(none)"}`,
+      "",
+      "─── Bash ───",
+      `Confirm:     ${cfg.bash?.confirm?.length ? cfg.bash.confirm.join(", ") : "(none)"}`,
+      `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
+      `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
+      `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
+    ];
+    if (navigation) lines.push("", "Commands: status, enable, disable, preflight, help");
+    ctx.ui.notify(lines.join("\n"), "info");
+  };
+  const showPreflightRules = (ctx: Parameters<Parameters<ExtensionAPI["registerCommand"]>[1]["handler"]>[1]) => {
+    const configured = refreshConfig(ctx.cwd).bash?.preflightRules ?? [];
+    const approvals = sessionPreflightApprovals.approvalsForScope(getEffectiveCwd(ctx.cwd));
+    ctx.ui.notify([
+      "🛡️ Gate 2 rules and session approvals",
+      `Configured: ${formatPreflightRulesForDisplay(configured)}`,
+      `Session rules: ${formatPreflightRulesForDisplay(sessionPreflightRules.rules)}`,
+      `Session approvals: ${approvals.length > 0 ? approvals.map((approval) => `${approval.command} → ${approval.intent}`).join(" | ") : "(none)"}`,
+    ].join("\n"), "info");
+  };
+
   pi.registerCommand("guardrails", {
-    description: "Show configuration or toggle this session: /guardrails on|off|status",
+    description: "Control session guardrails and Gate-2 preflight",
+    getArgumentCompletions: (prefix) => {
+      const values = [
+        ["status", "Show effective configuration"], ["enable", "Enable for this session"], ["disable", "Disable for this session"],
+        ["preflight", "Control Gate-2 preflight"], ["help", "Show command syntax"],
+        ["preflight status", "Show Gate-2 state"], ["preflight enable", "Enable Gate 2"], ["preflight disable", "Disable Gate 2"],
+        ["preflight rule add", "Add session Gate-2 rule"], ["preflight rule list", "List rules and approvals"], ["preflight help", "Show Gate-2 syntax"],
+      ] as const;
+      const normalized = prefix.trimStart().toLowerCase();
+      const matches = values.filter(([value]) => value.startsWith(normalized));
+      return matches.length ? matches.map(([value, description]) => ({ value, label: value, description })) : null;
+    },
     handler: async (args, ctx) => {
-      const action = args.trim().toLowerCase();
-      if (action === "on" || action === "off") {
-        guardrailsEnabled = action === "on";
+      const raw = args.trim();
+      const action = raw.toLowerCase();
+      if (!action) return showStatus(ctx, true);
+      if (action === "status") return showStatus(ctx, false);
+      if (action === "help") return ctx.ui.notify(help, "info");
+      if (action === "enable" || action === "disable") {
+        guardrailsEnabled = action === "enable";
         recordDecision(ctx, `guardrails-session-${action}`);
         ctx.ui.notify(`🛡️ Guardrails ${guardrailsEnabled ? "enabled" : "disabled"} for this session`, "info");
         return;
       }
-      if (action && action !== "status") {
-        ctx.ui.notify("Usage: /guardrails [on|off|status]", "warning");
+      if (!action.startsWith("preflight")) {
+        ctx.ui.notify(`Unknown guardrails command: ${raw}\n\n${help}`, "warning");
         return;
       }
-      const cfg = refreshConfig(ctx.cwd, true);
-      const astAvailable = isShfmtAvailable();
-      const lines = [
-        "🛡️ Guardrails Configuration",
-        "",
-        `Scope: ${scopeLabel(ctx.cwd)}`,
-        `Config source: ${configSourceLabel(ctx.cwd)}`,
-        `Timeout: ${(cfg.timeout ?? DEFAULT_TIMEOUT) / 1000}s`,
-        `Bash parser: ${astAvailable ? "AST (shfmt)" : "string-based (fallback)"}`,
-        `Session command allows: ${sessionAllow.commandSize}`,
-        `Session read scopes: ${sessionAllow.readScopeSize}`,
-        `Session write scopes: ${sessionAllow.writeScopeSize}`,
-        `Session preflight approvals: ${sessionPreflightApprovals.size}`,
-        "",
-        "─── Paths ───",
-        `Confirm Read:   ${cfg.paths?.confirmRead?.length ? cfg.paths.confirmRead.join(", ") : "(none)"}`,
-        `Allow Write: ${allowWriteLabel(cfg)}`,
-        `Confirm Write:  ${cfg.paths?.confirmWrite?.length ? cfg.paths.confirmWrite.join(", ") : "(none)"}`,
-        "",
-        "─── Bash ───",
-        `Confirm:     ${cfg.bash?.confirm?.length ? cfg.bash.confirm.join(", ") : "(none)"}`,
-        `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
-        `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
-        `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
-      ];
-      ctx.ui.notify(lines.join("\n"), "info");
-    },
-  });
-
-  pi.registerCommand("guardrails-preflight", {
-    description: "Control Gate-2: on|off|status|rule <text>|rules",
-    handler: async (args, ctx) => {
-      const raw = args.trim();
-      const action = raw.toLowerCase();
-      if (action === "rule" || action.startsWith("rule ")) {
-        const result = sessionPreflightRules.add(raw.slice("rule".length));
+      const rest = raw.slice("preflight".length).trim();
+      const preflightAction = rest.toLowerCase();
+      const preflightHelp = [
+        "Guardrails Gate 2 preflight",
+        "  /guardrails preflight status",
+        "  /guardrails preflight enable|disable",
+        "  /guardrails preflight rule add <text>",
+        "  /guardrails preflight rule list",
+      ].join("\n");
+      if (preflightAction === "help") return ctx.ui.notify(preflightHelp, "info");
+      if (preflightAction === "status") {
+        ctx.ui.notify(`🛡️ Gate 2 preflight: ${preflightDisabled() ? "disabled" : "enabled"}\n\n${preflightHelp}`, "info");
+        return;
+      }
+      if (preflightAction === "enable" || preflightAction === "disable") {
+        preflightEnabled = preflightAction === "enable";
+        recordDecision(ctx, `guardrails-preflight-session-${preflightAction}`);
+        ctx.ui.notify(`🛡️ Gate 2 preflight ${preflightEnabled ? "enabled" : "disabled"} for this session`, "info");
+        return;
+      }
+      if (preflightAction === "rule list") return showPreflightRules(ctx);
+      if (preflightAction.startsWith("rule add ")) {
+        const result = sessionPreflightRules.add(rest.slice("rule add".length));
         if (!result.added) {
           ctx.ui.notify(`Cannot add session preflight rule: ${result.error}`, "warning");
           return;
@@ -885,25 +941,7 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`🛡️ Added Gate 2 session rule: ${sessionPreflightRules.rules.at(-1)}`, "info");
         return;
       }
-      if (action === "rules") {
-        const configured = refreshConfig(ctx.cwd).bash?.preflightRules ?? [];
-        const approvals = sessionPreflightApprovals.approvalsForScope(getEffectiveCwd(ctx.cwd));
-        const lines = [
-          "🛡️ Gate 2 rules and session approvals",
-          `Configured: ${formatPreflightRulesForDisplay(configured)}`,
-          `Session rules: ${formatPreflightRulesForDisplay(sessionPreflightRules.rules)}`,
-          `Session approvals: ${approvals.length > 0 ? approvals.map((approval) => `${approval.command} → ${approval.intent}`).join(" | ") : "(none)"}`,
-        ];
-        ctx.ui.notify(lines.join("\n"), "info");
-        return;
-      }
-      if (action === "on" || action === "off") {
-        preflightEnabled = action === "on";
-        recordDecision(ctx, `guardrails-preflight-session-${action}`);
-        ctx.ui.notify(`🛡️ Gate 2 preflight ${preflightEnabled ? "enabled" : "disabled"} for this session`, "info");
-        return;
-      }
-      ctx.ui.notify(`🛡️ Gate 2 preflight: ${preflightDisabled() ? "disabled" : "enabled"}\nUsage: /guardrails-preflight [on|off|status|rule <text>|rules]`, action && action !== "status" ? "warning" : "info");
+      ctx.ui.notify(`Unknown Gate 2 command: ${rest || "(none)"}\n\n${preflightHelp}`, "warning");
     },
   });
 }

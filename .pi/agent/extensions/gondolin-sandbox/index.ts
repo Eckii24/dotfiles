@@ -553,16 +553,14 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         ? "Session-only mount: absolute host path or JSON array; requires --sandbox"
         : "Session-only network rule or JSON string array; requires --sandbox",
     });
-    pi.registerCommand("sandbox-status", {
-      description: "Show Gondolin sandbox activation and effective policy",
-      async handler(_args, ctx) {
-        const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
-        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}`, "info");
-      },
-    });
     registerPolicyCommands(pi, {
       pathsForScope: (scope) => ({ settingsPath: scope === "global" ? path.join(agentDir, "settings.json") : path.join(cwd, ".pi", "settings.json"), approvalsPath: path.join(agentDir, "sandbox-approvals.json"), lockPath: scope === "global" ? path.join(agentDir, ".gondolin-policy.lock") : path.join(cwd, ".pi", ".gondolin-policy.lock"), projectId: path.resolve(cwd), globalAgentDir: agentDir, expectedGlobalTarget: path.join(agentDir, "settings.json##default,e.json") }),
       readPolicy: async (ctx) => readPolicy(ctx.isProjectTrusted()),
+      showStatus: async (ctx) => {
+        const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
+        const navigation = "navigation=/sandbox help | /sandbox policy show | /sandbox mount help | /sandbox network help";
+        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}\n${navigation}`, "info");
+      },
     });
 
     // Wrappers are installed before Pi applies extension CLI values. Until session_start

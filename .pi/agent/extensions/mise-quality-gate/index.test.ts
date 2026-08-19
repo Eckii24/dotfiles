@@ -186,15 +186,15 @@ describe("mise quality gate lifecycle", () => {
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
-    await commands.get("quality-gate")!.handler("task verify:full", ctx);
-    await commands.get("quality-gate")!.handler("attempts 2", ctx);
+    await commands.get("quality-gate")!.handler("configure task verify:full", ctx);
+    await commands.get("quality-gate")!.handler("configure attempts 2", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
     expect(notices).toContain("Quality gate task set to verify:full");
     expect(notices).toContain("Quality gate automatic repair attempts set to 2");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toHaveLength(1);
 
-    await commands.get("quality-gate")!.handler("off", ctx);
+    await commands.get("quality-gate")!.handler("disable", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
     expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — disabled for this session"]);
@@ -202,7 +202,7 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
 
     await commands.get("quality-gate")!.handler("reset", ctx);
-    await commands.get("quality-gate")!.handler("on", ctx);
+    await commands.get("quality-gate")!.handler("enable", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
     expect(notices).toContain("Quality gate enabled for this session");

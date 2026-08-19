@@ -10,10 +10,12 @@
  * working model's transcript. It does not run tests itself.
  *
  * Usage:
- *   /goal <condition>   - Set a goal and start working immediately
- *   /goal               - Open configuration dialog (or show status if goal active)
- *   /goal clear         - Clear the active goal
+ *   /goal               - Show status and compact command navigation
  *   /goal status        - Show current goal status
+ *   /goal help          - Show command help
+ *   /goal start <condition> - Set a goal and start working immediately
+ *   /goal configure     - Open the configuration dialog
+ *   /goal pause|resume|cancel - Control the active goal
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -50,10 +52,6 @@ const VERDICT_REGEX =
 
 const SETTINGS_PATH_GLOBAL = path.join(os.homedir(), ".pi", "agent", "settings.json");
 
-const CLEAR_ALIASES = new Set(["clear", "stop", "off", "reset", "none", "cancel"]);
-const PAUSE_ALIASES = new Set(["pause", "hold"]);
-const RESUME_ALIASES = new Set(["resume", "continue"]);
-
 // ── Types ────────────────────────────────────────────────────────────
 
 type GoalStatus = "active" | "evaluating" | "met" | "cleared" | "paused";
@@ -77,6 +75,79 @@ type GoalOptions = {
 	evaluatorModel: string;
 	useFreshSession: boolean;
 };
+
+export type GoalCommand =
+	| { type: "status"; showNavigation: boolean }
+	| { type: "help" }
+	| { type: "start"; condition: string }
+	| { type: "configure" }
+	| { type: "pause" }
+	| { type: "resume" }
+	| { type: "cancel" }
+	| { type: "invalid"; message: string };
+
+const GOAL_COMMAND_NAVIGATION =
+	"Commands: /goal status · /goal help · /goal start <condition> · /goal configure · /goal pause · /goal resume · /goal cancel";
+
+const GOAL_COMMAND_HELP = [
+	"Goal commands:",
+	"  /goal                  Show status and compact navigation",
+	"  /goal status           Show current goal status",
+	"  /goal help             Show this help",
+	"  /goal start <condition>  Start working toward a condition",
+	"  /goal configure        Configure and start a goal",
+	"  /goal pause            Pause the active goal",
+	"  /goal resume           Resume the paused goal",
+	"  /goal cancel           Cancel the active goal",
+].join("\n");
+
+export function parseGoalCommand(args: string): GoalCommand {
+	const trimmed = args.trim();
+	if (!trimmed) return { type: "status", showNavigation: true };
+
+	const firstWhitespace = trimmed.search(/\s/);
+	const rawName = firstWhitespace === -1 ? trimmed : trimmed.slice(0, firstWhitespace);
+	const rest = firstWhitespace === -1 ? "" : trimmed.slice(firstWhitespace).trim();
+	const name = rawName.toLowerCase();
+
+	if (name === "start") {
+		if (!rest) {
+			return {
+				type: "invalid",
+				message: "Goal start requires a condition. Usage: /goal start <condition>",
+			};
+		}
+		return { type: "start", condition: rest };
+	}
+
+	if (["status", "help", "configure", "pause", "resume", "cancel"].includes(name)) {
+		if (rest) {
+			return {
+				type: "invalid",
+				message: `Goal command "/goal ${name}" does not accept arguments. Use /goal help.`,
+			};
+		}
+		switch (name) {
+			case "status":
+				return { type: "status", showNavigation: false };
+			case "help":
+				return { type: "help" };
+			case "configure":
+				return { type: "configure" };
+			case "pause":
+				return { type: "pause" };
+			case "resume":
+				return { type: "resume" };
+			case "cancel":
+				return { type: "cancel" };
+		}
+	}
+
+	return {
+		type: "invalid",
+		message: `Unknown Goal command "/goal ${rawName}". Use /goal help.`,
+	};
+}
 
 type EvaluationResult = {
 	met: boolean;
@@ -508,9 +579,23 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand("goal", {
 		description:
-			"Set a goal condition — agent works autonomously until an evaluator sub-agent confirms it's met",
+			"Control autonomous goals: status|help|start|configure|pause|resume|cancel",
+		getArgumentCompletions: (prefix) => {
+			const values = [
+				["status", "Show goal state"], ["start", "Start a goal from a condition"], ["configure", "Open goal configuration"],
+				["pause", "Pause active goal"], ["resume", "Resume paused goal"], ["cancel", "Cancel active goal"], ["help", "Show command syntax"],
+			] as const;
+			const normalized = prefix.trimStart().toLowerCase();
+			const matches = values.filter(([value]) => value.startsWith(normalized));
+			return matches.length ? matches.map(([value, description]) => ({ value, label: value, description })) : null;
+		},
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
-			const trimmed = args.trim();
+			const command = parseGoalCommand(args);
+			if (command.type === "invalid") {
+				ctx.ui.notify(command.message, "warning");
+				return;
+			}
+
 			const currentState = getLatestGoalState(ctx);
 			const isActive =
 				currentState &&
@@ -522,120 +607,114 @@ export default function (pi: ExtensionAPI) {
 					currentState.status === "evaluating" ||
 					currentState.status === "paused");
 
-			// /goal pause
-			if (PAUSE_ALIASES.has(trimmed.toLowerCase())) {
-				if (!currentState || currentState.status === "cleared" || currentState.status === "met") {
-					ctx.ui.notify("No active goal to pause", "info");
-					return;
-				}
-				if (currentState.status === "paused") {
-					ctx.ui.notify("Goal is already paused", "info");
-					return;
-				}
-				pauseGoal(pi, ctx, currentState);
-				ctx.ui.notify("Goal paused", "info");
-				return;
-			}
-
-			// /goal resume
-			if (RESUME_ALIASES.has(trimmed.toLowerCase())) {
-				if (!currentState || currentState.status !== "paused") {
-					ctx.ui.notify("No paused goal to resume", "info");
-					return;
-				}
-				await resumeGoal(pi, ctx, currentState);
-				return;
-			}
-
-			// /goal clear
-			if (CLEAR_ALIASES.has(trimmed.toLowerCase())) {
-				if (!hasGoal) {
-					ctx.ui.notify("No active goal to clear", "info");
-					return;
-				}
-				clearGoal(pi, ctx, currentState!);
-				ctx.ui.notify("Goal cleared", "info");
-				return;
-			}
-
-			// /goal status (or /goal with no args when goal is active)
-			if (trimmed.toLowerCase() === "status" || (trimmed === "" && hasGoal)) {
-				if (!hasGoal) {
-					ctx.ui.notify("No active goal", "info");
-					return;
-				}
-				showGoalStatus(ctx, currentState!);
-				return;
-			}
-
-			// If a goal is already active and args are provided, replace it
-			if (isActive && trimmed) {
-				clearGoal(pi, ctx, currentState!);
-			}
-
-			// /goal with no args and no active goal → open dialog
-			if (!trimmed) {
-				const settings = readSettings();
-				pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Goal — configuration needed" });
-
-				const result = await (async () => {
-					try {
-						return await ctx.ui.custom<GoalOptions | null>(
-							(_tui, theme, _kb, done) =>
-								new GoalDialog(theme, done, {
-									maxTurns:
-										settings.maxTurns ?? DEFAULT_MAX_TURNS,
-									evaluatorModel:
-										settings.evaluatorModel ??
-										DEFAULT_EVALUATOR_MODEL,
-								}),
-							{ overlay: true },
+			switch (command.type) {
+				case "status":
+					if (!hasGoal) {
+						ctx.ui.notify(
+							command.showNavigation
+								? `No active goal\n\n${GOAL_COMMAND_NAVIGATION}`
+								: "No active goal",
+							"info",
 						);
-					} finally {
-						pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
+						return;
 					}
-				})();
+					showGoalStatus(ctx, currentState!, command.showNavigation);
+					return;
 
-				if (!result) {
+				case "help":
+					ctx.ui.notify(GOAL_COMMAND_HELP, "info");
+					return;
+
+				case "pause":
+					if (!currentState || currentState.status === "cleared" || currentState.status === "met") {
+						ctx.ui.notify("No active goal to pause", "info");
+						return;
+					}
+					if (currentState.status === "paused") {
+						ctx.ui.notify("Goal is already paused", "info");
+						return;
+					}
+					pauseGoal(pi, ctx, currentState);
+					ctx.ui.notify("Goal paused", "info");
+					return;
+
+				case "resume":
+					if (!currentState || currentState.status !== "paused") {
+						ctx.ui.notify("No paused goal to resume", "info");
+						return;
+					}
+					await resumeGoal(pi, ctx, currentState);
+					return;
+
+				case "cancel":
+					if (!hasGoal) {
+						ctx.ui.notify("No active goal to cancel", "info");
+						return;
+					}
+					clearGoal(pi, ctx, currentState!);
 					ctx.ui.notify("Goal cancelled", "info");
 					return;
-				}
 
-				if (!result.condition.trim()) {
-					ctx.ui.notify("No condition provided", "warning");
+				case "configure": {
+					const settings = readSettings();
+					pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Goal — configuration needed" });
+
+					const result = await (async () => {
+						try {
+							return await ctx.ui.custom<GoalOptions | null>(
+								(_tui, theme, _kb, done) =>
+									new GoalDialog(theme, done, {
+										maxTurns: settings.maxTurns ?? DEFAULT_MAX_TURNS,
+										evaluatorModel:
+											settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL,
+									}),
+								{ overlay: true },
+							);
+						} finally {
+							pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
+						}
+					})();
+
+					if (!result) {
+						ctx.ui.notify("Goal cancelled", "info");
+						return;
+					}
+					if (!result.condition.trim()) {
+						ctx.ui.notify("No condition provided", "warning");
+						return;
+					}
+					if (result.evaluatorModel !== (settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL)) {
+						writeGoalSettings({ evaluatorModel: result.evaluatorModel });
+					}
+					if (isActive) clearGoal(pi, ctx, currentState!);
+					await startGoal(pi, ctx, result);
 					return;
 				}
 
-				// If evaluator model was picked, save it
-				if (result.evaluatorModel !== (settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL)) {
-					writeGoalSettings({ evaluatorModel: result.evaluatorModel });
-				}
+			case "start": {
+					if (isActive) clearGoal(pi, ctx, currentState!);
+					const settings = readSettings();
+					let evaluatorModel = settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL;
 
-				await startGoal(pi, ctx, result);
-				return;
-			}
+					if (!settings.evaluatorModel) {
+						const picked = await pickEvaluatorModel(ctx);
+						if (!picked) {
+							ctx.ui.notify("Goal cancelled — no evaluator model selected", "info");
+							return;
+						}
+						evaluatorModel = picked;
+						writeGoalSettings({ evaluatorModel: picked });
+					}
 
-			// /goal <condition> — quick start with defaults
-			const settings = readSettings();
-			let evaluatorModel = settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL;
-
-			// If no evaluator model configured, ask user to pick one
-			if (!settings.evaluatorModel) {
-				const picked = await pickEvaluatorModel(ctx);
-				if (!picked) {
-					ctx.ui.notify("Goal cancelled — no evaluator model selected", "info");
+					await startGoal(pi, ctx, {
+						condition: command.condition,
+						maxTurns: settings.maxTurns ?? DEFAULT_MAX_TURNS,
+						evaluatorModel,
+						useFreshSession: false,
+					});
 					return;
 				}
-				evaluatorModel = picked;
-				writeGoalSettings({ evaluatorModel: picked });
 			}
-
-			await startGoal(pi, ctx, {
-				condition: trimmed,
-				maxTurns: settings.maxTurns ?? DEFAULT_MAX_TURNS,
-				evaluatorModel,
-				useFreshSession: false,
-			});
 		},
 	});
 
@@ -651,7 +730,7 @@ export default function (pi: ExtensionAPI) {
 				const paused: GoalState = {
 					...state,
 					status: "paused",
-					lastEvalReason: "Fresh-session control unavailable after reload or resume. Start /goal again to continue autonomously.",
+					lastEvalReason: "Fresh-session control unavailable after reload or resume. Use /goal resume to continue autonomously.",
 				};
 				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, paused);
 				updateStatus(ctx, paused);
@@ -875,7 +954,7 @@ export default function (pi: ExtensionAPI) {
 				const pausedState: GoalState = {
 					...nextState,
 					status: "paused",
-					lastEvalReason: "Fresh-session control unavailable. Start /goal again to continue autonomously.",
+					lastEvalReason: "Fresh-session control unavailable. Use /goal resume to continue autonomously.",
 				};
 				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, pausedState);
 				updateStatus(ctx, pausedState);
@@ -1040,7 +1119,11 @@ export default function (pi: ExtensionAPI) {
 		);
 	}
 
-	function showGoalStatus(ctx: ExtensionContext, state: GoalState): void {
+	function showGoalStatus(
+		ctx: ExtensionContext,
+		state: GoalState,
+		showNavigation = false,
+	): void {
 		if (!ctx.hasUI) return;
 
 		const lines = [
@@ -1053,6 +1136,7 @@ export default function (pi: ExtensionAPI) {
 		if (state.lastEvalReason) {
 			lines.push(`Last evaluation: ${state.lastEvalReason}`);
 		}
+		if (showNavigation) lines.push("", GOAL_COMMAND_NAVIGATION);
 
 		ctx.ui.notify(lines.join("\n"), "info");
 	}
