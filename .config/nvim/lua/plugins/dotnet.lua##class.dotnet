@@ -1,3 +1,18 @@
+local function restart_roslyn_for_selected_solution()
+  local constants = require("easy-dotnet.constants")
+
+  for _, client in ipairs(vim.lsp.get_clients({ name = constants.lsp_client_name })) do
+    client:stop(true)
+  end
+
+  local lsp_options = require("easy-dotnet.options").options.lsp
+  require("easy-dotnet.roslyn.lsp").preload_roslyn(vim.tbl_deep_extend("force", lsp_options, {
+    -- A manual solution selection is an explicit request to load its workspace,
+    -- regardless of whether opportunistic startup preloading is disabled.
+    preload_roslyn = true,
+  }))
+end
+
 local function select_solution_from_cwd()
   local cwd = vim.fn.getcwd()
   local seen = {}
@@ -25,10 +40,12 @@ local function select_solution_from_cwd()
   end, solutions)
 
   require("easy-dotnet.picker").picker(nil, options, function(chosen)
-    if not chosen then return end
+    if not chosen then
+      return
+    end
 
-    require("easy-dotnet").solution_select(chosen.value)
-    require("easy-dotnet.rpc.rpc").global_rpc_client:restart()
+    require("easy-dotnet.current_solution").set_solution(chosen.value)
+    restart_roslyn_for_selected_solution()
   end, "Select solution", true, true)
 end
 
@@ -178,7 +195,7 @@ return {
       {
         "<leader>NpR",
         function()
-          require("easy-dotnet").solution_add()
+          require("easy-dotnet").solution_remove()
         end,
         desc = "Remove from solution",
       },
