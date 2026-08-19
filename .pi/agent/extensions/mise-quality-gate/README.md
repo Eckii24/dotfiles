@@ -5,8 +5,8 @@ Deterministic Pi quality gate for repositories that expose a mise task contract.
 ```text
 Pi agent_end
   -> Git reports changed paths
-  -> project mise policy matches paths
-  -> mise run verify
+  -> resolved mise policy matches paths
+  -> mise run verify from Git root
   -> format -> lint -> build -> unit tests
 ```
 
@@ -19,47 +19,52 @@ The extension enables itself once at `session_start` only when all conditions ho
 
 1. Current directory is inside a Git repository.
 2. `mise` is available.
-3. The protected global mise task `pi:quality-gate:project-root` resolves a project root inside that Git repository.
+3. The protected global mise task `pi:quality-gate:project-root` resolves the Git root.
 4. `mise env --json` at that root resolves a valid `PI_QUALITY_GATE_INCLUDE` policy.
-5. The repository defines `format`, `lint`, `build`, and `test` tasks in a mise config file inside that repository.
-6. `verify` is resolvable.
+5. The resolved mise hierarchy defines `format`, `lint`, `build`, and `test`.
+6. The resolved mise hierarchy defines `verify`.
 
-Global fallback tasks do **not** satisfy condition 5. This prevents accidentally running an arbitrary stack in a repository without an explicit local quality policy.
+The global config owns the protected resolver plus fail-closed diagnostic tasks. Stack defaults live in directory-level configs, for example `~/Development/Repos/mise.toml` for .NET repositories. Pi runs tasks with the resolved Git root as `cwd`; each task uses `MISE_ORIGINAL_CWD` so stack helpers resolve the current repository, including nested `src/v<N>` layouts.
 
-Before Pi executes `pi:quality-gate:project-root`, it verifies that the task's source is exactly `~/.config/mise/config.toml`. A repository-local override disables the gate instead of running project-provided discovery code during session startup.
+Before Pi executes the resolver, it verifies that its source is exactly `~/.config/mise/config.toml`. Quality tasks may come from a trusted parent stack config or a trusted repository-local override. Global quality-task fallbacks are diagnostics only and are rejected as a gate contract.
 
 The Pi UI shows the resulting state, for example:
 
 ```text
-Quality gate: enabled — /work/widget/src/v2
+Quality gate: enabled — /work/widget
 Quality gate: disabled — missing or invalid PI_QUALITY_GATE_INCLUDE
-Quality gate: disabled — task format is not defined in this repository
+Quality gate: disabled — quality task format is unavailable
 ```
 
-A project `mise.toml` must be trusted by mise. If it is not trusted, `mise env --json` cannot resolve the policy and the gate remains disabled. Trust the reviewed project config explicitly:
+Every stack config must be trusted by mise. Parent configs are intentional and inherited by all repositories below them. Inspect and trust the reviewed stack config explicitly:
 
 ```zsh
-mise trust mise.toml
+mise trust --show
+mise trust ~/Development/Repos/mise.toml
 ```
 
 ## .NET example setup
 
-The extension is stack-agnostic. This repository includes a .NET template as one example. Global generic task orchestration lives in:
+The global config contains the protected resolver and fail-closed diagnostics:
 
 ```text
 ~/.config/mise/config.toml
 ```
 
-It provides `pi:quality-gate:project-root`, `verify`, and `verify:full`. The protected resolver prints mise's `MISE_PROJECT_ROOT`; leaf tasks intentionally fail closed until a project defines them.
+Shared .NET defaults live in the directory config inherited by repositories below `~/Development/Repos`:
 
-Copy the .NET template into the project or wrapper root:
-
-```zsh
-cp ~/.config/mise/templates/dotnet/mise.toml ./mise.toml
-mise trust mise.toml
+```text
+~/Development/Repos/mise.toml
 ```
 
-The template defines:
+The file may be a symlink to the reusable template:
+
+```zsh
+ln -s ~/.config/mise/templates/dotnet/mise.toml ~/Development/Repos/mise.toml
+mise trust ~/Development/Repos/mise.toml
+```
+
+The stack config defines:
 
 ```text
 format             dotnet-in-repo format --verify-no-changes
@@ -80,7 +85,7 @@ MISE_TASK_RUN_AUTO_INSTALL=false
 
 ## Trigger policy
 
-The project owns trigger policy through normal mise environment inheritance. Pi reads the resolved values from:
+Each stack config owns its trigger policy. Pi reads the resolved values from the active mise hierarchy:
 
 ```zsh
 mise env --json
@@ -106,17 +111,9 @@ PI_QUALITY_GATE_EXCLUDE = '''
 
 Values are JSON arrays encoded as TOML strings because mise environment values are strings.
 
-The shipped .NET template includes source, project, MSBuild, solution, `.editorconfig`, NuGet, lockfile, and `global.json` changes. It excludes generated `bin` and `obj` trees.
+The .NET stack policy includes source, project, MSBuild, solution, `.editorconfig`, NuGet, lockfile, and `global.json` changes. It excludes generated `bin` and `obj` trees.
 
-mise resolves parent and nested `mise.toml` files. A nested project behaves as follows:
-
-```text
-PI_QUALITY_GATE_INCLUDE absent  -> inherit parent value
-PI_QUALITY_GATE_INCLUDE present -> replace parent list completely
-PI_QUALITY_GATE_EXCLUDE absent  -> inherit parent value
-```
-
-Complete replacement is deliberate: a subproject can narrow or replace its trigger surface without Pi implementing another config merge system.
+A Python stack can provide a sibling config, for example `~/Development/Python/mise.toml`, with Python-specific policy and tasks. A repository-local `mise.toml` can override inherited stack tasks after explicit trust.
 
 ## Change detection
 
@@ -153,13 +150,13 @@ Redaction is defense in depth, not a complete secret-scanning guarantee. Command
 ## Troubleshooting
 
 ```zsh
-# Inspect resolved policy at the project or wrapper root.
+# Inspect resolved shared policy from any repository directory.
 mise env --json
 
-# Resolve project root through the protected generic contract.
+# Resolve the current Git root through the protected contract.
 mise run --quiet pi:quality-gate:project-root
 
-# Inspect task origin; leaf tasks must originate inside the repository.
+# Inspect resolved task origins; source may be a trusted stack or repo config.
 mise tasks info --json format
 mise tasks info --json lint
 mise tasks info --json build
@@ -181,4 +178,4 @@ mise run --jobs 1 verify:full
 - No automatic SDK, runtime, or tool installation.
 - No formatting mutation during the automatic gate.
 - No integration tests in default `verify`.
-- No stack-specific task implementation; projects own `format`, `lint`, `build`, `test`, and `verify`.
+- No per-repository task duplication when stack defaults are sufficient.

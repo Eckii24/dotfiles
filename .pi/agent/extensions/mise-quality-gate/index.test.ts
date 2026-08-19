@@ -1,5 +1,9 @@
+import { homedir } from "node:os";
 import { describe, expect, test } from "bun:test";
 import miseQualityGate, { matchesQualityGatePath } from "./index.ts";
+
+const globalMiseConfig = `${homedir()}/.config/mise/config.toml`;
+const reposMiseConfig = "/mise.toml";
 
 type Execution = { command: string; args: string[]; options: any };
 
@@ -31,10 +35,10 @@ const pythonPolicy = {
 function createHarness(
   paths: string[],
   verifyResult = { code: 0, stdout: "verified\n", stderr: "" },
-  projectTaskSource = "/repo/mise.toml",
+  projectTaskSource = reposMiseConfig,
   env = dotnetPolicy,
   projectRoot = "/repo",
-  resolverSource = "/home/matthias/.config/mise/config.toml",
+  resolverSource = globalMiseConfig,
 ) {
   const handlers = new Map<string, (event: any, ctx: any) => Promise<unknown> | unknown>();
   const executions: Execution[] = [];
@@ -91,14 +95,14 @@ describe("mise quality-gate policy", () => {
 });
 
 describe("mise quality gate lifecycle", () => {
-  test("supports a non-.NET project and runs verification from the task directory", async () => {
-    const { ctx, executions, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, "/repo/mise.toml", pythonPolicy, "/repo/src/v2");
+  test("runs inherited verification from the Git repository root", async () => {
+    const { ctx, executions, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, undefined, pythonPolicy, "/repo");
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo/src/v2"]);
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo"]);
     expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "tasks" && entry.args.at(-1) === "pi:quality-gate:project-root")).toMatchObject({
       args: ["tasks", "info", "--json", "pi:quality-gate:project-root"],
       options: { cwd: "/repo/src" },
@@ -110,8 +114,18 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "dotnet-in-repo")).toHaveLength(0);
     expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toMatchObject({
       args: ["run", "--jobs", "1", "verify"],
-      options: { cwd: "/repo/src/v2", env: { MISE_TASK_RUN_AUTO_INSTALL: "false" } },
+      options: { cwd: "/repo", env: { MISE_TASK_RUN_AUTO_INSTALL: "false" } },
     });
+  });
+
+  test("accepts a repository-local quality task override", async () => {
+    const { ctx, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, "/repo/mise.toml", pythonPolicy);
+    miseQualityGate(pi);
+
+    await handlers.get("session_start")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo"]);
   });
 
   test("does not execute a project override of the global project-root resolver", async () => {
@@ -153,18 +167,18 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
   });
 
-  test("requires project-root implementations instead of global fallback tasks", async () => {
+  test("does not accept global quality-task fallbacks", async () => {
     const { ctx, executions, handlers, pi, statuses } = createHarness(
       ["src/Foo.cs"],
       undefined,
-      "/home/matthias/.config/mise/config.toml",
+      globalMiseConfig,
     );
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — task format is not defined in this repository"]);
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — quality task format is unavailable"]);
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
   });
 

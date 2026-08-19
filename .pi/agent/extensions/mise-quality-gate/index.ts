@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isAbsolute, matchesGlob, relative, resolve } from "node:path";
+import { dirname, isAbsolute, matchesGlob, relative, resolve } from "node:path";
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -143,7 +143,15 @@ async function resolveProjectRoot(
   return { projectRoot };
 }
 
-async function isProjectTask(
+function isQualityTaskSource(repoRoot: string, source: string): boolean {
+  const taskSource = resolve(source);
+  if (taskSource === PROJECT_ROOT_RESOLVER_SOURCE) return false;
+
+  const sourceDirectory = dirname(taskSource);
+  return isPathInside(repoRoot, taskSource) || isPathInside(sourceDirectory, repoRoot);
+}
+
+async function isQualityTask(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   repoRoot: string,
@@ -159,7 +167,7 @@ async function isProjectTask(
 
   try {
     const source = JSON.parse(task.stdout).source;
-    return typeof source === "string" && isPathInside(repoRoot, source);
+    return typeof source === "string" && isQualityTaskSource(repoRoot, source);
   } catch {
     return false;
   }
@@ -244,18 +252,13 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       const policy = resolvedPolicy.policy;
 
       for (const taskName of REQUIRED_PROJECT_TASKS) {
-        if (!await isProjectTask(pi, ctx, repoRoot, projectRoot, taskName)) {
-          setAvailabilityStatus(ctx, `disabled — task ${taskName} is not defined in this repository`);
+        if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, taskName)) {
+          setAvailabilityStatus(ctx, `disabled — quality task ${taskName} is unavailable`);
           return;
         }
       }
-      const verify = await pi.exec("mise", ["tasks", "info", QUALITY_TASK], {
-        cwd: projectRoot,
-        signal: ctx.signal,
-        timeout: 2_000,
-      });
-      if (verify.code !== 0) {
-        setAvailabilityStatus(ctx, `disabled — task ${QUALITY_TASK} is unavailable`);
+      if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, QUALITY_TASK)) {
+        setAvailabilityStatus(ctx, `disabled — quality task ${QUALITY_TASK} is unavailable`);
         return;
       }
 
