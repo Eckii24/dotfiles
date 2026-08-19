@@ -1,5 +1,8 @@
-import { homedir } from "node:os";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { loadQualityGateSettings } from "./config.ts";
 import miseQualityGate, { matchesQualityGatePath } from "./index.ts";
 
 const globalMiseConfig = `${homedir()}/.config/mise/config.toml`;
@@ -56,7 +59,7 @@ function createHarness(
     sendUserMessage(message: string) { followUps.push(message); },
     async exec(command: string, args: string[], options: any) {
       executions.push({ command, args, options });
-      if (command === "git" && args[0] === "rev-parse") return { code: 0, stdout: "/repo\n", stderr: "" };
+      if (command === "git" && args[0] === "rev-parse") return { code: 0, stdout: `${projectRoot}\n`, stderr: "" };
       if (command === "git" && ["diff", "ls-files"].includes(args[0])) return { code: 0, stdout: gitOutput, stderr: "" };
       if (command === "mise" && args[0] === "--version") return { code: 0, stdout: "mise 2026.1.0\n", stderr: "" };
       if (command === "mise" && args[0] === "env") return { code: 0, stdout: JSON.stringify(env), stderr: "" };
@@ -86,6 +89,28 @@ function createHarness(
   return { commands, ctx, executions, flags, followUps, handlers, notices, pi, statuses };
 }
 
+describe("mise quality-gate settings", () => {
+  test("merges global and project settings by field", () => {
+    const root = mkdtempSync(join(tmpdir(), "mise-quality-gate-"));
+    const agentDirectory = join(root, "agent");
+    const repoRoot = join(root, "repo");
+    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+    try {
+      mkdirSync(agentDirectory, { recursive: true });
+      mkdirSync(join(repoRoot, ".pi"), { recursive: true });
+      writeFileSync(join(agentDirectory, "settings.json"), JSON.stringify({ qualityGate: { task: "verify:full", maxRepairAttempts: 2 } }));
+      writeFileSync(join(repoRoot, ".pi", "settings.json"), JSON.stringify({ qualityGate: { maxRepairAttempts: 3 } }));
+      process.env.PI_CODING_AGENT_DIR = agentDirectory;
+
+      expect(loadQualityGateSettings(repoRoot)).toEqual({ task: "verify:full", maxRepairAttempts: 3 });
+    } finally {
+      if (previousAgentDirectory === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("mise quality-gate policy", () => {
   test("matches configured .NET inputs and excludes generated build outputs", () => {
     const include = JSON.parse(dotnetPolicy.PI_QUALITY_GATE_INCLUDE);
@@ -112,6 +137,36 @@ describe("mise quality gate lifecycle", () => {
     expect(executions).toHaveLength(0);
   });
 
+  test("uses configured task and repair attempts", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mise-quality-gate-"));
+    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+    try {
+      mkdirSync(join(root, ".pi"), { recursive: true });
+      writeFileSync(join(root, ".pi", "settings.json"), JSON.stringify({ qualityGate: { task: "verify:full", maxRepairAttempts: 2 } }));
+      process.env.PI_CODING_AGENT_DIR = join(root, "agent-without-settings");
+      const { ctx, executions, followUps, handlers, pi } = createHarness(
+        ["src/Foo.cs"],
+        { code: 1, stdout: "failed", stderr: "" },
+        undefined,
+        dotnetPolicy,
+        root,
+      );
+      miseQualityGate(pi);
+
+      await handlers.get("session_start")!({}, ctx);
+      await handlers.get("agent_end")!({}, ctx);
+      await handlers.get("agent_end")!({}, ctx);
+      await handlers.get("agent_end")!({}, ctx);
+
+      expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toHaveLength(3);
+      expect(followUps).toHaveLength(2);
+    } finally {
+      if (previousAgentDirectory === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("uses any Mise task target from a CLI flag", async () => {
     const { ctx, executions, flags, handlers, pi } = createHarness(["src/Foo.cs"]);
     flags.set("quality-gate-task", "verify:full");
@@ -132,9 +187,11 @@ describe("mise quality gate lifecycle", () => {
 
     await handlers.get("session_start")!({}, ctx);
     await commands.get("quality-gate")!.handler("task verify:full", ctx);
+    await commands.get("quality-gate")!.handler("attempts 2", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
     expect(notices).toContain("Quality gate task set to verify:full");
+    expect(notices).toContain("Quality gate automatic repair attempts set to 2");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toHaveLength(1);
 
     await commands.get("quality-gate")!.handler("off", ctx);

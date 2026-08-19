@@ -60,7 +60,25 @@ Control it from Pi chat for the current session:
 /quality-gate status
 ```
 
-The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. `task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. `reset` restores `verify`. All settings are session-only.
+The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. `task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. All command settings are session-only.
+
+### Settings
+
+Set defaults globally in `~/.pi/agent/settings.json`, or per repository in `.pi/settings.json`. Project settings override global fields independently:
+
+```json
+{
+  "qualityGate": {
+    "task": "verify:full",
+    "maxRepairAttempts": 2
+  }
+}
+```
+
+- `task`: default Mise task. Falls back to `verify`.
+- `maxRepairAttempts`: non-negative count of failed gate runs that queue an automatic repair follow-up for the model. Falls back to `1`; `0` disables automatic repair follow-ups.
+- `/quality-gate task <name>` and `/quality-gate attempts <count>` override these defaults for the active session.
+- `/quality-gate reset` removes both session overrides and restores current settings defaults.
 
 Every stack config must be trusted by mise. Parent configs are intentional and inherited by all repositories below them. Inspect and trust the reviewed stack config explicitly:
 
@@ -167,7 +185,7 @@ This is intentionally conservative. A `.cs` file already dirty before the agent 
 - `verify` has a ten-minute timeout.
 - On success, Pi shows `Quality gate passed`.
 - On failure, Pi shows the failed paths and a compact diagnostic, then queues one automatic Pi follow-up asking the LLM to repair the failure in current scope.
-- Only one automatic repair handoff is queued per Pi session. This prevents a permanently failing test from creating an infinite agent loop.
+- Failed checks queue automatic repair follow-ups only up to `maxRepairAttempts` (default: one). This prevents a permanently failing test from creating an infinite agent loop.
 
 Before diagnostics reach either the UI or LLM follow-up, common credential forms are redacted, including Authorization headers, password/token/key assignments, connection-string assignments, and common GitHub/GitLab/OpenAI token shapes.
 
