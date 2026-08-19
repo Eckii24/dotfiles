@@ -131,14 +131,14 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(1);
   });
 
-  test("runs inherited verification from the Git repository root", async () => {
-    const { ctx, executions, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, undefined, pythonPolicy, "/repo");
+  test("runs inherited verification from the Pi session directory", async () => {
+    const { ctx, executions, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, undefined, pythonPolicy, "/repo/src");
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo"]);
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo/src"]);
     expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "tasks" && entry.args.at(-1) === "pi:quality-gate:project-root")).toMatchObject({
       args: ["tasks", "info", "--json", "pi:quality-gate:project-root"],
       options: { cwd: "/repo/src" },
@@ -150,7 +150,7 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "dotnet-in-repo")).toHaveLength(0);
     expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toMatchObject({
       args: ["run", "--jobs", "1", "verify"],
-      options: { cwd: "/repo", env: { MISE_TASK_RUN_AUTO_INSTALL: "false" } },
+      options: { cwd: "/repo/src", env: { MISE_TASK_RUN_AUTO_INSTALL: "false" } },
     });
   });
 

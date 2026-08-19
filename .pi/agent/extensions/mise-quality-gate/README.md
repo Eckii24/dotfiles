@@ -19,12 +19,12 @@ The extension enables itself once at `session_start` only when all conditions ho
 
 1. Current directory is inside a Git repository.
 2. `mise` is available.
-3. The protected global mise task `pi:quality-gate:project-root` resolves the Git root.
+3. The protected global mise task `pi:quality-gate:project-root` resolves the Pi session directory.
 4. `mise env --json` at that root resolves a valid `PI_QUALITY_GATE_INCLUDE` policy.
 5. The resolved mise hierarchy defines `format`, `lint`, `build`, and `test`.
 6. The resolved mise hierarchy defines `verify`.
 
-The global config owns the protected resolver plus fail-closed diagnostic tasks. Stack defaults live in directory-level configs, for example `~/Development/Repos/mise.toml` for .NET repositories. Pi runs tasks with the resolved Git root as `cwd`; each task uses `MISE_ORIGINAL_CWD` so stack helpers resolve the current repository, including nested `src/v<N>` layouts.
+The global config owns the protected resolver plus fail-closed diagnostic tasks. Stack defaults live in directory-level configs, for example `~/Development/Repos/mise.toml` for .NET repositories. Pi runs tasks with the resolved Pi session directory as `cwd`; each task uses `MISE_ORIGINAL_CWD` so stack helpers resolve the requested project, including components nested in a Git monorepo and `src/v<N>` layouts.
 
 Before Pi executes the resolver, it verifies that its source is exactly `~/.config/mise/config.toml`. Quality tasks may come from a trusted parent stack config or a trusted repository-local override. Global quality-task fallbacks are diagnostics only and are rejected as a gate contract.
 
@@ -171,7 +171,7 @@ Redaction is defense in depth, not a complete secret-scanning guarantee. Command
 # Inspect resolved shared policy from any repository directory.
 mise env --json
 
-# Resolve the current Git root through the protected contract.
+# Resolve the current Pi session directory through the protected contract.
 mise run --quiet pi:quality-gate:project-root
 
 # Inspect resolved task origins; source may be a trusted stack or repo config.

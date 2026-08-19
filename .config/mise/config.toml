@@ -5,8 +5,8 @@ task.run_auto_install = false
 # Protected resolver for Pi. Stack-specific policy and tasks live in
 # directory-level mise.toml files (for example ~/Development/Repos/mise.toml).
 [tasks."pi:quality-gate:project-root"]
-description = "Print the current Git repository root for the Pi quality gate"
-run = 'git -C "$MISE_ORIGINAL_CWD" rev-parse --show-toplevel'
+description = "Print the Pi session directory for the quality gate"
+run = 'cd "$MISE_ORIGINAL_CWD" && pwd -P'
 
 # Fail-closed diagnostics for directories without a stack config. Pi rejects
 # these global task sources as a quality-gate contract.
