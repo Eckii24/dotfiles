@@ -36,6 +36,24 @@ Quality gate: disabled — missing or invalid PI_QUALITY_GATE_INCLUDE
 Quality gate: disabled — quality task format is unavailable
 ```
 
+## Session controls
+
+Disable the gate when starting Pi:
+
+```zsh
+pi --no-quality-gate
+```
+
+Control it from Pi chat for the current session:
+
+```text
+/quality-gate off
+/quality-gate on
+/quality-gate status
+```
+
+`--no-quality-gate` starts the session disabled; `/quality-gate on` re-checks the activation contract before enabling it. The setting is session-only.
+
 Every stack config must be trusted by mise. Parent configs are intentional and inherited by all repositories below them. Inspect and trust the reviewed stack config explicitly:
 
 ```zsh

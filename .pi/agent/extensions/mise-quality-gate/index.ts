@@ -31,6 +31,7 @@ type QualityGateState = {
   repoRoot?: string;
   projectRoot?: string;
   policy?: QualityGatePolicy;
+  enabled: boolean;
   available: boolean;
   repairFollowUpQueued: boolean;
   running: boolean;
@@ -194,19 +195,30 @@ function notify(ctx: ExtensionContext, message: string, level: "info" | "warning
 }
 
 export default function miseQualityGate(pi: ExtensionAPI) {
+  pi.registerFlag("no-quality-gate", {
+    description: "Disable the mise quality gate for this session",
+    type: "boolean",
+    default: false,
+  });
+
   const state: QualityGateState = {
+    enabled: !Boolean(pi.getFlag("no-quality-gate")),
     available: false,
     repairFollowUpQueued: false,
     running: false,
   };
 
-  pi.on("session_start", async (_event, ctx) => {
+  async function initialize(ctx: ExtensionContext): Promise<void> {
     state.available = false;
     state.repairFollowUpQueued = false;
-    state.running = false;
     state.repoRoot = undefined;
     state.projectRoot = undefined;
     state.policy = undefined;
+
+    if (!state.enabled) {
+      setAvailabilityStatus(ctx, "disabled — disabled for this session");
+      return;
+    }
 
     try {
       const root = await pi.exec("git", ["rev-parse", "--show-toplevel"], {
@@ -270,10 +282,40 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     } catch {
       setAvailabilityStatus(ctx, "disabled — initialization failed");
     }
+  }
+
+  pi.on("session_start", async (_event, ctx) => {
+    state.running = false;
+    await initialize(ctx);
+  });
+
+  pi.registerCommand("quality-gate", {
+    description: "Control this session's quality gate: on|off|status",
+    handler: async (args, ctx) => {
+      const action = args.trim().toLowerCase();
+      if (action === "off") {
+        state.enabled = false;
+        state.available = false;
+        setAvailabilityStatus(ctx, "disabled — disabled for this session");
+        notify(ctx, "Quality gate disabled for this session");
+        return;
+      }
+      if (action === "on") {
+        state.enabled = true;
+        await initialize(ctx);
+        notify(ctx, state.available ? "Quality gate enabled for this session" : "Quality gate could not be enabled; see status", state.available ? "info" : "warning");
+        return;
+      }
+      if (action === "status" || !action) {
+        notify(ctx, `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}\nUsage: /quality-gate [on|off|status]`);
+        return;
+      }
+      notify(ctx, "Usage: /quality-gate [on|off|status]", "warning");
+    },
   });
 
   pi.on("agent_end", async (_event, ctx) => {
-    if (!state.available || state.running || !state.repoRoot || !state.projectRoot || !state.policy) return;
+    if (!state.enabled || !state.available || state.running || !state.repoRoot || !state.projectRoot || !state.policy) return;
 
     state.running = true;
     try {

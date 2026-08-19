@@ -40,6 +40,8 @@ function createHarness(
   projectRoot = "/repo",
   resolverSource = globalMiseConfig,
 ) {
+  const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<unknown> | unknown }>();
+  const flags = new Map<string, unknown>();
   const handlers = new Map<string, (event: any, ctx: any) => Promise<unknown> | unknown>();
   const executions: Execution[] = [];
   const notices: string[] = [];
@@ -47,7 +49,10 @@ function createHarness(
   const followUps: string[] = [];
   const gitOutput = paths.join("\0") + (paths.length ? "\0" : "");
   const pi: any = {
+    getFlag(name: string) { return flags.get(name); },
     on(name: string, handler: any) { handlers.set(name, handler); },
+    registerCommand(name: string, command: any) { commands.set(name, command); },
+    registerFlag(name: string, options: any) { if (!flags.has(name)) flags.set(name, options.default); },
     sendUserMessage(message: string) { followUps.push(message); },
     async exec(command: string, args: string[], options: any) {
       executions.push({ command, args, options });
@@ -78,7 +83,7 @@ function createHarness(
       setStatus(key: string, text: string | undefined) { statuses.push([key, text]); },
     },
   };
-  return { ctx, executions, followUps, handlers, notices, pi, statuses };
+  return { commands, ctx, executions, flags, followUps, handlers, notices, pi, statuses };
 }
 
 describe("mise quality-gate policy", () => {
@@ -95,6 +100,37 @@ describe("mise quality-gate policy", () => {
 });
 
 describe("mise quality gate lifecycle", () => {
+  test("registers a CLI switch and skips initialization when quality gate starts disabled", async () => {
+    const { ctx, executions, flags, handlers, pi, statuses } = createHarness(["src/Foo.cs"]);
+    flags.set("no-quality-gate", true);
+    miseQualityGate(pi);
+
+    await handlers.get("session_start")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — disabled for this session"]);
+    expect(executions).toHaveLength(0);
+  });
+
+  test("toggles the quality gate from chat for the current session", async () => {
+    const { commands, ctx, executions, handlers, notices, pi, statuses } = createHarness(["src/Foo.cs"]);
+    miseQualityGate(pi);
+
+    await handlers.get("session_start")!({}, ctx);
+    await commands.get("quality-gate")!.handler("off", ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — disabled for this session"]);
+    expect(notices).toContain("Quality gate disabled for this session");
+    expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
+
+    await commands.get("quality-gate")!.handler("on", ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(notices).toContain("Quality gate enabled for this session");
+    expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(1);
+  });
+
   test("runs inherited verification from the Git repository root", async () => {
     const { ctx, executions, handlers, pi, statuses } = createHarness(["src/AlreadyDirty.py"], undefined, undefined, pythonPolicy, "/repo");
     miseQualityGate(pi);
