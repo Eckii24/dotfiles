@@ -167,7 +167,7 @@ local function read_review_data(root)
   local ok, data = pcall(vim.json.decode, raw)
   if not ok or type(data) ~= "table" then
     notify("Kann " .. review_file .. " nicht lesen: ungültiges JSON.", vim.log.levels.ERROR)
-    return default_review_data()
+    return nil
   end
 
   if type(data.comments) ~= "table" then
@@ -178,7 +178,8 @@ local function read_review_data(root)
 end
 
 local function read_comments(root)
-  return read_review_data(root).comments
+  local data = read_review_data(root)
+  return data and data.comments or nil
 end
 
 local function set_highlights()
@@ -276,11 +277,11 @@ local function visible_width(bufnr)
         textoff = info.textoff or 0
       end
 
-      return math.max(40, math.min(100, api.nvim_win_get_width(win) - textoff - 2))
+      return math.max(20, math.min(100, api.nvim_win_get_width(win) - textoff - 2))
     end
   end
 
-  return 88
+  return 80
 end
 
 local function split_lines(text)
@@ -378,9 +379,9 @@ end
 
 local function comment_virt_lines(note, index, width)
   local indent = "  "
-  local box_width = math.max(40, width)
-  local inside_width = math.max(34, box_width - vim.fn.strdisplaywidth(indent) - 2)
-  local content_width = math.max(20, inside_width - 2)
+  local box_width = math.max(20, width)
+  local inside_width = math.max(16, box_width - vim.fn.strdisplaywidth(indent) - 2)
+  local content_width = math.max(12, inside_width - 2)
   local target = string.format("%s:%d [%s]", note.file, note.line, note.side or "right")
   local title = string.format("AI review #%d  %s", index, target)
   local title_text = truncate_middle(title, inside_width - 3)
@@ -437,9 +438,14 @@ local function render_buffer(bufnr, root, file_path, side)
     return
   end
 
+  local all_comments = read_comments(root)
+  if not all_comments then
+    return
+  end
+
   local comments = vim.tbl_filter(function(note)
     return comment_matches(note, file_path, side) and (show_resolved or not is_resolved(note))
-  end, read_comments(root))
+  end, all_comments)
 
   table.sort(comments, function(a, b)
     if a.line == b.line then
@@ -535,9 +541,12 @@ end
 
 local function save_comment(target, body)
   local path = review_path(target.root)
-  ensure_review_file(path)
-
   local data = read_review_data(target.root)
+  if not data then
+    return
+  end
+
+  ensure_review_file(path)
   local comments = data.comments
   local note, index = find_comment(comments, target)
   local now = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -677,6 +686,10 @@ function M.add_note()
   end
 
   local data = read_review_data(target.root)
+  if not data then
+    return
+  end
+
   local existing = find_comment(data.comments, target)
 
   open_comment_editor(target, existing)
@@ -690,6 +703,10 @@ function M.toggle_note()
 
   local path = review_path(target.root)
   local data = read_review_data(target.root)
+  if not data then
+    return
+  end
+
   local note = find_comment(data.comments, target)
 
   if not note then
@@ -732,6 +749,10 @@ function M.open_notes()
   local root = git_root()
   local path = review_path(root)
 
+  if not read_review_data(root) then
+    return
+  end
+
   ensure_review_file(path)
 
   vim.cmd("edit " .. vim.fn.fnameescape(path))
@@ -762,6 +783,13 @@ function M.setup()
   api.nvim_create_autocmd("BufWritePost", {
     group = group,
     pattern = "*/.ai-review.json",
+    callback = function()
+      vim.schedule(M.render)
+    end,
+  })
+
+  api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+    group = group,
     callback = function()
       vim.schedule(M.render)
     end,
