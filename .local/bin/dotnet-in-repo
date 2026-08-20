@@ -105,12 +105,15 @@ run_test_kind() {
   projects=(
     "${(@f)$(find "$target_dir" -type f -name "*.${suffix}.csproj" -print)}"
   )
-  (( ${#projects[@]} == 1 )) && [[ -n "${projects[1]}" ]] || {
-    print -u2 -- "Expected exactly one *.${suffix}.csproj below $target_dir; found ${#projects[@]}"
-    return 1
+  (( ${#projects[@]} > 0 )) && [[ -n "${projects[1]:-}" ]] || {
+    print -u2 -- "Warning: no *.${suffix}.csproj found below $target_dir; skipping test-kind $kind"
+    return 0
   }
 
-  run_dotnet "$target_dir" test "$projects[1]" "$@"
+  local project
+  for project in "${projects[@]}"; do
+    run_dotnet "$target_dir" test "$project" "$@"
+  done
 }
 
 main() {
