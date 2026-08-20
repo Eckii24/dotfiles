@@ -7,16 +7,32 @@
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 
--- Disable Noice LSP progress for C# files, until the issue is resolved
--- https://github.com/dotnet/roslyn/issues/79939
--- https://github.com/folke/noice.nvim/issues/1144
+-- Roslyn can emit malformed $/progress notifications without `token` or
+-- `value` (https://github.com/dotnet/roslyn/issues/79939). Do not disable
+-- Noice progress globally; replace its handler only after C# support is active
+-- and discard only malformed events.
+local noice_progress_guard_installed = false
+
 vim.api.nvim_create_autocmd("FileType", {
-  pattern = { "cs" },
+  pattern = "cs",
   callback = function()
-    vim.api.nvim_clear_autocmds({
-      group = "noice_lsp_progress",
-      event = "LspProgress",
-      pattern = "*",
+    if noice_progress_guard_installed then
+      return
+    end
+
+    noice_progress_guard_installed = true
+    local group = "noice_lsp_progress"
+    vim.api.nvim_clear_autocmds({ group = group, event = "LspProgress" })
+    vim.api.nvim_create_autocmd("LspProgress", {
+      group = group,
+      callback = function(event)
+        local params = event.data and (event.data.params or event.data.result)
+        if type(params) ~= "table" or params.token == nil or type(params.value) ~= "table" then
+          return
+        end
+
+        require("noice.lsp.progress").progress(event.data)
+      end,
     })
   end,
 })
