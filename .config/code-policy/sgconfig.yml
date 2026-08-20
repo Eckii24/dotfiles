@@ -1,0 +1,5 @@
+# Central ast-grep policy root. Paths are relative to this file.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests
