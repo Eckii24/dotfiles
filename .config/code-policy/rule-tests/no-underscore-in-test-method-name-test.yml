@@ -1,0 +1,86 @@
+id: no-underscore-in-test-method-name
+
+valid:
+- |
+  using Xunit;
+
+  class Tests
+  {
+      [Fact]
+      public void DoesSomething() { }
+
+      [Theory]
+      public async Task DoesSomethingElse(int input_value) { }
+
+      public void Helper_method() { }
+
+      [Fact]
+      public void DoesSomethingWithUnderscoreInBody()
+      {
+          var input_value = 1;
+          Assert.Equal(1, input_value);
+      }
+  }
+- |
+  using NUnit.Framework;
+
+  class Tests
+  {
+      [Test]
+      public void DoesSomething() { }
+
+      [TestCase(1)]
+      public void DoesSomethingElse(int value) { }
+
+      [TestCaseSource(nameof(Data))]
+      public void DoesSomethingFromSource(int value) { }
+  }
+- |
+  using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+  class Tests
+  {
+      [TestMethod]
+      public void DoesSomething() { }
+
+      [DataTestMethod]
+      public void DoesSomethingWithData() { }
+  }
+
+invalid:
+- |
+  using Xunit;
+
+  class Tests
+  {
+      [Fact]
+      public void Does_something() { }
+
+      [Theory]
+      public async Task Does_something_else() { }
+  }
+- |
+  using NUnit.Framework;
+
+  class Tests
+  {
+      [Test]
+      public void Does_something() { }
+
+      [TestCase(1)]
+      public void Does_something_else(int value) { }
+
+      [TestCaseSource(nameof(Data))]
+      public void Does_something_from_source(int value) { }
+  }
+- |
+  using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+  class Tests
+  {
+      [TestMethod]
+      public void Does_something() { }
+
+      [DataTestMethod]
+      public void Does_something_with_data() { }
+  }

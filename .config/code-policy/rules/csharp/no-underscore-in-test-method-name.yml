@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: no-underscore-in-test-method-name
+message: Test method names must not contain underscores.
+severity: error
+language: CSharp
+rule:
+  all:
+    - kind: method_declaration
+    - has:
+        field: name
+        regex: _
+    - regex: '(?s)^\s*(?:\[[^\]]*\]\s*)*\[[^\]]*\b(?:Fact|Theory|Test|TestCase|TestCaseSource|TestMethod|DataTestMethod)(?:Attribute)?(?:\s*[\(,\]])'

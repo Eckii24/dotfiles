@@ -1,0 +1,71 @@
+id: no-underscore-in-test-method-name
+snapshots:
+  ? |
+    using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+    class Tests
+    {
+        [TestMethod]
+        public void Does_something() { }
+
+        [DataTestMethod]
+        public void Does_something_with_data() { }
+    }
+  : labels:
+    - source: |-
+        [TestMethod]
+            public void Does_something() { }
+      style: primary
+      start: 71
+      end: 120
+    - source: Does_something
+      style: secondary
+      start: 100
+      end: 114
+  ? |
+    using NUnit.Framework;
+
+    class Tests
+    {
+        [Test]
+        public void Does_something() { }
+
+        [TestCase(1)]
+        public void Does_something_else(int value) { }
+
+        [TestCaseSource(nameof(Data))]
+        public void Does_something_from_source(int value) { }
+    }
+  : labels:
+    - source: |-
+        [Test]
+            public void Does_something() { }
+      style: primary
+      start: 42
+      end: 85
+    - source: Does_something
+      style: secondary
+      start: 65
+      end: 79
+  ? |
+    using Xunit;
+
+    class Tests
+    {
+        [Fact]
+        public void Does_something() { }
+
+        [Theory]
+        public async Task Does_something_else() { }
+    }
+  : labels:
+    - source: |-
+        [Fact]
+            public void Does_something() { }
+      style: primary
+      start: 32
+      end: 75
+    - source: Does_something
+      style: secondary
+      start: 55
+      end: 69
