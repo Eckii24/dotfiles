@@ -126,14 +126,17 @@ describe("mise quality-gate policy", () => {
 
 describe("mise quality gate lifecycle", () => {
   test("registers a CLI switch and skips initialization when quality gate starts disabled", async () => {
-    const { ctx, executions, flags, handlers, pi, statuses } = createHarness(["src/Foo.cs"]);
+    const { commands, ctx, executions, flags, handlers, notices, pi, statuses } = createHarness(["src/Foo.cs"]);
     flags.set("no-quality-gate", true);
     miseQualityGate(pi);
 
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — disabled for this session"]);
+    expect(statuses).toEqual([]);
+    expect(notices).toContain("[quality-gate] Quality gate: disabled — disabled for this session");
+    await commands.get("quality-gate")!.handler("status", ctx);
+    expect(notices.at(-1)).toContain("Reason: disabled for this session");
     expect(executions).toHaveLength(0);
   });
 
@@ -197,7 +200,7 @@ describe("mise quality gate lifecycle", () => {
     await commands.get("quality-gate")!.handler("disable", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — disabled for this session"]);
+    expect(statuses).toEqual([]);
     expect(notices).toContain("Quality gate disabled for this session");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
 
@@ -216,7 +219,6 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo/src"]);
     expect(executions.find(entry => entry.command === "mise" && entry.args[0] === "tasks" && entry.args.at(-1) === "pi:quality-gate:project-root")).toMatchObject({
       args: ["tasks", "info", "--json", "pi:quality-gate:project-root"],
       options: { cwd: "/repo/src" },
@@ -239,7 +241,6 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: enabled — /repo"]);
   });
 
   test("does not execute a project override of the global project-root resolver", async () => {
@@ -256,7 +257,6 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — global project-root resolver is overridden"]);
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run")).toHaveLength(0);
   });
 
@@ -277,7 +277,6 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — missing or invalid PI_QUALITY_GATE_INCLUDE"]);
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
   });
 
@@ -292,11 +291,10 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate-availability", "Quality gate: disabled — quality task format is unavailable"]);
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
   });
 
-  test("shows active status and queues one redacted repair handoff on verification failure", async () => {
+  test("queues one redacted repair handoff on verification failure", async () => {
     const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
     const { ctx, executions, followUps, handlers, notices, pi, statuses } = createHarness(
       ["src/GeneratedByPython.cs"],
@@ -307,8 +305,6 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toContainEqual(["mise-quality-gate", "Running mise verify…"]);
-    expect(statuses).toContainEqual(["mise-quality-gate", undefined]);
     expect(notices.some(message => message.includes("Quality gate failed"))).toBe(true);
     expect(followUps).toHaveLength(1);
     expect(followUps[0]).toContain("Tests failed");

@@ -5,6 +5,7 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { loadQualityGateSettings } from "./config.ts";
+import { reportStartupStatus } from "../shared/startup-status.ts";
 
 const QUALITY_TASK = "verify";
 const PROJECT_ROOT_RESOLVER_TASK = "pi:quality-gate:project-root";
@@ -43,6 +44,7 @@ type QualityGateState = {
   available: boolean;
   repairAttempts: number;
   running: boolean;
+  disabledReason?: string;
 };
 
 export function matchesQualityGatePath(filePath: string, include: string[], exclude: string[]): boolean {
@@ -194,10 +196,6 @@ function compactOutput(stdout: string, stderr: string): string {
   return text.length <= 4_000 ? text : `…${text.slice(-4_000)}`;
 }
 
-function setAvailabilityStatus(ctx: ExtensionContext, message: string): void {
-  if (ctx.hasUI) ctx.ui.setStatus("mise-quality-gate-availability", `Quality gate: ${message}`);
-}
-
 function notify(ctx: ExtensionContext, message: string, level: "info" | "warning" = "info"): void {
   if (ctx.hasUI) ctx.ui.notify(message, level);
 }
@@ -235,9 +233,10 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     state.repoRoot = undefined;
     state.projectRoot = undefined;
     state.policy = undefined;
+    state.disabledReason = undefined;
 
     if (!state.enabled) {
-      setAvailabilityStatus(ctx, "disabled — disabled for this session");
+      state.disabledReason = "disabled for this session";
       return;
     }
 
@@ -248,7 +247,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
         timeout: 2_000,
       });
       if (root.code !== 0 || !root.stdout.trim()) {
-        setAvailabilityStatus(ctx, "disabled — not inside a Git repository");
+        state.disabledReason = "not inside a Git repository";
         return;
       }
       const repoRoot = root.stdout.trim();
@@ -264,39 +263,36 @@ export default function miseQualityGate(pi: ExtensionAPI) {
         timeout: 2_000,
       });
       if (mise.code !== 0) {
-        setAvailabilityStatus(ctx, "disabled — mise is unavailable");
+        state.disabledReason = "mise is unavailable";
         return;
       }
 
       const target = await resolveProjectRoot(pi, ctx, repoRoot);
       if ("reason" in target) {
-        setAvailabilityStatus(
-          ctx,
-          target.reason === "outside-repository"
-            ? "disabled — mise resolved a project root outside this repository"
-            : target.reason === "overridden"
-              ? "disabled — global project-root resolver is overridden"
-              : "disabled — mise could not resolve a project root",
-        );
+        state.disabledReason = target.reason === "outside-repository"
+          ? "mise resolved a project root outside this repository"
+          : target.reason === "overridden"
+            ? "global project-root resolver is overridden"
+            : "mise could not resolve a project root";
         return;
       }
       const projectRoot = target.projectRoot;
 
       const resolvedPolicy = await resolvePolicy(pi, ctx, projectRoot);
       if ("reason" in resolvedPolicy) {
-        setAvailabilityStatus(ctx, `disabled — ${resolvedPolicy.reason}`);
+        state.disabledReason = resolvedPolicy.reason;
         return;
       }
       const policy = resolvedPolicy.policy;
 
       for (const taskName of REQUIRED_PROJECT_TASKS) {
         if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, taskName)) {
-          setAvailabilityStatus(ctx, `disabled — quality task ${taskName} is unavailable`);
+          state.disabledReason = `quality task ${taskName} is unavailable`;
           return;
         }
       }
       if (!await isQualityTask(pi, ctx, repoRoot, projectRoot, state.taskName)) {
-        setAvailabilityStatus(ctx, `disabled — quality task ${state.taskName} is unavailable`);
+        state.disabledReason = `quality task ${state.taskName} is unavailable`;
         return;
       }
 
@@ -304,15 +300,19 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       state.projectRoot = projectRoot;
       state.policy = policy;
       state.available = true;
-      setAvailabilityStatus(ctx, `enabled — ${projectRoot}`);
     } catch {
-      setAvailabilityStatus(ctx, "disabled — initialization failed");
+      state.disabledReason = "initialization failed";
     }
   }
 
   pi.on("session_start", async (_event, ctx) => {
     state.running = false;
     await initialize(ctx);
+    const available = state.enabled && state.available;
+    const message = available
+      ? "enabled"
+      : `disabled${state.disabledReason ? ` — ${state.disabledReason}` : ""}`;
+    reportStartupStatus(_event, ctx, "quality-gate", `[quality-gate] Quality gate: ${message}`);
   });
 
   const usage = [
@@ -326,13 +326,14 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     "  /quality-gate reset",
     "  /quality-gate help",
   ].join("\n");
-  const status = () => [
-    `Quality gate: ${state.enabled && state.available ? "enabled" : "disabled"}`,
-    `Task: ${state.taskName}`,
-    `Automatic repair attempts: ${state.maxRepairAttempts}`,
-    "",
-    "Commands: status, enable, disable, configure, reset, help",
-  ].join("\n");
+  const status = () => {
+    const available = state.enabled && state.available;
+    const lines = [`Quality gate: ${available ? "enabled" : "disabled"}`];
+    if (!available) lines.push(`Reason: ${state.disabledReason ?? "unavailable"}`);
+    lines.push(`Task: ${state.taskName}`, `Automatic repair attempts: ${state.maxRepairAttempts}`);
+    lines.push("", "Commands: status, enable, disable, configure, reset, help");
+    return lines.join("\n");
+  };
 
   pi.registerCommand("quality-gate", {
     description: "Control the current session quality gate",
@@ -364,7 +365,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       if (action === "disable") {
         state.enabled = false;
         state.available = false;
-        setAvailabilityStatus(ctx, "disabled — disabled for this session");
+        state.disabledReason = "disabled for this session";
         notify(ctx, "Quality gate disabled for this session");
         return;
       }
@@ -422,7 +423,6 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       const changed = await relevantGitPaths(pi, ctx, repoRoot, policy);
       if (changed.length === 0) return;
 
-      if (ctx.hasUI) ctx.ui.setStatus("mise-quality-gate", `Running mise ${taskName}…`);
       const result = await pi.exec("mise", ["run", "--jobs", "1", taskName], {
         cwd: projectRoot,
         signal: ctx.signal,
@@ -449,7 +449,6 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       const message = error instanceof Error ? error.message : String(error);
       notify(ctx, `Quality gate could not run: ${message}`, "warning");
     } finally {
-      if (ctx.hasUI) ctx.ui.setStatus("mise-quality-gate", undefined);
       state.running = false;
     }
   });

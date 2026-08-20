@@ -154,6 +154,7 @@ import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 import { isGondolinSandboxRequested } from "../shared/sandbox-intent.ts";
+import { reportStartupStatus } from "../shared/startup-status.ts";
 
 const HERDR_BLOCKED_EVENT = "herdr:blocked";
 const DECISION_ENTRY_TYPE = "guardrails-decision";
@@ -454,49 +455,13 @@ export default function (pi: ExtensionAPI) {
     const restoredAllows = restoreSessionAllows(ctx);
     const restoredPreflightApprovals = restoreSessionPreflightApprovals(ctx);
 
-    const t = ctx.ui.theme;
-    const astAvailable = isShfmtAvailable();
-    const parserLabel = astAvailable ? "AST (shfmt)" : "string-based (fallback)";
-
-    const header = t.fg("mdHeading", "[Guardrails]");
-    const lines: string[] = [header];
-
-    lines.push(t.fg("dim", `  Disabled:    ${guardrailsDisabled() ? "yes" : "no"}`));
-    lines.push(t.fg("dim", `  Gate 2:      ${preflightDisabled() ? "disabled" : "enabled"}`));
-
-    if (config.paths?.confirmRead?.length) {
-      lines.push(t.fg("dim", `  Confirm Read:   ${config.paths.confirmRead.join(", ")}`));
-    }
-    if (config.paths?.allowWrite !== undefined) {
-      lines.push(t.fg("dim", `  Allow Write: ${allowWriteLabel(config)}`));
-    }
-    if (config.paths?.confirmWrite?.length) {
-      lines.push(t.fg("dim", `  Confirm Write:  ${config.paths.confirmWrite.join(", ")}`));
-    }
-    if (config.bash?.confirm?.length) {
-      lines.push(t.fg("dim", `  Bash Confirm: ${config.bash.confirm.join(", ")}`));
-    }
-    if (config.bash?.preflightRules?.length) {
-      lines.push(t.fg("dim", `  Gate 2 rules: ${formatPreflightRulesForDisplay(config.bash.preflightRules)}`));
-    }
-    lines.push(t.fg("dim", `  Scope:       ${scopeLabel(ctx.cwd)}`));
-    lines.push(t.fg("dim", `  Config:      ${configSourceLabel(ctx.cwd)}`));
-    lines.push(t.fg("dim", `  Parser:      ${parserLabel}`));
-    if (restoredAllows > 0 || restoredPreflightApprovals > 0) {
-      lines.push(t.fg("dim", `  Restored:    ${restoredAllows} session allow(s), ${restoredPreflightApprovals} preflight approval(s)`));
-    }
-
     recordDecision(ctx, "session-start", {
       disabled: guardrailsDisabled(),
       preflightDisabled: preflightDisabled(),
       restoredAllows,
     });
 
-    if (lines.length === 1) {
-      lines.push(t.fg("dim", `  No rules configured [${parserLabel}]`));
-    }
-
-    ctx.ui.notify(lines.join("\n"), "info");
+    reportStartupStatus(_event, ctx, "guardrails", `[guardrails] enabled=${guardrailsEnabled ? "yes" : "no"} preflight=${preflightDisabled() ? "disabled" : "enabled"}`);
   });
 
   // Gondolin provides the execution boundary; sandboxed sessions deliberately allow

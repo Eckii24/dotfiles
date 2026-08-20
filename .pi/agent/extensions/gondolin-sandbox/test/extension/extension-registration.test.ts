@@ -81,7 +81,7 @@ test("session_start latches the real --sandbox flag and starts exactly one VM", 
 test("startup policy flags require explicit --sandbox and fail closed", async () => {
   const pi = harness({ flag: false, flagValues: { "sandbox-network-allow": "api.example.com" } });
   await pi.handlers.get("session_start")!({}, pi.ctx());
-  assert.ok(pi.statuses.some((value) => value.includes("startup mount/network flags require explicit --sandbox")));
+  assert.ok(pi.notices.some((value) => value.includes("startup mount/network flags require explicit --sandbox")));
   const result = await pi.tools.get("bash").execute("id", { command: "pwd" });
   assert.equal(result.isError, true); assert.match(result.content[0].text, /require explicit --sandbox/);
 });
@@ -129,7 +129,7 @@ test("default image is provisioned before VM startup", async () => {
   const pi = harness({ flag: true });
   await pi.handlers.get("session_start")!({}, pi.ctx());
   assert.equal(pi.imageEnsures, 1);
-  assert.ok(pi.statuses.includes("SANDBOX building bundled image (first run)"));
+  assert.equal(pi.statuses.length, 0);
 });
 
 test("custom image skips bundled image provisioning", async () => {
@@ -138,14 +138,19 @@ test("custom image skips bundled image provisioning", async () => {
   assert.equal(pi.imageEnsures, 0);
 });
 
-test("image setup failure reports its exact reason", async () => {
+test("image setup failure remains in native status and disables sandbox status", async () => {
   const pi = harness({
     flag: true,
     ensureDefaultImage: async () => { throw new Error("docker unavailable"); },
   });
   await pi.handlers.get("session_start")!({}, pi.ctx());
-  assert.ok(pi.statuses.some((value) => value.includes("image setup failed: docker unavailable")));
-  assert.ok(pi.notices.some((value) => value.includes("image setup failed: docker unavailable")));
+  assert.ok(pi.statuses.includes("Sandbox disabled: image setup failed: docker unavailable"));
+  assert.ok(pi.notices.some((value) => value.includes("Sandbox startup failed: image setup failed: docker unavailable")));
+
+  await pi.commands.get("sandbox").handler("status", pi.ctx());
+  const status = pi.notices.at(-1)!;
+  assert.match(status, /^SANDBOX disabled\n/);
+  assert.ok(status.includes("reason=image setup failed: docker unavailable"));
 });
 
 test("session shutdown closes a VM whose startup is still pending", async () => {

@@ -28,13 +28,14 @@ The global config owns the protected resolver plus fail-closed diagnostic tasks.
 
 Before Pi executes the resolver, it verifies that its source is exactly `~/.config/mise/config.toml`. Quality tasks may come from a trusted parent stack config or a trusted repository-local override. Global quality-task fallbacks are diagnostics only and are rejected as a gate contract.
 
-The Pi UI shows the resulting state, for example:
+At session start, the extension reports the resulting state, without project path or configuration details:
 
 ```text
-Quality gate: enabled — /work/widget
-Quality gate: disabled — missing or invalid PI_QUALITY_GATE_INCLUDE
-Quality gate: disabled — quality task format is unavailable
+[quality-gate] Quality gate: enabled
+[quality-gate] Quality gate: disabled — not inside a Git repository
 ```
+
+Use `/quality-gate status` for details during a session.
 
 ## Session controls
 
@@ -185,7 +186,7 @@ This is intentionally conservative. A `.cs` file already dirty before the agent 
 ## Lifecycle and failure handling
 
 - At most one gate runs per `agent_end`.
-- While it runs, Pi shows `Running mise verify…` in the UI.
+- While it runs, the gate keeps its state internal; failures and successes still notify in the UI.
 - `verify` has a ten-minute timeout.
 - On success, Pi shows `Quality gate passed`.
 - On failure, Pi shows the failed paths and a compact diagnostic, then queues one automatic Pi follow-up asking the LLM to repair the failure in current scope.

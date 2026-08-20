@@ -36,6 +36,7 @@ import { GUEST_WORKSPACE, SandboxRuntime, isSandboxRequested, mapHostPath, type 
 import { registerPolicyCommands } from "./policy/commands.ts";
 import { loadApprovedEffectivePolicy } from "./policy/loader.ts";
 import { isNetworkAllowed, mergePolicies, type SandboxPolicy } from "./policy/policy.ts";
+import { reportStartupStatus } from "../shared/startup-status.ts";
 import {
   SANDBOX_SESSION_POLICY_ENV,
   STARTUP_POLICY_FLAGS,
@@ -515,9 +516,9 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     const latchFailure = (reason: string, ctx?: ExtensionContext) => {
       if (activation !== "failed") failedReason = reason;
       activation = "failed";
-      const message = `SANDBOX gondolin/${backend} FAILED: ${failedReason}`;
-      (ctx ?? lastContext)?.ui.setStatus("sandbox", message);
-      (ctx ?? lastContext)?.ui.notify(`Sandbox startup failed: ${failedReason}`, "error");
+      const failureContext = ctx ?? lastContext;
+      failureContext?.ui.setStatus("gondolin-sandbox", `Sandbox disabled: ${failedReason}`);
+      failureContext?.ui.notify(`Sandbox startup failed: ${failedReason}`, "error");
     };
     const ensure = async (ctx?: ExtensionContext): Promise<VmLike | undefined> => {
       if (ctx) lastContext = ctx;
@@ -525,7 +526,6 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       try {
         const vm = await runtime.ensureStarted();
         currentVm = vm;
-        (ctx ?? lastContext)?.ui.setStatus("sandbox", `SANDBOX gondolin/${backend} running VM=${vm.id.slice(0, 8)}`);
         return vm;
       } catch (error) {
         latchFailure(errorMessage(error), ctx);
@@ -559,7 +559,9 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       showStatus: async (ctx) => {
         const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
         const navigation = "navigation=/sandbox help | /sandbox policy show | /sandbox mount help | /sandbox network help";
-        ctx.ui.notify(`SANDBOX ${activation}\nbackend=${backend}\nimage=${vmImage}\nfailure=${activation === "failed" ? failedReason : "none"}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}\n${navigation}`, "info");
+        const state = activation === "failed" ? "disabled" : activation;
+        const reason = activation === "failed" ? `\nreason=${failedReason}` : "";
+        ctx.ui.notify(`SANDBOX ${state}${reason}\nbackend=${backend}\nimage=${vmImage}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}\n${navigation}`, "info");
       },
     });
 
@@ -617,6 +619,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     pi.on("session_start", async (_event, ctx) => {
       lastContext = ctx;
       if (activation !== "unlatched") return;
+      try {
       const sandboxFlag = pi.getFlag("sandbox");
       const startupFlagValues = Object.fromEntries(STARTUP_POLICY_FLAGS.map((name) => [name, pi.getFlag(name)]));
       const startupFlagsSupplied = hasStartupPolicyFlags(startupFlagValues);
@@ -626,7 +629,6 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
           return;
         }
         activation = "inactive";
-        ctx.ui.setStatus("sandbox", "SANDBOX inactive");
         return;
       }
       activation = "active";
@@ -661,14 +663,12 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
       }
       try {
         if (!effectivePolicy.image && image === DEFAULT_IMAGE) {
-          ctx.ui.setStatus("sandbox", "SANDBOX building bundled image (first run)");
           vmImage = await ensureDefaultImage(image);
         }
       } catch (error) {
         latchFailure(`image setup failed: ${errorMessage(error)}`, ctx);
         return;
       }
-      ctx.ui.setStatus("sandbox", `SANDBOX gondolin/${backend} starting`);
       if (await ensure(ctx)) {
         // Subagents are independent Pi processes. They inherit environment, not
         // extension flags, so propagate activation and validated session policy only
@@ -682,6 +682,9 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
           setSessionPolicy = true;
         }
       }
+    } finally {
+      reportStartupStatus(_event, ctx, "sandbox", `[sandbox] ${activation}`);
+    }
     });
     const oneShot = isOneShotMode();
     pi.on("session_shutdown", async () => {
