@@ -200,6 +200,10 @@ function notify(ctx: ExtensionContext, message: string, level: "info" | "warning
   if (ctx.hasUI) ctx.ui.notify(message, level);
 }
 
+function setRunningStatus(ctx: ExtensionContext, text: string | undefined): void {
+  if (ctx.hasUI) ctx.ui.setStatus("quality-gate", text);
+}
+
 export default function miseQualityGate(pi: ExtensionAPI) {
   pi.registerFlag("no-quality-gate", {
     description: "Disable the mise quality gate for this session",
@@ -419,6 +423,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
 
     const { policy, projectRoot, repoRoot, taskName } = state;
     state.running = true;
+    setRunningStatus(ctx, `Quality gate: running ${taskName}`);
     try {
       const changed = await relevantGitPaths(pi, ctx, repoRoot, policy);
       if (changed.length === 0) return;
@@ -450,6 +455,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       notify(ctx, `Quality gate could not run: ${message}`, "warning");
     } finally {
       state.running = false;
+      setRunningStatus(ctx, undefined);
     }
   });
 }

@@ -129,7 +129,7 @@ test("default image is provisioned before VM startup", async () => {
   const pi = harness({ flag: true });
   await pi.handlers.get("session_start")!({}, pi.ctx());
   assert.equal(pi.imageEnsures, 1);
-  assert.equal(pi.statuses.length, 0);
+  assert.deepEqual(pi.statuses, ["Sandbox: starting…", undefined]);
 });
 
 test("custom image skips bundled image provisioning", async () => {

@@ -186,7 +186,7 @@ This is intentionally conservative. A `.cs` file already dirty before the agent 
 ## Lifecycle and failure handling
 
 - At most one gate runs per `agent_end`.
-- While it runs, the gate keeps its state internal; failures and successes still notify in the UI.
+- While it runs, the footer shows `Quality gate: running <task>`; the status clears when the gate finishes. Failures and successes still notify in the UI.
 - `verify` has a ten-minute timeout.
 - On success, Pi shows `Quality gate passed`.
 - On failure, Pi shows the failed paths and a compact diagnostic, then queues one automatic Pi follow-up asking the LLM to repair the failure in current scope.

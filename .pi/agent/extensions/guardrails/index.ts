@@ -669,6 +669,7 @@ export default function (pi: ExtensionAPI) {
       });
 
       let preflightVerdict: Awaited<ReturnType<typeof runPreflightJudge>>;
+      if (ctx.hasUI) ctx.ui.setStatus("guardrails-preflight", `Guardrails: preflight ${preflightModel}`);
       try {
         preflightVerdict = await runPreflightJudge({
           cwd: sessionScope,
@@ -722,6 +723,8 @@ export default function (pi: ExtensionAPI) {
 
         recordDecision(ctx, "bash-preflight-error-allowed-once", { toolName: "bash", command, violation: fallbackViolation });
         return undefined;
+      } finally {
+        if (ctx.hasUI) ctx.ui.setStatus("guardrails-preflight", undefined);
       }
 
       if (preflightVerdict.decision === "allow") {

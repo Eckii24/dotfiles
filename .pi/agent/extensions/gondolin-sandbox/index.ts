@@ -513,11 +513,14 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     ));
     const runtime = new SandboxRuntime(createVm);
 
+    const setSandboxStatus = (ctx: ExtensionContext | undefined, value: string | undefined): void => {
+      if (ctx?.hasUI) ctx.ui.setStatus("gondolin-sandbox", value);
+    };
     const latchFailure = (reason: string, ctx?: ExtensionContext) => {
       if (activation !== "failed") failedReason = reason;
       activation = "failed";
       const failureContext = ctx ?? lastContext;
-      failureContext?.ui.setStatus("gondolin-sandbox", `Sandbox disabled: ${failedReason}`);
+      setSandboxStatus(failureContext, `Sandbox disabled: ${failedReason}`);
       failureContext?.ui.notify(`Sandbox startup failed: ${failedReason}`, "error");
     };
     const ensure = async (ctx?: ExtensionContext): Promise<VmLike | undefined> => {
@@ -619,6 +622,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     pi.on("session_start", async (_event, ctx) => {
       lastContext = ctx;
       if (activation !== "unlatched") return;
+      setSandboxStatus(ctx, "Sandbox: starting…");
       try {
       const sandboxFlag = pi.getFlag("sandbox");
       const startupFlagValues = Object.fromEntries(STARTUP_POLICY_FLAGS.map((name) => [name, pi.getFlag(name)]));
@@ -683,11 +687,13 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         }
       }
     } finally {
+      if (activation !== "failed") setSandboxStatus(ctx, undefined);
       reportStartupStatus(_event, ctx, "sandbox", `[sandbox] ${activation}`);
     }
     });
     const oneShot = isOneShotMode();
     pi.on("session_shutdown", async () => {
+      setSandboxStatus(lastContext, undefined);
       currentVm = undefined;
       if (setSandboxMarker) {
         if (inheritedSandboxMarker === undefined) delete process.env.PI_SANDBOX;

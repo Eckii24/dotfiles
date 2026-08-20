@@ -200,7 +200,10 @@ describe("mise quality gate lifecycle", () => {
     await commands.get("quality-gate")!.handler("disable", ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(statuses).toEqual([]);
+    expect(statuses).toEqual([
+      ["quality-gate", "Quality gate: running verify:full"],
+      ["quality-gate", undefined],
+    ]);
     expect(notices).toContain("Quality gate disabled for this session");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
 
