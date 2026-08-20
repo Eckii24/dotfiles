@@ -136,24 +136,11 @@ return {
               list = {
                 keys = {
                   ["O"] = { { "pick_win", "jump" }, mode = { "n", "i" } },
-                  ["A"] = "explorer_add_dotnet",
                   ["Y"] = "copy_path",
                 },
               },
             },
             actions = {
-              explorer_add_dotnet = function(picker)
-                local dir = picker:dir()
-                local tree = require("snacks.explorer.tree")
-                local actions = require("snacks.explorer.actions")
-                local easydotnet = require("easy-dotnet")
-
-                easydotnet.create_new_item(dir, function(item_path)
-                  tree:open(dir)
-                  tree:refresh(dir)
-                  actions.update(picker, { target = item_path })
-                end)
-              end,
               copy_path = function(_, item)
                 local modify = vim.fn.fnamemodify
                 local filepath = item.file

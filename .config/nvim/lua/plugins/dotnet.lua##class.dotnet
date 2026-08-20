@@ -336,6 +336,25 @@ return {
     opts = { ensure_installed = { "c_sharp" } },
   },
   {
+    "folke/snacks.nvim",
+    optional = true,
+    opts = function(_, opts)
+      local explorer = opts.picker.sources.explorer
+      explorer.win.list.keys["A"] = "explorer_add_dotnet"
+      explorer.actions.explorer_add_dotnet = function(picker)
+        local dir = picker:dir()
+        local tree = require("snacks.explorer.tree")
+        local actions = require("snacks.explorer.actions")
+
+        require("easy-dotnet").create_new_item(dir, function(item_path)
+          tree:open(dir)
+          tree:refresh(dir)
+          actions.update(picker, { target = item_path })
+        end)
+      end
+    end,
+  },
+  {
     "stevearc/conform.nvim",
     optional = true,
     opts = {
