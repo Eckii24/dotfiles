@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
-# Resolve the conventional .NET target for the current repository and run dotnet
-# through 1Password. This is the only project-discovery implementation used by
-# interactive Zsh, mise tasks, and Pi quality gates.
+# Resolve the conventional .NET target for the current repository and run dotnet.
+# This is the only project-discovery implementation used by interactive Zsh,
+# mise tasks, and Pi quality gates.
 set -euo pipefail
 
 usage() {
@@ -15,7 +15,7 @@ Target resolution:
   2. current directory, when it contains a solution or project
   3. highest direct src/v<N> directory containing a solution or project
 
-The command runs dotnet through `op run`.
+The command runs dotnet directly.
 EOF
 }
 
@@ -72,15 +72,9 @@ resolve_target_dir() {
 run_dotnet() {
   local target_dir="$1"
   shift
-  local -a op_run_args
-  op_run_args=( run -- )
-  if [[ -t 1 && -t 2 ]]; then
-    op_run_args=( run --no-masking -- )
-  fi
-
   (
     cd "$target_dir"
-    command op "${op_run_args[@]}" dotnet "$@"
+    command dotnet "$@"
   )
 }
 
