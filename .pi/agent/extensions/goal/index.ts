@@ -36,7 +36,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { buildEvaluatorArgs } from "./evaluator-cli.js";
+import { buildEvaluatorArgs, EVALUATOR_STDIO } from "./evaluator-cli.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -422,7 +422,7 @@ async function runEvaluator(
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
-			stdio: ["pipe", "pipe", "pipe"],
+			stdio: EVALUATOR_STDIO,
 			env: { ...process.env, PI_SUBAGENT: "1" },
 		});
 

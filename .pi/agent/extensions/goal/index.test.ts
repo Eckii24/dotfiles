@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildEvaluatorArgs } from "../goal/evaluator-cli.ts";
+import { buildEvaluatorArgs, EVALUATOR_STDIO } from "../goal/evaluator-cli.ts";
 import goalExtension, {
   parseGoalCommand,
   pauseGoalState,
@@ -22,6 +22,10 @@ afterEach(() => {
 });
 
 describe("Goal evaluator CLI arguments", () => {
+  test("does not keep stdin open while waiting for the evaluator", () => {
+    expect(EVALUATOR_STDIO).toEqual(["ignore", "pipe", "pipe"]);
+  });
+
   test("uses supported non-interactive thinking syntax and resolves tier aliases", () => {
     const agentDir = mkdtempSync(join(tmpdir(), "goal-evaluator-args-"));
     tempDirs.push(agentDir);
