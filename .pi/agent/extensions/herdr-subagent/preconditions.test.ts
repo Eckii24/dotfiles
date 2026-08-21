@@ -84,7 +84,7 @@ test("requires caller pane, workspace, and native Herdr Pi integration", async (
 
 test("returns resolved caller context and validates parent nesting metadata through depth three", async () => {
 	const root = setup();
-	await expect(checkPreconditions(root.dependencies)).resolves.toEqual({ socketPath: "/runtime/herdr.sock", workspaceId: "workspace-1", callerPaneId: "pane-1", nestingDepth: 0, protocol: 19, capabilities, piExecutable: "/usr/local/bin/pi" });
+	await expect(checkPreconditions(root.dependencies)).resolves.toEqual({ socketPath: "/runtime/herdr.sock", workspaceId: "workspace-1", callerPaneId: "pane-1", nestingDepth: 0, protocol: 20, capabilities, piExecutable: "/usr/local/bin/pi" });
 	const nested = setup({ env: baseEnv({ PI_HERDR_PARENT_ROOT_RUN_ID: "root-run", PI_HERDR_NESTING_DEPTH: String(MAX_NESTING_DEPTH) }) });
 	await expect(checkPreconditions(nested.dependencies)).resolves.toMatchObject({ parentRootRunId: "root-run", nestingDepth: MAX_NESTING_DEPTH });
 	const legacy = setup({ env: baseEnv({ HERDR_PARENT_ROOT_RUN_ID: "legacy-root", HERDR_NESTING_DEPTH: "999" }) });
@@ -99,6 +99,14 @@ test("returns resolved caller context and validates parent nesting metadata thro
 		const fixture = setup({ env }); await expectCode(checkPreconditions(fixture.dependencies), "nesting_depth_exceeded");
 		expect(fixture.clients()).toBe(0);
 	}
+});
+
+test("reports protocol compatibility instead of falsely instructing an update", async () => {
+	const fixture = setup({ probeError: { code: "protocol_unsupported" } });
+	await expect(checkPreconditions(fixture.dependencies)).rejects.toMatchObject({
+		code: "herdr_protocol_unsupported",
+		message: "Herdr protocol 20 is required; this extension is incompatible with the running Herdr server. Update/restart Herdr or reload a matching extension.",
+	});
 });
 
 test("redacts socket failures and never tries RPC fallback or installation", async () => {

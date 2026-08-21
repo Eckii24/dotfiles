@@ -129,7 +129,7 @@ function object(value: unknown): Record<string, unknown> | undefined {
 
 function mapClientError(error: unknown): PreconditionsError {
 	const code = object(error)?.code;
-	if (code === "protocol_unsupported") return new PreconditionsError("herdr_protocol_unsupported", `Herdr protocol ${HERDR_PROTOCOL} is required; update Herdr manually.`);
+	if (code === "protocol_unsupported") return new PreconditionsError("herdr_protocol_unsupported", `Herdr protocol ${HERDR_PROTOCOL} is required; this extension is incompatible with the running Herdr server. Update/restart Herdr or reload a matching extension.`);
 	return new PreconditionsError("herdr_socket_unreachable", "Cannot connect to Herdr socket; restart Herdr and Pi.");
 }
 

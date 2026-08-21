@@ -3,7 +3,7 @@ import { lstat } from "node:fs/promises";
 import net from "node:net";
 
 /** Exact wire contract verified against the installed Herdr API schema. */
-export const HERDR_PROTOCOL = 19;
+export const HERDR_PROTOCOL = 20;
 export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 export const DEFAULT_MAX_FRAME_BYTES = 1_048_576;
@@ -59,7 +59,7 @@ export class HerdrClientError extends Error {
 
 type Pending = { resolve: (result: HerdrResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; abort?: () => void };
 
-/** Narrow protocol-19 Unix-socket client. Errors identify frames, never echo bodies. */
+/** Narrow protocol-20 Unix-socket client. Errors identify frames, never echo bodies. */
 export class HerdrClient {
 	readonly socketPath: string;
 	private readonly connectTimeoutMs: number;

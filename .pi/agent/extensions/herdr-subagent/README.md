@@ -28,7 +28,7 @@ Keine Shell-Remote-Execution-API. Keine freie Tasteneingabe. Keine Bildschirm- o
 ```mermaid
 flowchart LR
   P[Aufrufer-Pi\nHerdr-Pane] -->|subagent| E[Herdr-Subagent-Extension]
-  E -->|Protocol 19 / Unix socket| H[Herdr]
+  E -->|Protocol 20 / Unix socket| H[Herdr]
   H --> T[neuer, owned Tab]
   T --> C1[Pi Child 1]
   T --> C2[Pi Child 2]
@@ -76,7 +76,7 @@ Pi lädt globale Extensions für alle Projekte. Ein `/reload` lädt die Extensio
 | `HERDR_ENV=1` | Expliziter Herdr-Kontext | `not_in_herdr` |
 | `HERDR_SOCKET_PATH` | Direkter Unix-Socket von Herdr | `missing_herdr_socket` |
 | `HERDR_PANE_ID` | Identität der aufrufenden Pane | `calling_pane_not_found` |
-| Herdr-Protokoll 17 | Benötigte Herdr-Operationen | `herdr_protocol_unsupported` |
+| Herdr-Protokoll 20 | Benötigte Herdr-Operationen | `herdr_protocol_unsupported` |
 | Herdr-Pi-Integration | Native Child-Pi- und Session-Referenz | `pi_integration_missing` |
 | ausführbares `pi` auf `PATH` | Startet Child-Pi | `pi_integration_missing` |
 
@@ -86,7 +86,7 @@ Vor jeder Topologie-Allokation prüft die Extension:
 
 1. `HERDR_ENV`, Socket-Pfad, Caller-Pane und verschachtelten Kontext.
 2. Socket ist Socket, kein Symlink, Eigentümer aktueller Benutzer.
-3. Protocol-19-Handshake und erforderliche Herdr-Fähigkeiten.
+3. Protocol-20-Handshake und erforderliche Herdr-Fähigkeiten.
 4. Caller-Pane ist in Snapshot vorhanden, hat Workspace und native Pi-Integration.
 5. Pi-Datei ist absolut und ausführbar.
 
@@ -289,7 +289,7 @@ flowchart TB
 - Pane-Namen enthalten Gruppe, Profil und erste acht Zeichen der Leaf-ID; Terminal-Control-Zeichen werden entfernt.
 - Während ein `subagent`-Tool läuft, zeigt dessen Orchestrator-Zeile Gruppe, Modus/Panenanzahl, Item-Name, Profil und eine gekürzte Task. Expansion zeigt die vollständige Task bzw. finale Leaf-Outputs. Modell, Tool-Liste und technische Pane-/Tab-IDs bleiben verborgen: Sie erklären den Run nicht besser als Profil und Gruppe.
 - Layouts: 1 Pane; 2 horizontal; 3 horizontal plus rechter vertikaler Split; 4 zwei vertikale Spalten. Layout-Fehler lassen sichere Standardanordnung bestehen und erzeugen Warnung.
-- Protocol 19 verwendet die von `tab.create` erzeugte Shell direkt für ersten Child; weitere Child-Panes entstehen über `pane.split`.
+- Protocol 20 verwendet die von `tab.create` erzeugte Shell direkt für ersten Child; weitere Child-Panes entstehen über `pane.split`.
 
 ### Task-Zustandsautomat
 
@@ -446,7 +446,7 @@ flowchart LR
 | Eingabevalidierung | unbekannte Felder verboten; genau ein Modus; Bounds 1–4 und 1–86400; Tasks/Messages werden vor Zustellung CR/LF-frei normalisiert |
 | Label-Injection | Gruppe/Panenamen NFKC-normalisiert; ANSI/OSC/C0-Control-Zeichen entfernt; Längen begrenzt |
 | Socket-Trust | aktueller Benutzer, direkter Nicht-Symlink-Socket, Device/Inode-Revalidierung beim Connect und vor Write |
-| Herdr-Protokoll | enger Protocol-16-Client; feste Methodenauswahl; serialisierte Requests; Frame/Payload-Limits; Fehler ohne Frame-Body |
+| Herdr-Protokoll | enger Protocol-20-Client; feste Methodenauswahl; serialisierte Requests; Frame/Payload-Limits; Fehler ohne Frame-Body |
 | Kein Tastatur-Backdoor | öffentlich keine Keys; intern nur festes Enter für Zustellung und festes Ctrl-C für Abbruch |
 | Kein frei wählbares Ziel | öffentliche Tools nehmen keine Socket-, Tab- oder Pane-ID entgegen |
 | Ownership | lokale Root/Leaf-Registry plus aktueller adressierbarer Herdr-Agent mit exakter registrierter Pane-ID; Parent darf eigene Nachfahren steuern, nie Vorfahren/Geschwister/fremde Runs |
@@ -502,7 +502,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 |---|---|
 | `not_in_herdr` | Pi aus einer Herdr-verwalteten Pane neu starten. |
 | `missing_herdr_socket` / `herdr_socket_unreachable` | Herdr und Pi als gleicher Benutzer neu starten; keinen Symlink-Socket verwenden. |
-| `herdr_protocol_unsupported` | Herdr auf Protocol 19 mit benötigten Fähigkeiten aktualisieren. |
+| `herdr_protocol_unsupported` | Laufenden Herdr-Server auf Protocol 20 aktualisieren/neustarten oder eine passende Extension-Version laden. |
 | `calling_pane_not_found` | Pi in live Herdr-Workspace-Pane neu starten. |
 | `pi_integration_missing` | Herdr-Pi-Integration aktivieren; ausführbares Pi konfigurieren; neu starten. |
 | `agent_profile_not_found` / `agent_profile_invalid` | Profil im gewählten Scope anlegen/reparieren. |
@@ -531,7 +531,7 @@ Run-Registry und Release-Hooks sind pro Extension-Prozess im Speicher. Nach Relo
 | `contracts.ts` | strikte Tool-Schemas, Defaults, Fehlercodes, Normalisierung |
 | `agent-profiles.ts` | User-/Projekt-Discovery, Profilvalidierung und Override |
 | `preconditions.ts` | Herdr-/Socket-/Caller-/Pi-Preflight, Nesting-Grenze |
-| `herdr-client.ts` | enger Protocol-16-JSONL-Client mit Socket-/Frame-Schutz |
+| `herdr-client.ts` | enger Protocol-20-JSONL-Client mit Socket-/Frame-Schutz |
 | `capacity.ts` | Cross-Process-Kapazität, atomare Locks, Writer-Leases |
 | `topology.ts` | Tab/Panes/Layout, ownership-sicherer Rollback/Cleanup |
 | `pi-launch.ts` | Child-Pi-Argumente, temporärer Systemprompt, Child-Env |

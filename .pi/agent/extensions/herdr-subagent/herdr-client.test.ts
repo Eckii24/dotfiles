@@ -109,7 +109,7 @@ test("times out a stalled Unix-socket connect", async () => {
 	}
 });
 
-test("uses Protocol-19 agent.start, pane.split, and literal pane text contracts", async () => {
+test("uses Protocol-20 agent.start, pane.split, and literal pane text contracts", async () => {
 	const requests: Array<{ method: string; params: unknown }> = [];
 	const server = await fake((socket, request) => { requests.push({ method: String(request.method), params: request.params }); response(socket, request.id, { type: "ok" }); });
 	const client = new HerdrClient({ socketPath: server.path });
@@ -124,11 +124,11 @@ test("uses Protocol-19 agent.start, pane.split, and literal pane text contracts"
 	client.dispose();
 });
 
-test("probes protocol 19 and exposes only fixed internal key candidates", async () => {
+test("probes protocol 20 and exposes only fixed internal key candidates", async () => {
 	const methods: string[] = []; const keyParams: unknown[] = [];
-	const server = await fake((socket, request) => { methods.push(String(request.method)); if (request.method === "ping") response(socket, request.id, { type: "pong", protocol: 19, version: "0.8.0" }); else { keyParams.push(request.params); response(socket, request.id, { type: "ok" }); } });
+	const server = await fake((socket, request) => { methods.push(String(request.method)); if (request.method === "ping") response(socket, request.id, { type: "pong", protocol: 20, version: "0.8.2" }); else { keyParams.push(request.params); response(socket, request.id, { type: "ok" }); } });
 	const client = new HerdrClient({ socketPath: server.path });
-	expect(await client.probeCapabilities()).toMatchObject({ protocol: 19, fixedInterrupt: true }); await client.interruptOwnedPane("p");
+	expect(await client.probeCapabilities()).toMatchObject({ protocol: 20, fixedInterrupt: true }); await client.interruptOwnedPane("p");
 	await client.submitOwnedPane("p");
 	expect(keyParams).toEqual([{ pane_id: "p", keys: ["ctrl+c"] }, { pane_id: "p", keys: ["enter"] }]); expect(methods).not.toContain("agent.stop"); expect(methods).not.toContain("agent.send"); expect("sendKeys" in client).toBe(false); client.dispose();
 });
