@@ -18,7 +18,7 @@ import { createTaskDelivery } from "./task-delivery.js";
 
 const sessionRoot = join(homedir(), ".pi", "agent", "sessions");
 type ToolUpdate = (value: any) => void;
-type RuntimeContext = Pick<ExtensionContext, "cwd" | "hasUI" | "ui">;
+type RuntimeContext = Pick<ExtensionContext, "cwd" | "hasUI" | "ui" | "model" | "thinkingLevel"> & { activeTools: string[] };
 type Client = HerdrClient & Record<string, any>;
 export type HerdrRuntimeDependencies = {
 	preflight?: () => Promise<PreconditionsContext>; discover?: typeof discoverAgentProfiles; createClient?: (socketPath: string) => Client;
@@ -91,7 +91,21 @@ export function createHerdrSubagentRuntime(deps: HerdrRuntimeDependencies = {}) 
 			for (const [index, entry] of prepared.entries()) {
 				// Later chain leaves acquire only when their pane is about to exist.
 				if (input.mode !== "chain" || index === 0) entry.lease = await capacity.acquireWriteLease({ cwd: entry.cwd, rootRunId: ids.rootRunId, tools: entry.profile.tools, allowSharedWorkspaceWrites: input.allowSharedWorkspaceWrites });
-				entry.launch = await (deps.createLaunch ?? createPiLaunchDescriptor)({ piExecutable: preflight.piExecutable, cwd: entry.cwd, profile: entry.profile, rootRunId: ids.rootRunId, leafRunId: entry.ids.leafRunId, parentRootRunId: preflight.parentRootRunId, nestingDepth: preflight.nestingDepth, group: input.group });
+				entry.launch = await (deps.createLaunch ?? createPiLaunchDescriptor)({
+					piExecutable: preflight.piExecutable,
+					cwd: entry.cwd,
+					profile: entry.profile,
+					parentRuntime: {
+						...(ctx.model ? { model: `${ctx.model.provider}/${ctx.model.id}` } : {}),
+						...(ctx.thinkingLevel ? { thinking: ctx.thinkingLevel } : {}),
+						tools: ctx.activeTools,
+					},
+					rootRunId: ids.rootRunId,
+					leafRunId: entry.ids.leafRunId,
+					parentRootRunId: preflight.parentRootRunId,
+					nestingDepth: preflight.nestingDepth,
+					group: input.group,
+				});
 				entry.leaf = { leafRunId: entry.ids.leafRunId, name: entry.item.name, agent: entry.profile.name, cwd: entry.cwd, paneId: "", paneLabel: "", status: "queued" };
 			}
 			const first = prepared[0]!;
@@ -254,11 +268,11 @@ function applyLife(leaf: HerdrLeafResult, life: LifecycleResult) {
 	if (!leaf.error && life.status !== "succeeded" && life.status !== "blocked") leaf.error = makeError(lifecycleCode(life.status), life.reason ?? `Child ${life.status}.`);
 }
 export function formatSubagentPrompt(agents: readonly AgentProfile[]): string {
-	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? agent.tools === undefined ? "writer: Pi default tools" : "writer: edit/write/bash" : "no writer tools"}; model: ${agent.model ?? "inherit"}; thinking: ${agent.thinking ?? "inherit"}]: ${agent.description}`).join("\n")}` : "";
+	const list = agents.length ? `\nAvailable user profiles:\n${agents.map(agent => `- ${agent.name} [${isDeclaredWriter(agent.tools) ? agent.tools === undefined ? "writer: inherited caller tools (conservative)" : "writer: edit/write/bash" : "no writer tools"}; model: ${agent.model ?? "inherit"}; thinking: ${agent.thinking ?? "inherit"}]: ${agent.description}`).join("\n")}` : "";
 	return `## Subagents
 Use \`subagent\` only inside managed Pi for interactive child panes.
 Before parallel launch:
-- Profiles omitting \`tools\` use Pi defaults and are writers. Profiles declaring \`edit\`, \`write\`, or \`bash\` are also writers. Parallel writers must use distinct existing canonical \`cwd\` values. Omit \`cwd\` unless an exact existing path is known; omitted values resolve to caller cwd.
+- Profiles omitting \`model\`, \`thinking\`, or \`tools\` inherit the caller's effective value for that field. Profiles omitting \`tools\` are conservatively classified as writers. Profiles declaring \`edit\`, \`write\`, or \`bash\` are also writers. Parallel writers must use distinct existing canonical \`cwd\` values. Omit \`cwd\` unless an exact existing path is known; omitted values resolve to caller cwd.
 - A running, blocked, or retained writer holds its canonical cwd lease until its pane closes. Close it or choose another cwd before launching another writer there.
 - For same-cwd parallel work, choose profiles with explicit read-only tool lists. For same-cwd writer work, use \`chain\`.
 - Set \`allowSharedWorkspaceWrites: true\` only when user explicitly accepts concurrent-write conflict risk.
@@ -271,7 +285,7 @@ export default function (pi: ExtensionAPI) {
 	const runtime = createHerdrSubagentRuntime();
 	pi.on("before_agent_start", async (event, ctx) => { const agents = discoverAgentProfiles(ctx.cwd, "user").agents; return { systemPrompt: `${event.systemPrompt}\n\n${formatSubagentPrompt(agents)}` }; });
 	pi.on("session_shutdown", async () => { await runtime.shutdown(); });
-	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools use Pi defaults and are writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Omit cwd unless an exact existing path is known; omitted cwd uses caller cwd. CR/LF task input is normalized to spaces. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, ctx, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
+	pi.registerTool({ name: "subagent", label: "Subagent", description: "Spawn one visible Pi child tab with 1-4 panes. Before parallel launch, profiles omitting tools inherit the caller's active tools and are conservatively classified as writers; profiles declaring edit/write/bash are also writers. Give every writer a distinct existing canonical cwd, use chain for same-cwd writers, or choose profiles with an explicit read-only tool list. Omit cwd unless an exact existing path is known; omitted cwd uses caller cwd. CR/LF task input is normalized to spaces. Set allowSharedWorkspaceWrites only when user explicitly accepts conflict risk.", parameters: HerdrSubagentParamsSchema, execute: async (_id, params, signal, onUpdate, ctx) => runtime.execute(params, { ...ctx, activeTools: pi.getActiveTools() }, signal, onUpdate), renderCall: renderSubagentCall, renderResult: renderSubagentResult });
 	const control = createHerdrSubagentControlRuntime({ registry: runtime.registry, createClient: path => new HerdrClient({ socketPath: path }) as Client, preflight: checkPreconditions, sessionRoot, runLifecycle: runLifecycleTurn, lifecyclePort: (client, paneId) => lifecyclePort(client as Client, paneId), sessionPort });
 	pi.registerTool({ name: "subagent_control", label: "Subagent Control", description: "Control only locally owned subagent leaves. follow_up requires a locally owned keepOpen root and succeeded trusted idle/done leaf; it accepts optional timeoutSeconds. Select a leaf when multiple eligible handles exist; native final remains follow_up eligible. Resolve a blocked child visibly in its pane; parent lifecycle remains waiting for its native final. A timed_out child may still be live; collect reconciles its pane and native final. Never auto-approve child prompts or follow_up a blocked child. Do not use questionnaires, repeated status, or Bash sleep polling. Status is local snapshot only. Use close to release retained panes when done.", parameters: HerdrSubagentControlParamsSchema, execute: async (_id, params, signal, onUpdate) => control.execute(params, signal, onUpdate) });
 }

@@ -149,13 +149,14 @@ import { checkBash, isShfmtAvailable } from "./bash-guard.js";
 import { evaluateBashCommandGates } from "./command-gates.js";
 import { buildPreflightPrompt, canReuseSessionPreflightApproval, DEFAULT_PREFLIGHT_MODEL, DEFAULT_PREFLIGHT_TIMEOUT_MS, formatPreflightRulesForDisplay, runPreflightJudge } from "./preflight.js";
 import { SessionAllowList } from "./session-allow-list.js";
-import { SessionPreflightRules } from "./session-preflight-rules.js";
+import { parseInheritedSessionPreflightRules, SessionPreflightRules } from "./session-preflight-rules.js";
 import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
 import {
   PI_GUARDRAILS_DISABLED,
   PI_GUARDRAILS_PREFLIGHT_DISABLED,
+  PI_GUARDRAILS_PREFLIGHT_RULES,
   syncGuardrailsLaunchState,
 } from "../shared/guardrails-session-state.ts";
 import { isGondolinSandboxRequested } from "../shared/sandbox-intent.ts";
@@ -356,11 +357,20 @@ export default function (pi: ExtensionAPI) {
   let config: GuardrailsConfig = { timeout: DEFAULT_TIMEOUT, paths: {}, bash: {} };
   const sessionAllow = new SessionAllowList();
   const sessionPreflightRules = new SessionPreflightRules();
+  for (const rule of parseInheritedSessionPreflightRules(process.env[PI_GUARDRAILS_PREFLIGHT_RULES])) {
+    sessionPreflightRules.add(rule);
+  }
   const sessionPreflightApprovals = new SessionPreflightApprovals();
-  // CLI flags win on initial startup; the process-local markers preserve slash-command
-  // state when a goal replaces the current session in-process or launches a child.
-  let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails")) && process.env[PI_GUARDRAILS_DISABLED] !== "1";
-  let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails")) && process.env[PI_GUARDRAILS_PREFLIGHT_DISABLED] !== "1";
+  // An explicit process marker is the latest effective state and therefore wins
+  // over stale startup flags when Pi reloads extensions in the same process.
+  const guardrailsMarker = process.env[PI_GUARDRAILS_DISABLED];
+  const preflightMarker = process.env[PI_GUARDRAILS_PREFLIGHT_DISABLED];
+  let guardrailsEnabled = guardrailsMarker === "0" || guardrailsMarker === "1"
+    ? guardrailsMarker === "0"
+    : !Boolean(pi.getFlag("no-guardrails"));
+  let preflightEnabled = preflightMarker === "0" || preflightMarker === "1"
+    ? preflightMarker === "0"
+    : !Boolean(pi.getFlag("no-preflight-guardrails"));
 
   function guardrailsDisabled(): boolean {
     return !guardrailsEnabled;
@@ -373,7 +383,7 @@ export default function (pi: ExtensionAPI) {
   // Herdr reads these process-local markers only while constructing a fresh
   // child command line. Keep them in lockstep with CLI and slash-command state.
   function syncChildLaunchState(): void {
-    syncGuardrailsLaunchState(guardrailsEnabled, preflightEnabled);
+    syncGuardrailsLaunchState(guardrailsEnabled, preflightEnabled, sessionPreflightRules.rules);
   }
   syncChildLaunchState();
 
@@ -921,6 +931,7 @@ export default function (pi: ExtensionAPI) {
           ctx.ui.notify(`Cannot add session preflight rule: ${result.error}`, "warning");
           return;
         }
+        syncChildLaunchState();
         recordDecision(ctx, "guardrails-preflight-rule-added", { rule: sessionPreflightRules.rules.at(-1) });
         ctx.ui.notify(`🛡️ Added Gate 2 session rule: ${sessionPreflightRules.rules.at(-1)}`, "info");
         return;

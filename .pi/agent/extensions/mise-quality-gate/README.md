@@ -49,6 +49,7 @@ Set any Mise task as its target when starting Pi:
 
 ```zsh
 pi --quality-gate-task verify:full
+pi --quality-gate-attempts 2
 ```
 
 Control it from Pi chat for the current session:
@@ -64,7 +65,7 @@ Control it from Pi chat for the current session:
 /quality-gate help
 ```
 
-The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate enable` re-checks the activation contract before enabling it. `configure task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. All command settings are session-only.
+The default target is `verify`. `--no-quality-gate` starts the session disabled; `/quality-gate enable` re-checks the activation contract before enabling it. `configure task <name>` accepts any non-empty Mise task name, but it must resolve from a trusted repository or parent stack config. All command settings are session-only. Fresh Herdr children receive the effective enabled state and explicit session overrides; a later `/quality-gate enable|disable|reset` wins over stale startup flags.
 
 ### Settings
 

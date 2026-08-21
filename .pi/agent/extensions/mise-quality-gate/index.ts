@@ -6,6 +6,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { loadQualityGateSettings } from "./config.ts";
 import { reportStartupStatus } from "../shared/startup-status.ts";
+import {
+  PI_QUALITY_GATE_ATTEMPTS,
+  PI_QUALITY_GATE_DISABLED,
+  PI_QUALITY_GATE_TASK,
+  syncQualityGateLaunchState,
+} from "../shared/quality-gate-session-state.ts";
 
 const QUALITY_TASK = "verify";
 const PROJECT_ROOT_RESOLVER_TASK = "pi:quality-gate:project-root";
@@ -215,21 +221,42 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     type: "string",
     default: "",
   });
+  pi.registerFlag("quality-gate-attempts", {
+    description: "Set automatic quality-gate repair attempts for this session",
+    type: "string",
+    default: "",
+  });
 
   const requestedTask = pi.getFlag("quality-gate-task");
-  const cliTask = typeof requestedTask === "string" && requestedTask.trim() ? requestedTask.trim() : undefined;
+  const qualityStateSynced = process.env[PI_QUALITY_GATE_DISABLED] === "0" || process.env[PI_QUALITY_GATE_DISABLED] === "1";
+  const cliTask = qualityStateSynced
+    ? process.env[PI_QUALITY_GATE_TASK]
+    : typeof requestedTask === "string" && requestedTask.trim() ? requestedTask.trim() : undefined;
+  const requestedAttempts = pi.getFlag("quality-gate-attempts");
+  const cliAttemptsText = qualityStateSynced
+    ? process.env[PI_QUALITY_GATE_ATTEMPTS] ?? ""
+    : typeof requestedAttempts === "string" ? requestedAttempts.trim() : "";
+  const cliAttempts = /^\d+$/.test(cliAttemptsText) && Number.isSafeInteger(Number(cliAttemptsText))
+    ? Number(cliAttemptsText)
+    : undefined;
   const state: QualityGateState = {
     taskName: cliTask ?? QUALITY_TASK,
     configuredTaskName: QUALITY_TASK,
-    maxRepairAttempts: DEFAULT_MAX_REPAIR_ATTEMPTS,
+    maxRepairAttempts: cliAttempts ?? DEFAULT_MAX_REPAIR_ATTEMPTS,
     configuredMaxRepairAttempts: DEFAULT_MAX_REPAIR_ATTEMPTS,
     taskOverridden: cliTask !== undefined,
-    repairAttemptsOverridden: false,
-    enabled: !Boolean(pi.getFlag("no-quality-gate")),
+    repairAttemptsOverridden: cliAttempts !== undefined,
+    enabled: qualityStateSynced ? process.env[PI_QUALITY_GATE_DISABLED] === "0" : !Boolean(pi.getFlag("no-quality-gate")),
     available: false,
     repairAttempts: 0,
     running: false,
   };
+  const syncChildLaunchState = () => syncQualityGateLaunchState({
+    enabled: state.enabled,
+    ...(state.taskOverridden ? { task: state.taskName } : {}),
+    ...(state.repairAttemptsOverridden ? { maxRepairAttempts: state.maxRepairAttempts } : {}),
+  });
+  syncChildLaunchState();
 
   async function initialize(ctx: ExtensionContext): Promise<void> {
     state.available = false;
@@ -370,11 +397,13 @@ export default function miseQualityGate(pi: ExtensionAPI) {
         state.enabled = false;
         state.available = false;
         state.disabledReason = "disabled for this session";
+        syncChildLaunchState();
         notify(ctx, "Quality gate disabled for this session");
         return;
       }
       if (action === "enable") {
         state.enabled = true;
+        syncChildLaunchState();
         await initialize(ctx);
         notify(ctx, state.available ? "Quality gate enabled for this session" : "Quality gate could not be enabled; see status", state.available ? "info" : "warning");
         return;
@@ -411,6 +440,7 @@ export default function miseQualityGate(pi: ExtensionAPI) {
       }
 
       if (state.enabled) await initialize(ctx);
+      syncChildLaunchState();
       notify(ctx, state.enabled && !state.available
         ? `Quality gate ${setting} but could not be enabled; see status`
         : `Quality gate ${setting}`,

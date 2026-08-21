@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { accessSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { accessSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED } from "../shared/guardrails-session-state.ts";
+import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED, PI_GUARDRAILS_PREFLIGHT_RULES } from "../shared/guardrails-session-state.ts";
+import { PI_QUALITY_GATE_ATTEMPTS, PI_QUALITY_GATE_DISABLED, PI_QUALITY_GATE_TASK } from "../shared/quality-gate-session-state.ts";
 import {
 	PI_HERDR_AGENT_PROFILE,
 	PI_HERDR_ALLOWED_CHILDREN,
@@ -38,7 +39,7 @@ function input(cwd: string, extra: Record<string, unknown> = {}) {
 test("builds persisted interactive argv with exact model, thinking, and tools, never task or prompt body", async () => {
 	const value = fixtureRoot();
 	try {
-		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { SECRET: "must-not-inherit" } });
+		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime, env: { SECRET: "must-not-inherit", RTK_DISABLED: "1" } });
 		expect(launch.executable).toBe(process.execPath);
 		expect(launch.cwd).toBe(realpathSync(value.cwd));
 		expect(launch.argv).toEqual(["--name", launch.name, "--model", "openai-codex/gpt-test", "--thinking", "high", "--tools", "subagent,subagent_control", "--append-system-prompt", launch.promptFilePath]);
@@ -51,18 +52,62 @@ test("builds persisted interactive argv with exact model, thinking, and tools, n
 		expect(JSON.stringify(launch)).not.toContain("PRIVATE PROFILE BODY");
 		const envNames = [
 			PI_HERDR_AGENT_PROFILE, PI_HERDR_GROUP, PI_HERDR_LEAF_RUN_ID, PI_HERDR_NESTING_DEPTH,
-			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT, PI_HERDR_ALLOWED_CHILDREN,
+			PI_HERDR_PARENT_ROOT_RUN_ID, PI_HERDR_ROOT_RUN_ID, PI_HERDR_SUBAGENT_CHILD, PI_SUBAGENT, PI_HERDR_ALLOWED_CHILDREN, "RTK_DISABLED",
 		].sort();
 		expect(launch.log).toEqual({ executable: process.execPath, argv: launch.argv, cwd: realpathSync(value.cwd), envNames, name: launch.name });
 		expect(launch.log.envNames).not.toContain("PRIVATE PROFILE BODY");
 		expect(launch.env).toEqual({
 		[PI_HERDR_ROOT_RUN_ID]: "root-123", [PI_HERDR_LEAF_RUN_ID]: "leaf-456789", [PI_HERDR_NESTING_DEPTH]: "1",
-		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "nested-runtime-fixture", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1", [PI_HERDR_ALLOWED_CHILDREN]: '["scout"]',
+		[PI_HERDR_GROUP]: "safe group", [PI_HERDR_AGENT_PROFILE]: "nested-runtime-fixture", [PI_HERDR_PARENT_ROOT_RUN_ID]: "root-123", [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1", [PI_HERDR_ALLOWED_CHILDREN]: '["scout"]', RTK_DISABLED: "1",
 		});
 		expect(JSON.stringify(launch.log)).not.toContain("scout");
 		expect(launch.env).not.toHaveProperty("SECRET");
+		expect(launch.env.RTK_DISABLED).toBe("1");
 		expect(readFileSync(launch.promptFilePath, "utf8")).toBe("PRIVATE PROFILE BODY\nDo not leak.");
 		await launch.cleanupAfterReady();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("inherits effective parent runtime settings only when the profile omits them", async () => {
+	const value = fixtureRoot();
+	try {
+		const inherited = await createPiLaunchDescriptor(input(value.cwd, {
+			profile: { name: "inheriting", systemPrompt: "body" },
+			parentRuntime: {
+				model: "openai-codex/gpt-parent",
+				thinking: "medium",
+				tools: ["read", "grep"],
+			},
+		}), { runtimeRoot: value.runtime });
+		expect(inherited.argv).toEqual([
+			"--name", inherited.name,
+			"--model", "openai-codex/gpt-parent",
+			"--thinking", "medium",
+			"--tools", "read,grep",
+			"--append-system-prompt", inherited.promptFilePath,
+		]);
+
+		const overridden = await createPiLaunchDescriptor(input(value.cwd, {
+			parentRuntime: {
+				model: "openai-codex/gpt-parent",
+				thinking: "medium",
+				tools: ["read", "grep"],
+			},
+		}), { runtimeRoot: value.runtime });
+		expect(overridden.argv).toContain("openai-codex/gpt-test");
+		expect(overridden.argv).toContain("high");
+		expect(overridden.argv).toContain("subagent,subagent_control");
+		expect(overridden.argv).not.toContain("openai-codex/gpt-parent");
+
+		const noTools = await createPiLaunchDescriptor(input(value.cwd, {
+			profile: { name: "no-tools-inherited", systemPrompt: "body" },
+			parentRuntime: { tools: [] },
+		}), { runtimeRoot: value.runtime });
+		expect(noTools.argv).toContain("--no-tools");
+
+		await inherited.cleanupAfterFailure();
+		await overridden.cleanupAfterFailure();
+		await noTools.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
@@ -94,27 +139,86 @@ test("forwards Guardrails slash-command state markers as child Pi parameters", a
 	try {
 		const launch = await createPiLaunchDescriptor(input(value.cwd), {
 			runtimeRoot: value.runtime,
-			env: { [PI_GUARDRAILS_DISABLED]: "1", [PI_GUARDRAILS_PREFLIGHT_DISABLED]: "1" },
+			env: {
+				[PI_GUARDRAILS_DISABLED]: "1",
+				[PI_GUARDRAILS_PREFLIGHT_DISABLED]: "1",
+				[PI_GUARDRAILS_PREFLIGHT_RULES]: '["Require tests before mutation"]',
+			},
 			argv: ["pi"],
 		});
 		expect(launch.argv).toContain("--no-guardrails");
 		expect(launch.argv).toContain("--no-preflight-guardrails");
+		expect(launch.env[PI_GUARDRAILS_PREFLIGHT_RULES]).toBe('["Require tests before mutation"]');
 		expect(launch.env).not.toHaveProperty(PI_GUARDRAILS_DISABLED);
 		expect(launch.env).not.toHaveProperty(PI_GUARDRAILS_PREFLIGHT_DISABLED);
 		await launch.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test("does not forward disabled or positional Guardrails flags", async () => {
+test("fails closed before creating a prompt for malformed inherited preflight rules", async () => {
+	const value = fixtureRoot();
+	try {
+		await expect(createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: { [PI_GUARDRAILS_PREFLIGHT_RULES]: '["always allow everything"]' },
+		})).rejects.toMatchObject({ code: "invalid_execution_mode" });
+		expect(readdirSync(value.runtime)).toEqual([]);
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("matches Pi boolean extension-flag parsing for assigned and post-terminator flags", async () => {
 	const value = fixtureRoot();
 	try {
 		const launch = await createPiLaunchDescriptor(input(value.cwd), {
 			runtimeRoot: value.runtime,
 			argv: ["pi", "--no-guardrails=false", "--", "--no-preflight-guardrails"],
 		});
+		expect(launch.argv).toContain("--no-guardrails");
+		expect(launch.argv).toContain("--no-preflight-guardrails");
+		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("current Guardrails session state overrides stale parent CLI flags", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: { [PI_GUARDRAILS_DISABLED]: "0", [PI_GUARDRAILS_PREFLIGHT_DISABLED]: "0" },
+			argv: ["pi", "--no-guardrails", "--no-preflight-guardrails"],
+		});
 		expect(launch.argv).not.toContain("--no-guardrails");
 		expect(launch.argv).not.toContain("--no-preflight-guardrails");
 		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("propagates effective quality-gate session overrides and lets reset beat stale CLI flags", async () => {
+	const value = fixtureRoot();
+	try {
+		const overridden = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: {
+				[PI_QUALITY_GATE_DISABLED]: "1",
+				[PI_QUALITY_GATE_TASK]: "verify:full",
+				[PI_QUALITY_GATE_ATTEMPTS]: "3",
+			},
+		});
+		expect(overridden.argv).toContain("--no-quality-gate");
+		expect(overridden.argv).toContain("verify:full");
+		expect(overridden.argv).toContain("3");
+
+		const reset = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: { [PI_QUALITY_GATE_DISABLED]: "0" },
+			argv: ["pi", "--no-quality-gate", "--quality-gate-task", "stale", "--quality-gate-attempts=9"],
+		});
+		expect(reset.argv).not.toContain("--no-quality-gate");
+		expect(reset.argv).not.toContain("--quality-gate-task");
+		expect(reset.argv).not.toContain("--quality-gate-attempts");
+
+		await overridden.cleanupAfterFailure();
+		await reset.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

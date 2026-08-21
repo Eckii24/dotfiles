@@ -2,9 +2,12 @@ import { constants } from "node:fs";
 import { access, chmod, lstat, mkdir, mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { AgentProfile } from "./agent-profiles.js";
-import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED } from "../shared/guardrails-session-state.ts";
+import { parseInheritedSessionPreflightRules } from "../guardrails/session-preflight-rules.js";
+import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED, PI_GUARDRAILS_PREFLIGHT_RULES } from "../shared/guardrails-session-state.ts";
+import { PI_QUALITY_GATE_ATTEMPTS, PI_QUALITY_GATE_DISABLED, PI_QUALITY_GATE_TASK } from "../shared/quality-gate-session-state.ts";
 import { PreconditionsError, MAX_NESTING_DEPTH } from "./preconditions.js";
 
 export const PI_HERDR_ROOT_RUN_ID = "PI_HERDR_ROOT_RUN_ID";
@@ -26,6 +29,8 @@ export type PiLaunchInput = {
 	piExecutable: string;
 	cwd: string;
 	profile: Pick<AgentProfile, "name" | "model" | "thinking" | "tools" | "allowedChildren" | "systemPrompt">;
+	/** Effective caller runtime. Profile fields override these inherited values independently. */
+	parentRuntime?: { model?: string; thinking?: ExtensionContext["thinkingLevel"]; tools?: string[] };
 	rootRunId: string;
 	leafRunId: string;
 	parentRootRunId?: string;
@@ -70,6 +75,14 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	const inheritedEnv = dependencies.env ?? process.env;
 	const inheritedSessionPolicy = inheritedEnv.PI_SANDBOX === "gondolin" ? inheritedEnv[PI_SANDBOX_SESSION_POLICY] : undefined;
 	if (inheritedSessionPolicy !== undefined) assertSandboxSessionPolicy(inheritedSessionPolicy);
+	const inheritedPreflightRules = inheritedEnv[PI_GUARDRAILS_PREFLIGHT_RULES];
+	if (inheritedPreflightRules !== undefined) {
+		try {
+			parseInheritedSessionPreflightRules(inheritedPreflightRules);
+		} catch (error) {
+			throw new PreconditionsError("invalid_execution_mode", error instanceof Error ? error.message : "Invalid inherited session preflight rules.");
+		}
+	}
 	const childDepth = input.nestingDepth + 1;
 	if (!Number.isInteger(input.nestingDepth) || input.nestingDepth < 0 || childDepth > MAX_NESTING_DEPTH) {
 		throw new PreconditionsError("nesting_depth_exceeded", `Pi child nesting may not exceed ${MAX_NESTING_DEPTH}.`);
@@ -85,15 +98,24 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 	};
 	const name = launchName(input.group, input.profile.name, input.leafRunId);
 	const parentArgv = dependencies.argv ?? process.argv;
+	const model = input.profile.model ?? input.parentRuntime?.model;
+	const thinking = input.profile.thinking ?? input.parentRuntime?.thinking;
+	const tools = input.profile.tools ?? input.parentRuntime?.tools;
+	const qualityStateSynced = inheritedEnv[PI_QUALITY_GATE_DISABLED] === "0" || inheritedEnv[PI_QUALITY_GATE_DISABLED] === "1";
+	const qualityTask = qualityStateSynced ? inheritedEnv[PI_QUALITY_GATE_TASK] : stringFlag(parentArgv, "quality-gate-task");
+	const qualityAttempts = qualityStateSynced ? inheritedEnv[PI_QUALITY_GATE_ATTEMPTS] : stringFlag(parentArgv, "quality-gate-attempts");
 	const argv = [
 		"--name", name,
-		...(input.profile.model ? ["--model", input.profile.model] : []),
-		...(input.profile.thinking ? ["--thinking", input.profile.thinking] : []),
-		...(input.profile.tools ? ["--tools", input.profile.tools.join(",")] : []),
+		...(model ? ["--model", model] : []),
+		...(thinking ? ["--thinking", thinking] : []),
+		...(tools === undefined ? [] : tools.length > 0 ? ["--tools", tools.join(",")] : ["--no-tools"]),
 		// These are Guardrails extension flags, not environment state. Forward only
 		// explicit enabled parent flags; children otherwise retain their own defaults.
-		...(hasEnabledBooleanFlag(parentArgv, "no-guardrails") || inheritedEnv[PI_GUARDRAILS_DISABLED] === "1" ? ["--no-guardrails"] : []),
-		...(hasEnabledBooleanFlag(parentArgv, "no-preflight-guardrails") || inheritedEnv[PI_GUARDRAILS_PREFLIGHT_DISABLED] === "1" ? ["--no-preflight-guardrails"] : []),
+		...(effectiveDisabled(inheritedEnv[PI_GUARDRAILS_DISABLED], parentArgv, "no-guardrails") ? ["--no-guardrails"] : []),
+		...(effectiveDisabled(inheritedEnv[PI_GUARDRAILS_PREFLIGHT_DISABLED], parentArgv, "no-preflight-guardrails") ? ["--no-preflight-guardrails"] : []),
+		...(effectiveDisabled(inheritedEnv[PI_QUALITY_GATE_DISABLED], parentArgv, "no-quality-gate") ? ["--no-quality-gate"] : []),
+		...(qualityTask ? ["--quality-gate-task", qualityTask] : []),
+		...(qualityAttempts && /^\d+$/.test(qualityAttempts) ? ["--quality-gate-attempts", qualityAttempts] : []),
 		"--append-system-prompt", promptFilePath,
 	];
 	const env: Record<string, string> = {
@@ -104,6 +126,10 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		[PI_HERDR_AGENT_PROFILE]: requiredLabel(input.profile.name, "profile name"),
 		[PI_HERDR_SUBAGENT_CHILD]: "1",
 		[PI_SUBAGENT]: "1",
+		...(inheritedEnv.RTK_DISABLED === "1" ? { RTK_DISABLED: "1" } : {}),
+		...(inheritedPreflightRules
+			? { [PI_GUARDRAILS_PREFLIGHT_RULES]: inheritedPreflightRules }
+			: {}),
 	};
 	if (input.profile.allowedChildren) env[PI_HERDR_ALLOWED_CHILDREN] = JSON.stringify(input.profile.allowedChildren);
 	// Every Pi child becomes a potential nested caller; its parent is this launched root,
@@ -127,11 +153,29 @@ function hasEnabledBooleanFlag(argv: readonly string[], name: string): boolean {
 	const exact = `--${name}`;
 	const assignment = `${exact}=`;
 	for (const argument of argv) {
-		if (argument === "--") return false;
-		if (argument === exact || argument === `${exact}=true`) return true;
-		if (argument.startsWith(assignment)) return false;
+		// Match Pi 0.84 extension-flag parsing exactly: assigned boolean values
+		// still enable the flag, and `--` is not a terminator for unknown flags.
+		if (argument === exact || argument.startsWith(assignment)) return true;
 	}
 	return false;
+}
+
+function effectiveDisabled(marker: string | undefined, argv: readonly string[], flag: string): boolean {
+	return marker === "0" || marker === "1" ? marker === "1" : hasEnabledBooleanFlag(argv, flag);
+}
+
+function stringFlag(argv: readonly string[], name: string): string | undefined {
+	const exact = `--${name}`;
+	for (let index = 0; index < argv.length; index++) {
+		const argument = argv[index]!;
+		if (argument === "--") return undefined;
+		if (argument === exact) {
+			const value = argv[index + 1];
+			return value && value !== "--" && !value.startsWith("--") ? value : undefined;
+		}
+		if (argument.startsWith(`${exact}=`)) return argument.slice(exact.length + 1) || undefined;
+	}
+	return undefined;
 }
 
 function assertSandboxSessionPolicy(raw: string) {

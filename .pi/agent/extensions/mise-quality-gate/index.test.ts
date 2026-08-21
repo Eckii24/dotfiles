@@ -1,9 +1,28 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { loadQualityGateSettings } from "./config.ts";
 import miseQualityGate, { matchesQualityGatePath } from "./index.ts";
+import { PI_QUALITY_GATE_ATTEMPTS, PI_QUALITY_GATE_DISABLED, PI_QUALITY_GATE_TASK } from "../shared/quality-gate-session-state.ts";
+
+const initialQualityEnv = {
+  disabled: process.env[PI_QUALITY_GATE_DISABLED],
+  task: process.env[PI_QUALITY_GATE_TASK],
+  attempts: process.env[PI_QUALITY_GATE_ATTEMPTS],
+};
+function restoreQualityEnv() {
+  for (const [key, value] of [
+    [PI_QUALITY_GATE_DISABLED, initialQualityEnv.disabled],
+    [PI_QUALITY_GATE_TASK, initialQualityEnv.task],
+    [PI_QUALITY_GATE_ATTEMPTS, initialQualityEnv.attempts],
+  ] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+beforeEach(restoreQualityEnv);
+afterEach(restoreQualityEnv);
 
 const globalMiseConfig = `${homedir()}/.config/mise/config.toml`;
 const reposMiseConfig = "/mise.toml";
@@ -184,6 +203,44 @@ describe("mise quality gate lifecycle", () => {
     });
   });
 
+  test("uses repair attempts from a CLI flag", async () => {
+    const { ctx, flags, followUps, handlers, pi } = createHarness(
+      ["src/Foo.cs"],
+      { code: 1, stdout: "failed", stderr: "" },
+    );
+    flags.set("quality-gate-attempts", "2");
+    miseQualityGate(pi);
+
+    await handlers.get("session_start")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+    await handlers.get("agent_end")!({}, ctx);
+
+    expect(followUps).toHaveLength(2);
+  });
+
+  test("current enable and reset survive extension reload with stale startup flags", async () => {
+    const first = createHarness(["src/Foo.cs"]);
+    first.flags.set("no-quality-gate", true);
+    first.flags.set("quality-gate-task", "stale:task");
+    first.flags.set("quality-gate-attempts", "9");
+    miseQualityGate(first.pi);
+    await first.commands.get("quality-gate")!.handler("enable", first.ctx);
+    await first.commands.get("quality-gate")!.handler("reset", first.ctx);
+    expect(process.env[PI_QUALITY_GATE_DISABLED]).toBe("0");
+    expect(process.env[PI_QUALITY_GATE_TASK]).toBeUndefined();
+    expect(process.env[PI_QUALITY_GATE_ATTEMPTS]).toBeUndefined();
+
+    const reloaded = createHarness(["src/Foo.cs"]);
+    reloaded.flags.set("no-quality-gate", true);
+    reloaded.flags.set("quality-gate-task", "stale:task");
+    reloaded.flags.set("quality-gate-attempts", "9");
+    miseQualityGate(reloaded.pi);
+    expect(process.env[PI_QUALITY_GATE_DISABLED]).toBe("0");
+    expect(process.env[PI_QUALITY_GATE_TASK]).toBeUndefined();
+    expect(process.env[PI_QUALITY_GATE_ATTEMPTS]).toBeUndefined();
+  });
+
   test("changes the task target from chat for the current session", async () => {
     const { commands, ctx, executions, handlers, notices, pi, statuses } = createHarness(["src/Foo.cs"]);
     miseQualityGate(pi);
@@ -195,6 +252,8 @@ describe("mise quality gate lifecycle", () => {
 
     expect(notices).toContain("Quality gate task set to verify:full");
     expect(notices).toContain("Quality gate automatic repair attempts set to 2");
+    expect(process.env[PI_QUALITY_GATE_TASK]).toBe("verify:full");
+    expect(process.env[PI_QUALITY_GATE_ATTEMPTS]).toBe("2");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify:full")).toHaveLength(1);
 
     await commands.get("quality-gate")!.handler("disable", ctx);
@@ -205,6 +264,7 @@ describe("mise quality gate lifecycle", () => {
       ["quality-gate", undefined],
     ]);
     expect(notices).toContain("Quality gate disabled for this session");
+    expect(process.env[PI_QUALITY_GATE_DISABLED]).toBe("1");
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
 
     await commands.get("quality-gate")!.handler("reset", ctx);
@@ -212,6 +272,9 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("agent_end")!({}, ctx);
 
     expect(notices).toContain("Quality gate enabled for this session");
+    expect(process.env[PI_QUALITY_GATE_DISABLED]).toBe("0");
+    expect(process.env[PI_QUALITY_GATE_TASK]).toBeUndefined();
+    expect(process.env[PI_QUALITY_GATE_ATTEMPTS]).toBeUndefined();
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(1);
   });
 

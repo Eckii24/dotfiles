@@ -15,7 +15,7 @@ const ids = () => ({ rootRunId: "root", leafRunId: "leaf", turnId: "turn" });
 const profile = (source: "user" | "project" = "user", tools: string[] = []) => ({ name: "scout", description: "desc", systemPrompt: "SECRET PROFILE BODY", source, filePath: "/profile.md", tools });
 const preflight = async () => ({ socketPath: "/socket", workspaceId: "workspace", callerPaneId: "caller", nestingDepth: 0, protocol: 1, capabilities: {} as any, piExecutable: "/bin/pi" });
 
-function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string>; cleanupTopology?: (input: any) => Promise<string[]>; restartAgent?: (client: any, paneId: string, leaf: any) => Promise<void> } = {}) {
+function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" | "project"; tools?: string[]; capacity?: any; lifecycle?: (input: any) => Promise<any>; events?: string[]; registry?: RunRegistry; discover?: (cwd: string, scope: any) => any; env?: NodeJS.ProcessEnv; createLaunch?: (input: any) => Promise<any>; createTopology?: (input: any, topology: any) => any; addTopologyLeaf?: (input: any) => Promise<string>; cleanupTopology?: (input: any) => Promise<string[]>; restartAgent?: (client: any, paneId: string, leaf: any) => Promise<void> } = {}) {
 	const events = options.events ?? [];
 	const client = { dispose: () => events.push("dispose") } as any;
 	const launch = { executable: "/bin/pi", name: "scout", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => { events.push("ready-cleanup"); }, cleanupAfterFailure: async () => { events.push("failure-cleanup"); } };
@@ -27,7 +27,7 @@ function vertical(options: { status?: any; keepOpen?: boolean; source?: "user" |
 		env: options.env,
 		createClient: () => client,
 		createCapacity: () => options.capacity ?? ({ acquireWriteLease: async () => ({}) }),
-		createLaunch: async () => launch as any,
+		createLaunch: options.createLaunch ?? (async () => launch as any),
 		createTopology: async (input: any) => options.createTopology ? options.createTopology(input, topology) : (topology.group.ownedPaneIds = new Set(input.leaves.map((_: any, index: number) => `pane-${index + 1}`)), topology),
 		addTopologyLeaf: options.addTopologyLeaf ?? (async ({ result }: any) => { const pane = `pane-${result.group.ownedPaneIds.size + 1}`; result.group.ownedPaneIds.add(pane); return pane; }),
 		cleanupTopology: options.cleanupTopology ?? (async ({ result }: any) => { events.push("topology-cleanup"); result.group.ownedPaneIds.clear(); return []; }),
@@ -53,8 +53,9 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	] as any);
 	expect(guidance).toContain("worker [writer: edit/write/bash; model: openai-codex/terra; thinking: medium]");
 	expect(guidance).toContain("scout [writer: edit/write/bash; model: inherit; thinking: low]");
-	expect(guidance).toContain("default [writer: Pi default tools; model: inherit; thinking: inherit]");
-	expect(guidance).toContain("Profiles omitting `tools` use Pi defaults and are writers");
+	expect(guidance).toContain("default [writer: inherited caller tools (conservative); model: inherit; thinking: inherit]");
+	expect(guidance).toContain("Profiles omitting `model`, `thinking`, or `tools` inherit the caller's effective value");
+	expect(guidance).toContain("Profiles omitting `tools` are conservatively classified as writers");
 	expect(guidance).toContain("Profiles declaring `edit`, `write`, or `bash` are also writers");
 	expect(guidance).toContain("Omit `cwd` unless an exact existing path is known");
 	expect(guidance).toContain("CR/LF input is normalized to spaces");
@@ -64,7 +65,7 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	const tools: any[] = [];
 	herdrExtension({ on: () => {}, registerTool: (tool: any) => { tools.push(tool); } } as any);
 	const description = tools.find(tool => tool.name === "subagent")?.description;
-	expect(description).toContain("profiles omitting tools use Pi defaults and are writers");
+	expect(description).toContain("profiles omitting tools inherit the caller's active tools and are conservatively classified as writers");
 	expect(description).toContain("profiles declaring edit/write/bash are also writers");
 	expect(description).toContain("omitted cwd uses caller cwd");
 	expect(description).toContain("CR/LF task input is normalized to spaces");
@@ -72,6 +73,28 @@ test("prompt and tool description prevent accidental same-cwd parallel writers",
 	expect(formatSubagentPrompt([])).toContain("Retained follow-up");
 	const control = tools.find(tool => tool.name === "subagent_control")?.description;
 	expect(control).toContain("keepOpen root"); expect(control).toContain("idle/done"); expect(control).toContain("multiple eligible"); expect(control).toContain("native final"); expect(control).toContain("blocked"); expect(control).toContain("close");
+});
+
+test("passes the effective Pi runtime settings into every child launch", async () => {
+	let launchInput: any;
+	const fallbackLaunch = { executable: "/bin/pi", name: "default", argv: [], cwd: process.cwd(), env: {}, cleanupAfterReady: async () => {}, cleanupAfterFailure: async () => {} };
+	const f = vertical({
+		discover: (() => ({ agents: [{ name: "default", description: "inherits", systemPrompt: "body", source: "user", filePath: "/default.md" }], projectAgentsDir: null })) as any,
+		createLaunch: async (input: any) => { launchInput = input; return fallbackLaunch; },
+	});
+
+	await f.runtime.execute({ group: "inherit", agent: "default", task: "work" }, {
+		...context,
+		model: { provider: "openai-codex", id: "gpt-test" },
+		thinkingLevel: "high",
+		activeTools: ["read", "bash"],
+	});
+
+	expect(launchInput.parentRuntime).toEqual({
+		model: "openai-codex/gpt-test",
+		thinking: "high",
+		tools: ["read", "bash"],
+	});
 });
 
 test("validation and unsupported mode throw before Herdr preflight side effects", async () => {

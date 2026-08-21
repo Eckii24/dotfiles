@@ -18,7 +18,7 @@
  *   /goal pause|resume|cancel - Control the active goal
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -161,7 +161,7 @@ type EvaluationResult = {
 
 type GoalGlobalState = {
 	activeGoalId?: string;
-	evaluatorProcess?: ChildProcessWithoutNullStreams;
+	evaluatorProcess?: ChildProcess;
 	abortEvaluation?: () => void;
 	sessionControl?: {
 		goalId: string;
@@ -183,37 +183,69 @@ type GoalSettings = {
 	maxTurns?: number;
 };
 
-function readSettings(): GoalSettings {
-	// Try project-level settings first
-	const projectPath = path.join(process.cwd(), ".pi", "settings.json");
-	for (const p of [projectPath, SETTINGS_PATH_GLOBAL]) {
+export function readSettings(cwd = process.cwd(), globalPath = SETTINGS_PATH_GLOBAL): GoalSettings {
+	const projectPath = path.join(cwd, ".pi", "settings.json");
+	const merged: GoalSettings = {};
+	// Merge by field so a partial project object overrides only the values it declares.
+	for (const p of [globalPath, projectPath]) {
 		try {
 			const raw = fs.readFileSync(p, "utf-8");
 			const data = JSON.parse(raw);
 			if (data?.goal && typeof data.goal === "object") {
-				return data.goal as GoalSettings;
+				Object.assign(merged, data.goal as GoalSettings);
 			}
 		} catch {
 			// file doesn't exist or invalid JSON
 		}
 	}
-	return {};
+	return merged;
 }
 
-function writeGoalSettings(settings: GoalSettings): void {
+export function writeGoalSettings(settings: GoalSettings, cwd = process.cwd(), globalPath = SETTINGS_PATH_GLOBAL): void {
+	const projectPath = path.join(cwd, ".pi", "settings.json");
+	let projectData: Record<string, unknown> | undefined;
 	try {
-		let data: Record<string, unknown> = {};
-		try {
-			const raw = fs.readFileSync(SETTINGS_PATH_GLOBAL, "utf-8");
-			data = JSON.parse(raw);
-		} catch {
-			// fresh settings
+		const metadata = fs.lstatSync(projectPath);
+		const expectedPath = path.resolve(projectPath);
+		const ownedByCurrentUser = typeof process.getuid !== "function" || metadata.uid === process.getuid();
+		if (!metadata.isFile() || metadata.isSymbolicLink() || !ownedByCurrentUser || fs.realpathSync(projectPath) !== expectedPath) {
+			throw new Error("Unsafe project settings path");
 		}
-		data.goal = { ...(data.goal as GoalSettings | undefined), ...settings };
-		fs.writeFileSync(SETTINGS_PATH_GLOBAL, JSON.stringify(data, null, 2) + "\n", "utf-8");
+		projectData = JSON.parse(fs.readFileSync(projectPath, "utf-8"));
 	} catch {
-		// ignore write failures
+		// Missing or invalid project settings cannot own an override.
 	}
+	const projectGoal = projectData?.goal && typeof projectData.goal === "object"
+		? projectData.goal as GoalSettings
+		: undefined;
+	const projectUpdates: GoalSettings = {};
+	const globalUpdates: GoalSettings = {};
+	for (const [key, value] of Object.entries(settings)) {
+		const target = projectGoal && Object.prototype.hasOwnProperty.call(projectGoal, key) ? projectUpdates : globalUpdates;
+		(target as Record<string, unknown>)[key] = value;
+	}
+
+	const writeScope = (filePath: string, updates: GoalSettings, existing?: Record<string, unknown>) => {
+		if (Object.keys(updates).length === 0) return;
+		try {
+			let data = existing ?? {};
+			if (!existing) {
+				try { data = JSON.parse(fs.readFileSync(filePath, "utf-8")); } catch { /* fresh settings */ }
+			}
+			data.goal = { ...(data.goal as GoalSettings | undefined), ...updates };
+			const content = JSON.stringify(data, null, 2) + "\n";
+			if (existing) {
+				const descriptor = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
+				try { fs.writeFileSync(descriptor, content, "utf-8"); } finally { fs.closeSync(descriptor); }
+			} else {
+				fs.writeFileSync(filePath, content, "utf-8");
+			}
+		} catch {
+			// Configuration persistence must not interrupt the active goal.
+		}
+	};
+	writeScope(projectPath, projectUpdates, projectData);
+	writeScope(globalPath, globalUpdates);
 }
 
 // ── Process helpers ──────────────────────────────────────────────────
@@ -662,7 +694,7 @@ export default function (pi: ExtensionAPI) {
 					return;
 
 				case "configure": {
-					const settings = readSettings();
+					const settings = readSettings(ctx.cwd);
 					pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label: "Goal — configuration needed" });
 
 					const result = await (async () => {
@@ -689,9 +721,10 @@ export default function (pi: ExtensionAPI) {
 						ctx.ui.notify("No condition provided", "warning");
 						return;
 					}
-					if (result.evaluatorModel !== (settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL)) {
-						writeGoalSettings({ evaluatorModel: result.evaluatorModel });
-					}
+					const settingsUpdate: GoalSettings = {};
+					if (result.evaluatorModel !== (settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL)) settingsUpdate.evaluatorModel = result.evaluatorModel;
+					if (result.maxTurns !== (settings.maxTurns ?? DEFAULT_MAX_TURNS)) settingsUpdate.maxTurns = result.maxTurns;
+					if (Object.keys(settingsUpdate).length > 0) writeGoalSettings(settingsUpdate, ctx.cwd);
 					if (isActive) clearGoal(pi, ctx, currentState!);
 					await startGoal(pi, ctx, result);
 					return;
@@ -699,7 +732,7 @@ export default function (pi: ExtensionAPI) {
 
 			case "start": {
 					if (isActive) clearGoal(pi, ctx, currentState!);
-					const settings = readSettings();
+					const settings = readSettings(ctx.cwd);
 					let evaluatorModel = settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL;
 
 					if (!settings.evaluatorModel) {
@@ -709,7 +742,7 @@ export default function (pi: ExtensionAPI) {
 							return;
 						}
 						evaluatorModel = picked;
-						writeGoalSettings({ evaluatorModel: picked });
+						writeGoalSettings({ evaluatorModel: picked }, ctx.cwd);
 					}
 
 					await startGoal(pi, ctx, {

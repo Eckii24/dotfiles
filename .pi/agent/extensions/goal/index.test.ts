@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -13,7 +13,9 @@ import {
 import goalExtension, {
   parseGoalCommand,
   pauseGoalState,
+  readSettings,
   resumeGoalState,
+  writeGoalSettings,
 } from "../goal/index.ts";
 
 const tempDirs: string[] = [];
@@ -26,6 +28,35 @@ afterEach(() => {
   else process.env.PI_AGENT_DIR = previousAgentDir;
   if (previousCodingAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousCodingAgentDir;
+});
+
+test("goal settings merge global and project fields using the active context cwd", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-goal-settings-"));
+  tempDirs.push(root);
+  const project = join(root, "project");
+  const projectPi = join(project, ".pi");
+  mkdirSync(projectPi, { recursive: true });
+  const globalPath = join(root, "global-settings.json");
+  writeFileSync(globalPath, JSON.stringify({ goal: { evaluatorModel: "@small", maxTurns: 7 } }));
+  writeFileSync(join(projectPi, "settings.json"), JSON.stringify({ goal: { maxTurns: 11 } }));
+  expect(readSettings(project, globalPath)).toEqual({ evaluatorModel: "@small", maxTurns: 11 });
+});
+
+test("goal settings persist each changed field in the scope that owns its override", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-goal-settings-write-"));
+  tempDirs.push(root);
+  const project = join(root, "project");
+  const projectPi = join(project, ".pi");
+  mkdirSync(projectPi, { recursive: true });
+  const globalPath = join(root, "global-settings.json");
+  writeFileSync(globalPath, JSON.stringify({ unrelated: true, goal: { evaluatorModel: "@small", maxTurns: 7 } }));
+  writeFileSync(join(projectPi, "settings.json"), JSON.stringify({ projectValue: true, goal: { maxTurns: 11 } }));
+
+  writeGoalSettings({ evaluatorModel: "@large", maxTurns: 12 }, project, globalPath);
+
+  expect(readSettings(project, globalPath)).toEqual({ evaluatorModel: "@large", maxTurns: 12 });
+  expect(JSON.parse(readFileSync(globalPath, "utf8"))).toEqual({ unrelated: true, goal: { evaluatorModel: "@large", maxTurns: 7 } });
+  expect(JSON.parse(readFileSync(join(projectPi, "settings.json"), "utf8"))).toEqual({ projectValue: true, goal: { maxTurns: 12 } });
 });
 
 describe("Goal evaluator CLI arguments", () => {
@@ -64,6 +95,24 @@ describe("Goal evaluator CLI arguments", () => {
     });
     expect(env.PI_GUARDRAILS_DISABLED).toBeUndefined();
     expect(env.PI_GUARDRAILS_PREFLIGHT_DISABLED).toBeUndefined();
+  });
+
+  test("matches Pi boolean extension-flag parsing for assigned and post-terminator flags", () => {
+    const settings = getEvaluatorLaunchSettings(
+      ["pi", "--no-guardrails=false", "--", "--no-preflight-guardrails"],
+      {},
+    );
+    expect(settings.guardrailsDisabled).toBe(true);
+    expect(settings.preflightGuardrailsDisabled).toBe(true);
+  });
+
+  test("current session enable overrides stale Guardrails startup flags", () => {
+    const settings = getEvaluatorLaunchSettings(
+      ["pi", "--no-guardrails", "--no-preflight-guardrails"],
+      { PI_GUARDRAILS_DISABLED: "0", PI_GUARDRAILS_PREFLIGHT_DISABLED: "0" },
+    );
+    expect(settings.guardrailsDisabled).toBe(false);
+    expect(settings.preflightGuardrailsDisabled).toBe(false);
   });
 
   test("uses supported non-interactive thinking syntax and resolves tier aliases", () => {

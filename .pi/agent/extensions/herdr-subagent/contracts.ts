@@ -32,7 +32,7 @@ const ErrorCodeSchema = StringEnum(ERROR_CODES);
 
 export const HerdrSubagentItemSchema = Type.Object({
 	name: Type.Optional(Type.String()),
-	agent: Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." }),
+	agent: Type.String({ description: "Agent profile name. Omitted profile tools inherit the caller's active tools and are conservatively classified as writers; edit, write, or bash declarations are also writers." }),
 	task: Type.String({ description: "Task text. CR/LF input is normalized to spaces before delivery." }),
 	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd. Parallel writers require distinct canonical cwd values." })),
 }, Strict);
@@ -44,10 +44,10 @@ export const HerdrSubagentItemSchema = Type.Object({
 export const HerdrSubagentParamsSchema = Type.Object({
 	group: Type.String(),
 	mode: ExecutionModeSchema,
-	agent: Type.Optional(Type.String({ description: "Agent profile name. Omitted profile tools use Pi defaults and are writers; edit, write, or bash declarations are also writers." })),
+	agent: Type.Optional(Type.String({ description: "Agent profile name. Omitted profile tools inherit the caller's active tools and are conservatively classified as writers; edit, write, or bash declarations are also writers." })),
 	task: Type.Optional(Type.String({ description: "Task text. CR/LF input is normalized to spaces before delivery." })),
 	cwd: Type.Optional(Type.String({ description: "Existing working directory. Omit to use caller cwd." })),
-	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every default-tool or declared writer a distinct canonical cwd." })),
+	tasks: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Parallel panes. Give every inherited-tool or declared writer a distinct canonical cwd." })),
 	chain: Type.Optional(Type.Array(HerdrSubagentItemSchema, { minItems: 1, maxItems: 4, description: "Sequential panes; use for multiple writers sharing one cwd." })),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(Type.Boolean()),
@@ -247,8 +247,9 @@ export function normalizeSubagentParams(raw: unknown): NormalizedSubagentParams 
 	const value = record(raw);
 	onlyFields(value, ["group", "mode", "agent", "task", "cwd", "tasks", "chain", "agentScope", "confirmProjectAgents", "timeoutSeconds", "keepOpen", "allowSharedWorkspaceWrites"]);
 	const group = sanitizeGroup(value.group);
-	const explicitMode = value.mode === undefined ? undefined : text(value.mode, "mode");
-	if (explicitMode !== undefined && !(["single", "parallel", "chain"] as const).includes(explicitMode as "single" | "parallel" | "chain")) invalid("invalid_execution_mode", "mode is invalid");
+	const explicitModeText = value.mode === undefined ? undefined : text(value.mode, "mode");
+	if (explicitModeText !== undefined && !(["single", "parallel", "chain"] as const).includes(explicitModeText as NormalizedSubagentParams["mode"])) invalid("invalid_execution_mode", "mode is invalid");
+	const explicitMode = explicitModeText as NormalizedSubagentParams["mode"] | undefined;
 	// Compatibility for direct runtime callers predating the public selector. Registered
 	// tool calls always include mode because the wire schema requires it.
 	const hasSingle = hasMeaningfulText(value.agent) || hasMeaningfulText(value.task);

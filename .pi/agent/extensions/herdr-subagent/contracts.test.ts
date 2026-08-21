@@ -68,7 +68,7 @@ test("normalizes legacy bridge-materialized empty launch fields", () => {
 });
 
 test("schema descriptions warn about parallel writer cwd conflicts", () => {
-	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("Omitted profile tools use Pi defaults and are writers");
+	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("Omitted profile tools inherit the caller's active tools and are conservatively classified as writers");
 	expect(HerdrSubagentParamsSchema.properties.agent.description).toContain("bash");
 	expect(HerdrSubagentParamsSchema.properties.tasks.description).toContain("distinct canonical cwd");
 	expect(HerdrSubagentParamsSchema.properties.chain.description).toContain("writers sharing one cwd");

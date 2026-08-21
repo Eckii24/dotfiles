@@ -28,9 +28,9 @@ export function getEvaluatorLaunchSettings(
 ): EvaluatorLaunchSettings {
   return {
     guardrailsDisabled:
-      hasEnabledBooleanFlag(argv, "no-guardrails") || env[PI_GUARDRAILS_DISABLED] === "1",
+      effectiveDisabled(env[PI_GUARDRAILS_DISABLED], argv, "no-guardrails"),
     preflightGuardrailsDisabled:
-      hasEnabledBooleanFlag(argv, "no-preflight-guardrails") || env[PI_GUARDRAILS_PREFLIGHT_DISABLED] === "1",
+      effectiveDisabled(env[PI_GUARDRAILS_PREFLIGHT_DISABLED], argv, "no-preflight-guardrails"),
     sandboxRequested: isGondolinSandboxRequested(argv, env),
     loadSecurityExtensions: true,
   };
@@ -104,9 +104,13 @@ function hasEnabledBooleanFlag(argv: readonly string[], name: string): boolean {
   const exact = `--${name}`;
   const assignment = `${exact}=`;
   for (const argument of argv) {
-    if (argument === "--") return false;
-    if (argument === exact || argument === `${exact}=true`) return true;
-    if (argument.startsWith(assignment)) return false;
+    // Pi 0.84 treats any registered boolean extension flag as true, including
+    // `--flag=false`, and does not stop extension-flag collection at `--`.
+    if (argument === exact || argument.startsWith(assignment)) return true;
   }
   return false;
+}
+
+function effectiveDisabled(marker: string | undefined, argv: readonly string[], flag: string): boolean {
+  return marker === "0" || marker === "1" ? marker === "1" : hasEnabledBooleanFlag(argv, flag);
 }

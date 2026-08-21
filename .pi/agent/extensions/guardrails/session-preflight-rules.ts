@@ -1,5 +1,6 @@
 const MAX_RULES = 20;
 const MAX_RULE_CHARS = 500;
+export const MAX_SESSION_PREFLIGHT_RULES_BYTES = 64 * 1024;
 
 function isUnsafeRuleText(rule: string): boolean {
   return /[\r\n\u2028\u2029\t\0-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(rule) ||
@@ -26,4 +27,23 @@ export class SessionPreflightRules {
   get rules(): string[] {
     return [...this.values];
   }
+}
+
+export function parseInheritedSessionPreflightRules(raw: string | undefined): string[] {
+  if (raw === undefined) return [];
+  if (Buffer.byteLength(raw, "utf8") > MAX_SESSION_PREFLIGHT_RULES_BYTES) throw new Error("Inherited session preflight rules exceed 64KB");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Inherited session preflight rules are not valid JSON");
+  }
+  if (!Array.isArray(parsed)) throw new Error("Inherited session preflight rules must be an array");
+  const rules = new SessionPreflightRules();
+  for (const value of parsed) {
+    if (typeof value !== "string") throw new Error("Inherited session preflight rules must contain only strings");
+    const result = rules.add(value);
+    if (!result.added) throw new Error(`Invalid inherited session preflight rule: ${result.error}`);
+  }
+  return rules.rules;
 }

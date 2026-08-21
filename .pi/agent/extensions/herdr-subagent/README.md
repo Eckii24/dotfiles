@@ -1,6 +1,6 @@
 # Herdr Subagent Extension – technischer Überblick
 
-> Implementierungsstand dieses Verzeichnisses. Stand: Pi `0.83.0`, Herdr `0.7.5`, Herdr-Protokoll `17`, Ergebnisprotokoll `1`.
+> Implementierungsstand dieses Verzeichnisses. Verifiziert mit Pi `0.84.0`, Herdr-Protokoll `20`, Ergebnisprotokoll `1`.
 
 Extension erzeugt sichtbare, interaktive Pi-Unteragenten in Herdr. Sie registriert genau zwei Pi-Tools:
 
@@ -107,7 +107,7 @@ Verzeichnis und Lock-Verzeichnis müssen `0700`, Dateien `0600` sein, dem aktuel
 
 ### Child-Umgebung
 
-Jeder Child-Pi erhält nur explizite Koordinationswerte. Zusätzlich werden die im Parent explizit gesetzten Guardrails-CLI-Flags `--no-guardrails` und `--no-preflight-guardrails` als gleichnamige Child-Pi-Parameter weitergereicht. Dasselbe gilt für die laufenden Session-Änderungen durch `/guardrails disable|enable` und `/guardrails preflight disable|enable`: Der Zustand beim Child-Start wird als Child-Pi-Parameter materialisiert, nicht als geerbte Variable. Profiltext, Task und sonstige geerbte Umgebung erscheinen nicht im Diagnose-Log:
+Jeder Child-Pi erhält nur explizite Koordinationswerte. Effektive Session-Einstellungen werden beim Child-Start als Child-Pi-Parameter materialisiert, nicht als ungeprüfte geerbte Umgebung: Guardrails- und Preflight-Zustand, Quality-Gate-Zustand samt Session-Overrides sowie Modell, Thinking-Level und aktive Tools. Bei Modell, Thinking und Tools gewinnt jedes im Agent-Profil gesetzte Feld einzeln; nur fehlende Felder erben den aktuellen Parent-Wert. Eine spätere Session-Änderung gewinnt auch gegen ein älteres Parent-CLI-Flag. Sandbox-Intent und der validierte Session-Policy-Overlay werden separat fail-closed weitergegeben. Profiltext, Task und sonstige Umgebung erscheinen nicht im Diagnose-Log:
 
 | Variable | Bedeutung |
 |---|---|
@@ -153,19 +153,19 @@ Finde nur relevante Pfade, Symbole und Tests. Keine Änderungen.
 |---|---:|---|
 | `name` | ja | Auswahlname im Tool-Aufruf |
 | `description` | ja | Wird dem aufrufenden Modell im Prompt angezeigt |
-| `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben; ohne Feld nutzt Pi seine mutation-fähigen Default-Tools |
+| `tools` | nein | Kommagetrennt als `pi --tools …` an Child übergeben; ohne Feld werden die aktuell aktiven Parent-Tools geerbt |
 | `allowedChildren` | nein | Nichtleere, eindeutige Liste getrimmter Profilnamen (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`); autorisiert nur diese unmittelbaren Nested-Children. Ohne Feld keine Nested-Delegation. |
-| `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert |
-| `thinking` | nein | Einer von `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; wird als `pi --thinking …` an Child übergeben. Ohne Feld bleibt Pi-Default erhalten. |
+| `model` | nein | Als `pi --model …` übergeben; Referenz wird validiert. Ohne Feld wird das effektive Parent-Modell geerbt. |
+| `thinking` | nein | Einer von `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; wird als `pi --thinking …` an Child übergeben. Ohne Feld wird das effektive Parent-Level geerbt. |
 | Markdown-Body | nein | temporär als Datei geschrieben und via `--append-system-prompt <datei>` angehängt |
 
 Ungültige/unlesbare Profile werden bei Discovery verworfen. Jedes Item entdeckt Profile relativ zu seinem kanonischen CWD; parallele Items können daher verschiedene Projektprofile wählen. Ausgewählte Projektprofile werden über `source` und kanonischen Profilpfad dedupliziert und standardmäßig in einer gemeinsamen UI-Bestätigung bestätigt. In Non-UI-Modi schlägt jede solche Auswahl mit `project_agent_not_confirmed` fehl; nur explizites `confirmProjectAgents: false` umgeht dies.
 
-`thinking` ist eine Rollenentscheidung, keine Vererbung vom Parent: Ein Mode kann den Parent auf Terra/high setzen, während Scout, Worker und Reviewer ihren eigenen expliziten Profilwert erhalten. So wird weder ein globaler Default noch ein langlebiger Parent-Kontext versehentlich zur Kostenpolicy jedes Childs.
+Explizite Profilwerte sind Rollenentscheidungen und gewinnen vor der Vererbung: Ein Mode kann den Parent auf Terra/high setzen, während Scout, Worker und Reviewer ihre eigenen Profilwerte behalten. Nur ein im Profil fehlendes Feld übernimmt den effektiven Parent-Wert.
 
 Temporäre Prompt-Dateien liegen in einem neuen `0700`-Runtime-Unterordner, werden exklusiv als `0600` erzeugt und nach stabiler Child-Bereitschaft oder Startfehler gelöscht.
 
-> Profile ohne `tools` nutzen Pi-Defaults und werden konservativ als Writer klassifiziert. Explizite `edit`-, `write`- oder `bash`-Deklarationen sind ebenfalls Writer; Bash darf schreiben. Dies ist kein Sandbox-Nachweis.
+> Profile ohne `tools` erben die aktiven Parent-Tools, werden für die Lease-Prüfung aber weiterhin konservativ als Writer klassifiziert. Explizite `edit`-, `write`- oder `bash`-Deklarationen sind ebenfalls Writer; Bash darf schreiben. Dies ist kein Sandbox-Nachweis.
 
 ### Verschachtelte Delegation
 
