@@ -15,7 +15,30 @@ afterEach(() => {
 	else process.env[PI_GUARDRAILS_PREFLIGHT_DISABLED] = initialPreflight;
 });
 
-test("slash-command disable state is exposed to a subsequent Herdr child launch", async () => {
+test("restores slash-command disable state when a goal starts a fresh session", async () => {
+	process.env[PI_GUARDRAILS_DISABLED] = "1";
+	process.env[PI_GUARDRAILS_PREFLIGHT_DISABLED] = "1";
+	const entries: any[] = [];
+	const handlers = new Map<string, any>();
+	guardrails({
+		registerFlag() {},
+		getFlag() { return false; },
+		on(name: string, handler: any) { handlers.set(name, handler); },
+		registerCommand() {},
+		appendEntry(_type: string, data: unknown) { entries.push(data); },
+		events: { emit() {} },
+	} as any);
+
+	await handlers.get("session_start")?.({}, {
+		cwd: process.cwd(),
+		hasUI: false,
+		sessionManager: { getBranch() { return []; } },
+	});
+
+	expect(entries[0]).toMatchObject({ disabled: true, preflightDisabled: true });
+});
+
+ test("slash-command disable state is exposed to a subsequent Herdr child launch", async () => {
 	const commands = new Map<string, any>();
 	guardrails({
 		registerFlag() {},

@@ -36,7 +36,12 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { buildEvaluatorArgs, EVALUATOR_STDIO } from "./evaluator-cli.js";
+import {
+	buildEvaluatorArgs,
+	buildEvaluatorEnv,
+	EVALUATOR_STDIO,
+	getEvaluatorLaunchSettings,
+} from "./evaluator-cli.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -416,14 +421,15 @@ async function runEvaluator(
 			return;
 		}
 
-		const args = buildEvaluatorArgs(evaluatorModel, prompt);
+		const launchSettings = getEvaluatorLaunchSettings();
+		const args = buildEvaluatorArgs(evaluatorModel, prompt, launchSettings);
 
 		const invocation = getPiInvocation(args);
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
 			stdio: EVALUATOR_STDIO,
-			env: { ...process.env, PI_SUBAGENT: "1" },
+			env: buildEvaluatorEnv(launchSettings),
 		});
 
 		const globalState = getGlobalState();
@@ -1029,6 +1035,9 @@ export default function (pi: ExtensionAPI) {
 					);
 				},
 				withSession: async (freshCtx) => {
+					// newSession invalidates the old command context. Keep the loop bound
+					// to the replacement context for the next fresh-session iteration.
+					setGoalSessionControl(freshCtx, state);
 					await freshCtx.sendUserMessage(
 						evalReason
 							? buildGoalContinuationPrompt(state, evalReason)

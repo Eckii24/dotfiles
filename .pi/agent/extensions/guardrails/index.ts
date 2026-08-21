@@ -153,7 +153,11 @@ import { SessionPreflightRules } from "./session-preflight-rules.js";
 import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
-import { syncGuardrailsLaunchState } from "../shared/guardrails-session-state.ts";
+import {
+  PI_GUARDRAILS_DISABLED,
+  PI_GUARDRAILS_PREFLIGHT_DISABLED,
+  syncGuardrailsLaunchState,
+} from "../shared/guardrails-session-state.ts";
 import { isGondolinSandboxRequested } from "../shared/sandbox-intent.ts";
 import { reportStartupStatus } from "../shared/startup-status.ts";
 
@@ -353,8 +357,10 @@ export default function (pi: ExtensionAPI) {
   const sessionAllow = new SessionAllowList();
   const sessionPreflightRules = new SessionPreflightRules();
   const sessionPreflightApprovals = new SessionPreflightApprovals();
-  let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails"));
-  let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails"));
+  // CLI flags win on initial startup; the process-local markers preserve slash-command
+  // state when a goal replaces the current session in-process or launches a child.
+  let guardrailsEnabled = !Boolean(pi.getFlag("no-guardrails")) && process.env[PI_GUARDRAILS_DISABLED] !== "1";
+  let preflightEnabled = !Boolean(pi.getFlag("no-preflight-guardrails")) && process.env[PI_GUARDRAILS_PREFLIGHT_DISABLED] !== "1";
 
   function guardrailsDisabled(): boolean {
     return !guardrailsEnabled;

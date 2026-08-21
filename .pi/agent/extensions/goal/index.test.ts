@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildEvaluatorArgs, EVALUATOR_STDIO } from "../goal/evaluator-cli.ts";
+import {
+  buildEvaluatorArgs,
+  buildEvaluatorEnv,
+  EVALUATOR_STDIO,
+  getEvaluatorLaunchSettings,
+  PI_SANDBOX,
+  PI_SANDBOX_SESSION_POLICY,
+} from "../goal/evaluator-cli.ts";
 import goalExtension, {
   parseGoalCommand,
   pauseGoalState,
@@ -24,6 +31,39 @@ afterEach(() => {
 describe("Goal evaluator CLI arguments", () => {
   test("does not keep stdin open while waiting for the evaluator", () => {
     expect(EVALUATOR_STDIO).toEqual(["ignore", "pipe", "pipe"]);
+  });
+
+  test("passes active guardrail and sandbox state to the evaluator child", () => {
+    const policy = JSON.stringify({ network: { deny: ["blocked.example.com"] } });
+    const settings = getEvaluatorLaunchSettings(
+      ["pi", "--no-guardrails"],
+      {
+        PI_GUARDRAILS_PREFLIGHT_DISABLED: "1",
+        [PI_SANDBOX]: "gondolin",
+        [PI_SANDBOX_SESSION_POLICY]: policy,
+      },
+    );
+    const args = buildEvaluatorArgs("@small", "verify the goal", settings);
+    const env = buildEvaluatorEnv(settings, {
+      PATH: "/bin",
+      [PI_SANDBOX_SESSION_POLICY]: policy,
+    });
+
+    expect(settings).toMatchObject({
+      guardrailsDisabled: true,
+      preflightGuardrailsDisabled: true,
+      sandboxRequested: true,
+    });
+    expect(args).toContain("--no-guardrails");
+    expect(args).toContain("--no-preflight-guardrails");
+    expect(args).toContain("--sandbox");
+    expect(env).toMatchObject({
+      PI_SUBAGENT: "1",
+      [PI_SANDBOX]: "gondolin",
+      [PI_SANDBOX_SESSION_POLICY]: policy,
+    });
+    expect(env.PI_GUARDRAILS_DISABLED).toBeUndefined();
+    expect(env.PI_GUARDRAILS_PREFLIGHT_DISABLED).toBeUndefined();
   });
 
   test("uses supported non-interactive thinking syntax and resolves tier aliases", () => {
@@ -185,4 +225,72 @@ describe("Goal pause and resume command", () => {
     expect(notices.at(-1)).toContain("Condition: all tests pass");
     expect(notices.at(-1)).toContain("/goal start <condition>");
   });
+});
+
+test("refreshes fresh-session control after a goal session replacement", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goal-fresh-session-"));
+  tempDirs.push(root);
+  const evaluator = join(root, "evaluator.js");
+  writeFileSync(evaluator, 'console.log("[GOAL_VERDICT]\\nMET: NO\\nREASON: continue\\n[/GOAL_VERDICT]");\n');
+
+  const entries: any[] = [];
+  const handlers = new Map<string, any>();
+  const commands = new Map<string, any>();
+  let originalNewSessionCalls = 0;
+  let replacementCtx: any;
+  const appendCustomEntry = (_type: string, data: unknown) => entries.push({ type: "custom", customType: "goal-state", data });
+  const makeContext = (newSession: (options: any) => Promise<{ cancelled: boolean }>): any => ({
+    hasUI: true,
+    cwd: process.cwd(),
+    sessionManager: {
+      getBranch() { return entries; },
+      getSessionFile() { return "/tmp/goal-fresh-session.jsonl"; },
+    },
+    ui: {
+      custom: async () => ({ condition: "finish the task", maxTurns: 3, evaluatorModel: "@small", useFreshSession: true }),
+      notify() {},
+      setStatus() {},
+      theme: { fg(_color: string, text: string) { return text; } },
+    },
+    newSession,
+    sendUserMessage() {},
+    waitForIdle() {},
+    isIdle() { return true; },
+    hasPendingMessages() { return false; },
+  });
+  const runReplacement = async (options: any) => {
+    await options.setup?.({ appendCustomEntry });
+    await options.withSession?.(replacementCtx);
+    return { cancelled: false };
+  };
+  replacementCtx = makeContext(runReplacement);
+  const originalNewSession = async (options: any) => {
+    originalNewSessionCalls++;
+    if (originalNewSessionCalls > 1) throw new Error("stale original context used");
+    await options.setup?.({ appendCustomEntry });
+    await options.withSession?.(replacementCtx);
+    return { cancelled: false };
+  };
+  const initialCtx = makeContext(originalNewSession);
+  const pi: any = {
+    registerCommand(name: string, command: any) { commands.set(name, command); },
+    on(name: string, handler: any) { handlers.set(name, handler); },
+    appendEntry(customType: string, data: unknown) { entries.push({ type: "custom", customType, data }); },
+    sendUserMessage() {},
+    events: { emit() {} },
+  };
+
+  const previousScript = process.argv[1];
+  process.argv[1] = evaluator;
+  try {
+    goalExtension(pi);
+    await commands.get("goal").handler("configure", initialCtx);
+    await handlers.get("agent_end")({ messages: [{ role: "assistant", stopReason: "stop" }] }, replacementCtx);
+  } finally {
+    if (previousScript === undefined) delete process.argv[1];
+    else process.argv[1] = previousScript;
+  }
+
+  expect(originalNewSessionCalls).toBe(1);
+  expect(entries.at(-1).data).toMatchObject({ status: "active", currentTurn: 2 });
 });
