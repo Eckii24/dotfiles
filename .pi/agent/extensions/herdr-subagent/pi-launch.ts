@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 import type { AgentProfile } from "./agent-profiles.js";
+import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED } from "../shared/guardrails-session-state.ts";
 import { PreconditionsError, MAX_NESTING_DEPTH } from "./preconditions.js";
 
 export const PI_HERDR_ROOT_RUN_ID = "PI_HERDR_ROOT_RUN_ID";
@@ -58,6 +59,8 @@ type LaunchDependencies = {
 	open?: typeof open;
 	rm?: (path: string, options?: { force?: boolean; recursive?: boolean }) => Promise<void>;
 	runtimeRoot?: string;
+	/** Parent Pi command line. Injectable so inherited extension flags remain testable. */
+	argv?: readonly string[];
 };
 
 /** Builds an interactive persisted Pi child. Caller invokes cleanup only on failure or stable readiness. */
@@ -81,11 +84,16 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		await (dependencies.rm ?? rm)(runtimeDir, { recursive: true, force: true });
 	};
 	const name = launchName(input.group, input.profile.name, input.leafRunId);
+	const parentArgv = dependencies.argv ?? process.argv;
 	const argv = [
 		"--name", name,
 		...(input.profile.model ? ["--model", input.profile.model] : []),
 		...(input.profile.thinking ? ["--thinking", input.profile.thinking] : []),
 		...(input.profile.tools ? ["--tools", input.profile.tools.join(",")] : []),
+		// These are Guardrails extension flags, not environment state. Forward only
+		// explicit enabled parent flags; children otherwise retain their own defaults.
+		...(hasEnabledBooleanFlag(parentArgv, "no-guardrails") || inheritedEnv[PI_GUARDRAILS_DISABLED] === "1" ? ["--no-guardrails"] : []),
+		...(hasEnabledBooleanFlag(parentArgv, "no-preflight-guardrails") || inheritedEnv[PI_GUARDRAILS_PREFLIGHT_DISABLED] === "1" ? ["--no-preflight-guardrails"] : []),
 		"--append-system-prompt", promptFilePath,
 	];
 	const env: Record<string, string> = {
@@ -113,6 +121,17 @@ export async function createPiLaunchDescriptor(input: PiLaunchInput, dependencie
 		cleanupAfterReady: cleanup, cleanupAfterFailure: cleanup,
 		log: { executable, argv: [...argv], cwd, envNames: Object.keys(env).sort(), name },
 	};
+}
+
+function hasEnabledBooleanFlag(argv: readonly string[], name: string): boolean {
+	const exact = `--${name}`;
+	const assignment = `${exact}=`;
+	for (const argument of argv) {
+		if (argument === "--") return false;
+		if (argument === exact || argument === `${exact}=true`) return true;
+		if (argument.startsWith(assignment)) return false;
+	}
+	return false;
 }
 
 function assertSandboxSessionPolicy(raw: string) {

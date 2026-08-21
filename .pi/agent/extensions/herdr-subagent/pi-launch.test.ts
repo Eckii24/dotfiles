@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { PI_GUARDRAILS_DISABLED, PI_GUARDRAILS_PREFLIGHT_DISABLED } from "../shared/guardrails-session-state.ts";
 import {
 	PI_HERDR_AGENT_PROFILE,
 	PI_HERDR_ALLOWED_CHILDREN,
@@ -70,6 +71,49 @@ test("marks Herdr children as standard subagents so global dirty-repo-guard skip
 	try {
 		const launch = await createPiLaunchDescriptor(input(value.cwd), { runtimeRoot: value.runtime });
 		expect(launch.env).toMatchObject({ [PI_HERDR_SUBAGENT_CHILD]: "1", [PI_SUBAGENT]: "1" });
+		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("forwards explicitly enabled Guardrails disable flags as child Pi parameters", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			argv: ["pi", "--no-guardrails", "--no-preflight-guardrails=true"],
+		});
+		expect(launch.argv).toContain("--no-guardrails");
+		expect(launch.argv).toContain("--no-preflight-guardrails");
+		expect(launch.argv.indexOf("--no-guardrails")).toBeLessThan(launch.argv.indexOf("--append-system-prompt"));
+		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("forwards Guardrails slash-command state markers as child Pi parameters", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			env: { [PI_GUARDRAILS_DISABLED]: "1", [PI_GUARDRAILS_PREFLIGHT_DISABLED]: "1" },
+			argv: ["pi"],
+		});
+		expect(launch.argv).toContain("--no-guardrails");
+		expect(launch.argv).toContain("--no-preflight-guardrails");
+		expect(launch.env).not.toHaveProperty(PI_GUARDRAILS_DISABLED);
+		expect(launch.env).not.toHaveProperty(PI_GUARDRAILS_PREFLIGHT_DISABLED);
+		await launch.cleanupAfterFailure();
+	} finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test("does not forward disabled or positional Guardrails flags", async () => {
+	const value = fixtureRoot();
+	try {
+		const launch = await createPiLaunchDescriptor(input(value.cwd), {
+			runtimeRoot: value.runtime,
+			argv: ["pi", "--no-guardrails=false", "--", "--no-preflight-guardrails"],
+		});
+		expect(launch.argv).not.toContain("--no-guardrails");
+		expect(launch.argv).not.toContain("--no-preflight-guardrails");
 		await launch.cleanupAfterFailure();
 	} finally { rmSync(value.root, { recursive: true, force: true }); }
 });

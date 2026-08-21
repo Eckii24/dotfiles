@@ -153,6 +153,7 @@ import { SessionPreflightRules } from "./session-preflight-rules.js";
 import { SessionPreflightApprovals } from "./session-preflight-approvals.js";
 import type { GuardrailsConfig, BashViolation } from "./types.js";
 import { DEFAULT_TIMEOUT } from "./types.js";
+import { syncGuardrailsLaunchState } from "../shared/guardrails-session-state.ts";
 import { isGondolinSandboxRequested } from "../shared/sandbox-intent.ts";
 import { reportStartupStatus } from "../shared/startup-status.ts";
 
@@ -362,6 +363,13 @@ export default function (pi: ExtensionAPI) {
   function preflightDisabled(): boolean {
     return guardrailsDisabled() || !preflightEnabled;
   }
+
+  // Herdr reads these process-local markers only while constructing a fresh
+  // child command line. Keep them in lockstep with CLI and slash-command state.
+  function syncChildLaunchState(): void {
+    syncGuardrailsLaunchState(guardrailsEnabled, preflightEnabled);
+  }
+  syncChildLaunchState();
 
   function recordDecision(
     ctx: Parameters<Parameters<ExtensionAPI["on"]>[1]>[1],
@@ -870,6 +878,7 @@ export default function (pi: ExtensionAPI) {
       if (action === "help") return ctx.ui.notify(help, "info");
       if (action === "enable" || action === "disable") {
         guardrailsEnabled = action === "enable";
+        syncChildLaunchState();
         recordDecision(ctx, `guardrails-session-${action}`);
         ctx.ui.notify(`🛡️ Guardrails ${guardrailsEnabled ? "enabled" : "disabled"} for this session`, "info");
         return;
@@ -894,6 +903,7 @@ export default function (pi: ExtensionAPI) {
       }
       if (preflightAction === "enable" || preflightAction === "disable") {
         preflightEnabled = preflightAction === "enable";
+        syncChildLaunchState();
         recordDecision(ctx, `guardrails-preflight-session-${preflightAction}`);
         ctx.ui.notify(`🛡️ Gate 2 preflight ${preflightEnabled ? "enabled" : "disabled"} for this session`, "info");
         return;

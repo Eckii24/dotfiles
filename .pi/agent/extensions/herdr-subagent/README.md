@@ -107,7 +107,7 @@ Verzeichnis und Lock-Verzeichnis müssen `0700`, Dateien `0600` sein, dem aktuel
 
 ### Child-Umgebung
 
-Jeder Child-Pi erhält nur explizite Koordinationswerte; Profiltext, Task und geerbte Umgebung erscheinen nicht im Diagnose-Log:
+Jeder Child-Pi erhält nur explizite Koordinationswerte. Zusätzlich werden die im Parent explizit gesetzten Guardrails-CLI-Flags `--no-guardrails` und `--no-preflight-guardrails` als gleichnamige Child-Pi-Parameter weitergereicht. Dasselbe gilt für die laufenden Session-Änderungen durch `/guardrails disable|enable` und `/guardrails preflight disable|enable`: Der Zustand beim Child-Start wird als Child-Pi-Parameter materialisiert, nicht als geerbte Variable. Profiltext, Task und sonstige geerbte Umgebung erscheinen nicht im Diagnose-Log:
 
 | Variable | Bedeutung |
 |---|---|
