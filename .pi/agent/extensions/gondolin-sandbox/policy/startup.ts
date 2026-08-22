@@ -1,6 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { mergePolicies, normalizeAbsolute, type Mount, type SandboxPolicy } from "./policy";
-import { validateHostPattern, validateSandbox } from "./loader";
+import { mergePolicies, normalizeAbsolute, validateHostPattern, type Mount, type SandboxPolicy } from "./policy";
 
 export const SANDBOX_SESSION_POLICY_ENV = "PI_SANDBOX_SESSION_POLICY_V1";
 export const MAX_SANDBOX_SESSION_POLICY_BYTES = 64 * 1024;
@@ -92,7 +91,20 @@ export async function parseSerializedSessionPolicy(raw: string | undefined): Pro
   catch { throw new Error("inherited sandbox session policy is invalid JSON"); }
   const policy = object(parsed, "inherited sandbox session policy");
   onlyKeys(policy, ["mounts", "network"], "inherited sandbox session policy");
-  return mergePolicies({}, await validateSandbox(policy));
+  const values: StartupPolicyFlagValues = {};
+  if (policy.mounts !== undefined) {
+    const mounts = object(policy.mounts, "inherited sandbox session policy mounts");
+    onlyKeys(mounts, ["readOnly", "readWrite"], "inherited sandbox session policy mounts");
+    if (mounts.readOnly !== undefined) values["sandbox-mount-ro"] = JSON.stringify(mounts.readOnly);
+    if (mounts.readWrite !== undefined) values["sandbox-mount-rw"] = JSON.stringify(mounts.readWrite);
+  }
+  if (policy.network !== undefined) {
+    const network = object(policy.network, "inherited sandbox session policy network");
+    onlyKeys(network, ["allow", "deny"], "inherited sandbox session policy network");
+    if (network.allow !== undefined) values["sandbox-network-allow"] = JSON.stringify(network.allow);
+    if (network.deny !== undefined) values["sandbox-network-deny"] = JSON.stringify(network.deny);
+  }
+  return parseStartupPolicyFlags(values);
 }
 
 const compactPolicy = (policy: SandboxPolicy): SandboxPolicy => {

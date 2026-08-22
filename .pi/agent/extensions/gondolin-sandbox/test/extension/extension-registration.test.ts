@@ -70,6 +70,20 @@ test("factory registers dormant wrappers before CLI values exist", () => {
   assert.deepEqual([...pi.commands.keys()], ["sandbox"]);
 });
 
+test("sandbox command is status-only", async () => {
+  const pi = harness({ flag: false });
+  await pi.commands.get("sandbox").handler("", pi.ctx());
+  await pi.commands.get("sandbox").handler("status", pi.ctx());
+  await assert.rejects(
+    pi.commands.get("sandbox").handler("mount ro add /host/docs", pi.ctx()),
+    /usage: \/sandbox \[status\]/,
+  );
+  await assert.rejects(
+    pi.commands.get("sandbox").handler("help", pi.ctx()),
+    /usage: \/sandbox \[status\]/,
+  );
+});
+
 test("session_start latches the real --sandbox flag and starts exactly one VM", async () => {
   let starts = 0;
   const pi = harness({ flag: true, vm: { id: "vm-realflag", start: async () => { starts++; }, close: async () => {} } });

@@ -32,6 +32,16 @@ export const normalizeAbsolute = (value: string): string => {
 
 export const normalizePattern = (value: string): string => value.trim().toLowerCase().replace(/\.$/, "");
 
+const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+export const validateHostPattern = (input: string): string => {
+  const pattern = normalizePattern(input);
+  const hostname = pattern.startsWith("*.") ? pattern.slice(2) : pattern;
+  if (hostname.length === 0 || hostname.length > 253 || !hostname.includes(".") || hostname.split(".").some((label) => !HOST_LABEL.test(label))) {
+    throw new PolicyError(`invalid host pattern: ${input}`);
+  }
+  return pattern;
+};
+
 const patternMatches = (hostname: string, pattern: string): boolean => {
   const host = normalizePattern(hostname);
   const rule = normalizePattern(pattern);

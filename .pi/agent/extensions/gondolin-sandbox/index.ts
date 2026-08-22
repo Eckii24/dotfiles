@@ -33,8 +33,6 @@ import {
   type VMOptions,
 } from "@earendil-works/gondolin";
 import { GUEST_WORKSPACE, SandboxRuntime, isSandboxRequested, mapHostPath, type SandboxMount } from "./core.ts";
-import { registerPolicyCommands } from "./policy/commands.ts";
-import { loadApprovedEffectivePolicy } from "./policy/loader.ts";
 import { isNetworkAllowed, mergePolicies, type SandboxPolicy } from "./policy/policy.ts";
 import { reportStartupStatus } from "../shared/startup-status.ts";
 import {
@@ -478,7 +476,6 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
   return function gondolinSandbox(pi: ExtensionAPI): void {
     const cwd = deps.cwd ?? process.cwd();
     const env = deps.env ?? process.env;
-    const agentDir = path.join(env.HOME ?? process.env.HOME ?? "/home/matthias", ".pi", "agent");
     const image = deps.image ?? env.GONDOLIN_DEFAULT_IMAGE ?? DEFAULT_IMAGE;
     let vmImage = image;
     const ensureDefaultImage = deps.ensureDefaultImage ?? ensureDefaultSandboxImage;
@@ -501,13 +498,6 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     let sessionPolicyText: string | undefined;
     let effectivePolicy: SandboxPolicy = {};
     let backend: "qemu" | "krun" = "qemu";
-    const readPolicy = async (trusted: boolean): Promise<SandboxPolicy> => {
-      const projectPath = trusted ? path.join(cwd, ".pi", "settings.json") : path.join(cwd, ".pi", "settings.json.disabled");
-      let projectId = path.resolve(cwd);
-      try { projectId = await realpath(cwd); } catch { /* no project policy */ }
-      return loadApprovedEffectivePolicy({ globalPath: path.join(agentDir, "settings.json"), projectPath, approvalsPath: path.join(agentDir, "sandbox-approvals.json"), projectId });
-    };
-
     const createVm = deps.createVm ?? (async () => VM.create(
       buildVmOptions(effectivePolicy, canonicalCwd, vmImage, backend),
     ));
@@ -516,8 +506,9 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
     const setSandboxStatus = (ctx: ExtensionContext | undefined, value: string | undefined): void => {
       if (ctx?.hasUI) ctx.ui.setStatus("gondolin-sandbox", value);
     };
+    const isFailed = (): boolean => activation === "failed";
     const latchFailure = (reason: string, ctx?: ExtensionContext) => {
-      if (activation !== "failed") failedReason = reason;
+      if (!isFailed()) failedReason = reason;
       activation = "failed";
       const failureContext = ctx ?? lastContext;
       setSandboxStatus(failureContext, `Sandbox disabled: ${failedReason}`);
@@ -556,15 +547,14 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         ? "Session-only mount: absolute host path or JSON array; requires --sandbox"
         : "Session-only network rule or JSON string array; requires --sandbox",
     });
-    registerPolicyCommands(pi, {
-      pathsForScope: (scope) => ({ settingsPath: scope === "global" ? path.join(agentDir, "settings.json") : path.join(cwd, ".pi", "settings.json"), approvalsPath: path.join(agentDir, "sandbox-approvals.json"), lockPath: scope === "global" ? path.join(agentDir, ".gondolin-policy.lock") : path.join(cwd, ".pi", ".gondolin-policy.lock"), projectId: path.resolve(cwd), globalAgentDir: agentDir, expectedGlobalTarget: path.join(agentDir, "settings.json##default,e.json") }),
-      readPolicy: async (ctx) => readPolicy(ctx.isProjectTrusted()),
-      showStatus: async (ctx) => {
+    pi.registerCommand("sandbox", {
+      description: "Show Gondolin sandbox runtime status",
+      async handler(args, ctx) {
+        if (args.trim() && args.trim() !== "status") throw new Error("usage: /sandbox [status]");
         const mountText = mounts.map((m) => `${m.hostPath} -> ${m.guestPath} (${m.readOnly ? "ro" : "rw"})`).join(", ");
-        const navigation = "navigation=/sandbox help | /sandbox policy show | /sandbox mount help | /sandbox network help";
         const state = activation === "failed" ? "disabled" : activation;
         const reason = activation === "failed" ? `\nreason=${failedReason}` : "";
-        ctx.ui.notify(`SANDBOX ${state}${reason}\nbackend=${backend}\nimage=${vmImage}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}\npolicy=${JSON.stringify(effectivePolicy)}\n${navigation}`, "info");
+        ctx.ui.notify(`SANDBOX ${state}${reason}\nbackend=${backend}\nimage=${vmImage}\nguest-workspace=${GUEST_WORKSPACE}\nmounts=${mountText}\nnetwork=${JSON.stringify(effectivePolicy.network ?? { allow: [], deny: [] })}`, "info");
       },
     });
 
@@ -649,7 +639,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         const inheritedOverlay = await parseSerializedSessionPolicy(env[SANDBOX_SESSION_POLICY_ENV]);
         const cliOverlay = await parseStartupPolicyFlags(startupFlagValues);
         const sessionOverlay = mergePolicies(inheritedOverlay, cliOverlay);
-        effectivePolicy = mergePolicies(await readPolicy(ctx.isProjectTrusted()), sessionOverlay);
+        effectivePolicy = sessionOverlay;
         sessionPolicyText = serializeSessionPolicy(sessionOverlay);
         backend = resolveBackend(effectivePolicy, env);
         mounts = policyMounts(effectivePolicy, canonicalCwd);
@@ -687,7 +677,7 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         }
       }
     } finally {
-      if (activation !== "failed") setSandboxStatus(ctx, undefined);
+      if (!isFailed()) setSandboxStatus(ctx, undefined);
       reportStartupStatus(_event, ctx, "sandbox", `[sandbox] ${activation}`);
     }
     });
