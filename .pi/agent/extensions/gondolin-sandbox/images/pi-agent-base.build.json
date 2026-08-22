@@ -29,6 +29,7 @@
       "py3-pip",
       "unzip",
       "build-base",
+      "gcompat",
       "cargo",
       "rust",
       "musl-dev"

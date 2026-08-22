@@ -17,7 +17,7 @@ EOF
 chmod 0755 /etc/profile.d/dotnet-tools.sh
 
 curl -kfsSL --retry 3 --retry-all-errors -o /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh
-sh /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/lib/dotnet --no-path
+bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/lib/dotnet --no-path
 ln -sfn /usr/lib/dotnet/dotnet /usr/local/bin/dotnet
 rm -f /tmp/dotnet-install.sh
 
