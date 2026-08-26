@@ -61,15 +61,3 @@ run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo test-kind unit -- -p:TreatWarni
 description = "Run the convention-resolved integration-test project"
 run = 'cd "$MISE_ORIGINAL_CWD" && dotnet-in-repo test-kind integration -- -p:TreatWarningsAsErrors=false -p:WarningsAsErrors='
 
-[tasks.verify]
-description = "Run project formatting, linting, build, and tests serially"
-run = [
-  { task = "format" },
-  { task = "lint" },
-  { task = "build" },
-  { task = "test" },
-]
-
-[tasks."verify:full"]
-description = "Run the complete project verification suite"
-run = [{ task = "verify" }, { task = "test:integration" }]

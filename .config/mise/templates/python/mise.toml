@@ -60,15 +60,3 @@ run = 'cd "$MISE_ORIGINAL_CWD" && uv run pytest'
 description = "Run Python integration tests marked integration"
 run = 'cd "$MISE_ORIGINAL_CWD" && uv run pytest -m integration'
 
-[tasks.verify]
-description = "Run project formatting, linting, build, and tests serially"
-run = [
-  { task = "format" },
-  { task = "lint" },
-  { task = "build" },
-  { task = "test" },
-]
-
-[tasks."verify:full"]
-description = "Run the complete Python verification suite"
-run = [{ task = "verify" }, { task = "test:integration" }]
