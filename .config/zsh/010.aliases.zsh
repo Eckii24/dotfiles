@@ -5,8 +5,10 @@ alias lzd='lazydocker'
 alias ylg='lazygit --git-dir ~/.local/share/yadm/repo.git/'
 alias ynvim='yadm enter nvim ~'
 alias 1nvim='OM nvim'
-alias n='nvim'
-alias N='OM nvim'
+# Fast C# profile is the normal interactive mode. `N` keeps the existing
+# 1Password wrapper and opts into full-solution Roslyn analysis explicitly.
+alias n='NVIM_DOTNET_PROFILE=fast nvim'
+alias N='NVIM_DOTNET_PROFILE=full nvim'
 alias diff='delta -n -s'
 alias rm='trash-put'
 alias mr='mr -d "$HOME"'
