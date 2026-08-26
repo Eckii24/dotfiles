@@ -1,0 +1,74 @@
+# Shared Python quality-gate defaults for repositories below ~/Development/Repos.
+# The global ~/.config/mise/config.toml owns only the protected Git-root resolver
+# and fail-closed task definitions.
+#
+# Python projects use uv for environments, dependencies, execution, locking, and
+# builds; Ruff, ty, and pytest are project development dependencies.
+
+[env]
+PI_QUALITY_GATE_INCLUDE = '''
+[
+  "**/*.py",
+  "**/pyproject.toml",
+  "**/uv.lock",
+  "**/.python-version",
+  "**/ruff.toml",
+  "**/pytest.ini"
+]
+'''
+PI_QUALITY_GATE_EXCLUDE = '''
+[
+  "**/.venv/**",
+  "**/__pycache__/**",
+  "**/.pytest_cache/**",
+  "**/.ruff_cache/**",
+  "**/.ty_cache/**",
+  "**/.mypy_cache/**",
+  "**/.coverage",
+  "**/htmlcov/**",
+  "**/build/**",
+  "**/dist/**",
+  "**/*.egg-info/**"
+]
+'''
+
+[tasks.format]
+description = "Verify Python formatting without modifying files"
+run = 'cd "$MISE_ORIGINAL_CWD" && uv run ruff format --check .'
+
+[tasks."format:apply"]
+description = "Apply Python formatting changes"
+confirm = "Apply Python formatting changes?"
+run = 'cd "$MISE_ORIGINAL_CWD" && uv run ruff format .'
+
+[tasks.lint]
+description = "Run Python lint and type checks"
+run = [
+  'cd "$MISE_ORIGINAL_CWD" && uv run ruff check .',
+  'cd "$MISE_ORIGINAL_CWD" && uv run ty check',
+]
+
+[tasks.build]
+description = "Build the Python package"
+run = 'cd "$MISE_ORIGINAL_CWD" && uv build'
+
+[tasks.test]
+description = "Run Python unit tests"
+run = 'cd "$MISE_ORIGINAL_CWD" && uv run pytest'
+
+[tasks."test:integration"]
+description = "Run Python integration tests marked integration"
+run = 'cd "$MISE_ORIGINAL_CWD" && uv run pytest -m integration'
+
+[tasks.verify]
+description = "Run project formatting, linting, build, and tests serially"
+run = [
+  { task = "format" },
+  { task = "lint" },
+  { task = "build" },
+  { task = "test" },
+]
+
+[tasks."verify:full"]
+description = "Run the complete Python verification suite"
+run = [{ task = "verify" }, { task = "test:integration" }]
