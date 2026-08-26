@@ -20,9 +20,15 @@ vim.api.nvim_create_autocmd("FileType", {
       return
     end
 
-    noice_progress_guard_installed = true
     local group = "noice_lsp_progress"
-    vim.api.nvim_clear_autocmds({ group = group, event = "LspProgress" })
+    -- Noice creates this group lazily on VeryLazy. Opening a C# file before
+    -- that point must not abort its FileType handler.
+    local ok = pcall(vim.api.nvim_clear_autocmds, { group = group, event = "LspProgress" })
+    if not ok then
+      return
+    end
+
+    noice_progress_guard_installed = true
     vim.api.nvim_create_autocmd("LspProgress", {
       group = group,
       callback = function(event)
