@@ -15,7 +15,7 @@ import {
 
 const QUALITY_TASK = "verify";
 const PROJECT_ROOT_RESOLVER_TASK = "pi:quality-gate:project-root";
-const PROJECT_ROOT_RESOLVER_SOURCE = resolve(homedir(), ".config/mise/config.toml");
+const GLOBAL_MISE_CONFIG_SOURCE = resolve(homedir(), ".config/mise/config.toml");
 const QUALITY_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_REPAIR_ATTEMPTS = 1;
 const REQUIRED_PROJECT_TASKS = ["format", "lint", "build", "test"];
@@ -141,7 +141,7 @@ async function resolveProjectRoot(
   if (info.code !== 0) return { reason: "unavailable" };
 
   try {
-    if (JSON.parse(info.stdout).source !== PROJECT_ROOT_RESOLVER_SOURCE) return { reason: "overridden" };
+    if (JSON.parse(info.stdout).source !== GLOBAL_MISE_CONFIG_SOURCE) return { reason: "overridden" };
   } catch {
     return { reason: "unavailable" };
   }
@@ -162,7 +162,7 @@ async function resolveProjectRoot(
 
 function isQualityTaskSource(repoRoot: string, source: string): boolean {
   const taskSource = resolve(source);
-  if (taskSource === PROJECT_ROOT_RESOLVER_SOURCE) return false;
+  if (taskSource === GLOBAL_MISE_CONFIG_SOURCE) return true;
 
   const sourceDirectory = dirname(taskSource);
   return isPathInside(repoRoot, taskSource) || isPathInside(sourceDirectory, repoRoot);

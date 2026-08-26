@@ -26,7 +26,7 @@ The extension enables itself once at `session_start` only when all conditions ho
 
 The global config owns the protected resolver plus fail-closed diagnostic tasks. Stack defaults live in directory-level configs, for example `~/Development/Repos/mise.toml` for .NET repositories. Pi runs tasks with the resolved Pi session directory as `cwd`; each task uses `MISE_ORIGINAL_CWD` so stack helpers resolve the requested project, including components nested in a Git monorepo and `src/v<N>` layouts.
 
-Before Pi executes the resolver, it verifies that its source is exactly `~/.config/mise/config.toml`. Quality tasks may come from a trusted parent stack config or a trusted repository-local override. Global quality-task fallbacks are diagnostics only and are rejected as a gate contract.
+Before Pi executes the resolver, it verifies that its source is exactly `~/.config/mise/config.toml`. Quality tasks may come from the global config, a trusted parent stack config, or a trusted repository-local override. Global diagnostic fallbacks remain valid task sources and fail closed when run.
 
 At session start, the extension reports the resulting state, without project path or configuration details:
 

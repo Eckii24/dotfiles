@@ -346,8 +346,8 @@ describe("mise quality gate lifecycle", () => {
     expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
   });
 
-  test("does not accept global quality-task fallbacks", async () => {
-    const { ctx, executions, handlers, pi, statuses } = createHarness(
+  test("accepts global quality tasks", async () => {
+    const { ctx, executions, handlers, pi } = createHarness(
       ["src/Foo.cs"],
       undefined,
       globalMiseConfig,
@@ -357,7 +357,7 @@ describe("mise quality gate lifecycle", () => {
     await handlers.get("session_start")!({}, ctx);
     await handlers.get("agent_end")!({}, ctx);
 
-    expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(0);
+    expect(executions.filter(entry => entry.command === "mise" && entry.args[0] === "run" && entry.args.at(-1) === "verify")).toHaveLength(1);
   });
 
   test("queues one redacted repair handoff on verification failure", async () => {
