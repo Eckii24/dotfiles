@@ -485,7 +485,13 @@ export default function (pi: ExtensionAPI) {
       restoredAllows,
     });
 
-    reportStartupStatus(_event, ctx, "guardrails", `[guardrails] enabled=${guardrailsEnabled ? "yes" : "no"} preflight=${preflightDisabled() ? "disabled" : "enabled"}`);
+    reportStartupStatus(
+      _event,
+      ctx,
+      "guardrails",
+      `[guardrails] enabled=${guardrailsEnabled ? "yes" : "no"} preflight=${preflightDisabled() ? "disabled" : "enabled"}`,
+      { error: !guardrailsEnabled || preflightDisabled() },
+    );
   });
 
   // Gondolin provides the execution boundary; sandboxed sessions deliberately allow

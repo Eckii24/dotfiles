@@ -2,10 +2,15 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type SessionStartEvent = { reason?: unknown };
 
-type StartupStatusContext = Pick<ExtensionContext, "hasUI" | "ui">;
+type StartupStatusContext = Pick<ExtensionContext, "hasUI" | "mode" | "ui">;
+
+type StartupStatus = {
+  message: string;
+  error: boolean;
+};
 
 type StartupStatusState = {
-  statuses: Map<string, string>;
+  statuses: Map<string, StartupStatus>;
   sessionKey: string | undefined;
 };
 
@@ -26,6 +31,7 @@ export function reportStartupStatus(
   ctx: StartupStatusContext,
   key: string,
   message: string,
+  options: { error?: boolean } = {},
 ): void {
   const state = getState();
   const currentSessionKey = getSessionKey(event);
@@ -33,6 +39,11 @@ export function reportStartupStatus(
     state.statuses.clear();
     state.sessionKey = currentSessionKey;
   }
-  state.statuses.set(key, message);
-  if (ctx.hasUI) ctx.ui.notify([...state.statuses.values()].join("\n"), "info");
+  state.statuses.set(key, { message, error: options.error ?? false });
+  if (!ctx.hasUI) return;
+
+  const rendered = [...state.statuses.values()].map((status) =>
+    ctx.mode === "tui" && status.error ? ctx.ui.theme.fg("error", status.message) : status.message
+  );
+  ctx.ui.notify(rendered.join("\n"), "info");
 }

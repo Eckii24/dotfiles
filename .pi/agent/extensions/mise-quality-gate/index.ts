@@ -343,7 +343,13 @@ export default function miseQualityGate(pi: ExtensionAPI) {
     const message = available
       ? "enabled"
       : `disabled${state.disabledReason ? ` — ${state.disabledReason}` : ""}`;
-    reportStartupStatus(_event, ctx, "quality-gate", `[quality-gate] Quality gate: ${message}`);
+    reportStartupStatus(
+      _event,
+      ctx,
+      "quality-gate",
+      `[quality-gate] Quality gate: ${message}`,
+      { error: !available },
+    );
   });
 
   const usage = [

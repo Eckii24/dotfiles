@@ -7,18 +7,22 @@ describe("startup status", () => {
     const ctx: any = {
       cwd: "/repo",
       hasUI: true,
+      mode: "tui",
       sessionManager: { getSessionFile: () => "/session.jsonl" },
-      ui: { notify(message: string) { notices.push(message); } },
+      ui: {
+        notify(message: string) { notices.push(message); },
+        theme: { fg(color: string, message: string) { return `<${color}>${message}</${color}>`; } },
+      },
     };
 
     const event = { reason: "startup-status-test" };
     reportStartupStatus(event, ctx, "guardrails", "[guardrails] enabled=yes");
-    reportStartupStatus(event, ctx, "quality-gate", "[quality-gate] Quality gate: disabled");
+    reportStartupStatus(event, ctx, "quality-gate", "[quality-gate] Quality gate: disabled", { error: true });
     reportStartupStatus(event, ctx, "sandbox", "[sandbox] inactive");
 
     expect(notices.at(-1)).toBe([
       "[guardrails] enabled=yes",
-      "[quality-gate] Quality gate: disabled",
+      "<error>[quality-gate] Quality gate: disabled</error>",
       "[sandbox] inactive",
     ].join("\n"));
   });
