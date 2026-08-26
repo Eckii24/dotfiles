@@ -1,20 +1,69 @@
-local full_solution = vim.env.NVIM_DOTNET_PROFILE == "full"
-local analysis_scope = full_solution and "fullSolution" or "openFiles"
+local function roslyn_settings(full_solution)
+  local analysis_scope = full_solution and "fullSolution" or "openFiles"
 
-local function restart_roslyn_for_selected_solution()
-  local constants = require("easy-dotnet.constants")
+  return {
+    ["csharp|inlay_hints"] = {
+      csharp_enable_inlay_hints_for_implicit_object_creation = full_solution,
+      csharp_enable_inlay_hints_for_implicit_variable_types = full_solution,
+      csharp_enable_inlay_hints_for_lambda_parameter_types = full_solution,
+      csharp_enable_inlay_hints_for_types = full_solution,
+      dotnet_enable_inlay_hints_for_indexer_parameters = full_solution,
+      dotnet_enable_inlay_hints_for_literal_parameters = full_solution,
+      dotnet_enable_inlay_hints_for_object_creation_parameters = full_solution,
+      dotnet_enable_inlay_hints_for_other_parameters = full_solution,
+      dotnet_enable_inlay_hints_for_parameters = full_solution,
+      dotnet_suppress_inlay_hints_for_parameters_that_differ_only_by_suffix = full_solution,
+      dotnet_suppress_inlay_hints_for_parameters_that_match_argument_name = full_solution,
+      dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = full_solution,
+    },
+    ["csharp|code_lens"] = {
+      -- This controls inline CodeLens counts only. `gd`/`gr` and normal
+      -- symbol/reference navigation remain available in both profiles.
+      dotnet_enable_references_code_lens = full_solution,
+      dotnet_enable_tests_code_lens = full_solution,
+    },
+    ["csharp|completion"] = {
+      dotnet_provider_regex_completions = full_solution,
+      dotnet_show_completion_items_from_unimported_namespaces = full_solution,
+      dotnet_show_name_completion_suggestions = true,
+    },
+    ["csharp|background_analysis"] = {
+      background_analysis_dotnet_compiler_diagnostics_scope = analysis_scope,
+      background_analysis_dotnet_analyzers_diagnostics_scope = analysis_scope,
+    },
+    ["csharp|symbol_search"] = {
+      dotnet_search_reference_assemblies = full_solution,
+    },
+  }
+end
 
-  for _, client in ipairs(vim.lsp.get_clients({ name = constants.lsp_client_name })) do
+local function restart_roslyn(full_solution)
+  local client_name = require("easy-dotnet.constants").lsp_client_name
+  local client = vim.lsp.get_clients({ name = client_name, bufnr = 0 })[1]
+
+  vim.env.NVIM_DOTNET_PROFILE = full_solution and "full" or "fast"
+  vim.lsp.config[client_name] = vim.tbl_deep_extend("force", vim.lsp.config[client_name], {
+    settings = roslyn_settings(full_solution),
+  })
+
+  local root_dir = client.config.root_dir
+  client:stop(true)
+  vim.lsp.start(vim.tbl_deep_extend("force", vim.lsp.config[client_name], { root_dir = root_dir }))
+  vim.notify((full_solution and "Full" or "Fast") .. " Roslyn mode")
+end
+
+local function restart_selected_solution()
+  local client_name = require("easy-dotnet.constants").lsp_client_name
+  for _, client in ipairs(vim.lsp.get_clients({ name = client_name })) do
     client:stop(true)
   end
 
   local lsp_options = require("easy-dotnet.options").options.lsp
-  require("easy-dotnet.roslyn.lsp").preload_roslyn(vim.tbl_deep_extend("force", lsp_options, {
-    -- A manual solution selection is an explicit request to load its workspace,
-    -- regardless of whether opportunistic startup preloading is disabled.
-    preload_roslyn = true,
-  }))
+  require("easy-dotnet.roslyn.lsp").preload_roslyn(vim.tbl_deep_extend("force", lsp_options, { preload_roslyn = true }))
 end
+
+local full_solution = vim.env.NVIM_DOTNET_PROFILE == "full"
+local initial_roslyn_settings = roslyn_settings(full_solution)
 
 local function select_solution_from_cwd()
   local cwd = vim.fn.getcwd()
@@ -48,7 +97,7 @@ local function select_solution_from_cwd()
     end
 
     require("easy-dotnet.current_solution").set_solution(chosen.value)
-    restart_roslyn_for_selected_solution()
+    restart_selected_solution()
   end, "Select solution", true, true)
 end
 
@@ -91,40 +140,7 @@ return {
       },
       lsp = {
         config = {
-          settings = {
-            ["csharp|inlay_hints"] = {
-              csharp_enable_inlay_hints_for_implicit_object_creation = full_solution,
-              csharp_enable_inlay_hints_for_implicit_variable_types = full_solution,
-              csharp_enable_inlay_hints_for_lambda_parameter_types = full_solution,
-              csharp_enable_inlay_hints_for_types = full_solution,
-              dotnet_enable_inlay_hints_for_indexer_parameters = full_solution,
-              dotnet_enable_inlay_hints_for_literal_parameters = full_solution,
-              dotnet_enable_inlay_hints_for_object_creation_parameters = full_solution,
-              dotnet_enable_inlay_hints_for_other_parameters = full_solution,
-              dotnet_enable_inlay_hints_for_parameters = full_solution,
-              dotnet_suppress_inlay_hints_for_parameters_that_differ_only_by_suffix = full_solution,
-              dotnet_suppress_inlay_hints_for_parameters_that_match_argument_name = full_solution,
-              dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = full_solution,
-            },
-            ["csharp|code_lens"] = {
-              -- This controls inline CodeLens counts only. `gd`/`gr` and normal
-              -- symbol/reference navigation remain available in both profiles.
-              dotnet_enable_references_code_lens = full_solution,
-              dotnet_enable_tests_code_lens = full_solution,
-            },
-            ["csharp|completion"] = {
-              dotnet_provider_regex_completions = full_solution,
-              dotnet_show_completion_items_from_unimported_namespaces = full_solution,
-              dotnet_show_name_completion_suggestions = true,
-            },
-            ["csharp|background_analysis"] = {
-              background_analysis_dotnet_compiler_diagnostics_scope = analysis_scope,
-              background_analysis_dotnet_analyzers_diagnostics_scope = analysis_scope,
-            },
-            ["csharp|symbol_search"] = {
-              dotnet_search_reference_assemblies = full_solution,
-            },
-          },
+          settings = initial_roslyn_settings,
         },
       },
     },
@@ -295,6 +311,20 @@ return {
         "<leader>NS",
         select_solution_from_cwd,
         desc = "Select Solution",
+      },
+      {
+        "<leader>NF",
+        function()
+          restart_roslyn(true)
+        end,
+        desc = "Roslyn Full Mode",
+      },
+      {
+        "<leader>Nf",
+        function()
+          restart_roslyn(false)
+        end,
+        desc = "Roslyn Fast Mode",
       },
       {
         "<leader>Nx",
