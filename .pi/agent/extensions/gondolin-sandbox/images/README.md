@@ -1,14 +1,14 @@
 # Gondolin guest images
 
-Default sandbox image: `pi-agent-work:0.12.0`
+Default sandbox image: `pi-agent-work:0.12.1`
 
 ## Build on working machine
 
 Build base + work images with Gondolin, then tag them in local Gondolin image store:
 
 ```sh
-gondolin build --config images/pi-agent-base.build.json --tag pi-agent-base:0.12.0
-gondolin build --config images/pi-agent-work.build.json --tag pi-agent-work:0.12.0
+gondolin build --config images/pi-agent-base.build.json --tag pi-agent-base:0.12.1
+gondolin build --config images/pi-agent-work.build.json --tag pi-agent-work:0.12.1
 ```
 
 Check refs:
@@ -50,6 +50,6 @@ Sandbox should now resolve the tagged Gondolin image from local store and skip r
 
 ## Notes
 
-- `pi-agent-work:0.12.0` is default sandbox image in extension.
-- `pi-agent-base:0.12.0` stays available if you want leaner image; set `GONDOLIN_DEFAULT_IMAGE=pi-agent-base:0.12.0` to use it.
+- `pi-agent-work:0.12.1` is default sandbox image in extension.
+- `pi-agent-base:0.12.1` stays available if you want leaner image; set `GONDOLIN_DEFAULT_IMAGE=pi-agent-base:0.12.1` to use it.
 - Build still needs network on the working machine that creates the Gondolin store.

@@ -44,7 +44,7 @@ import {
   serializeSessionPolicy,
 } from "./policy/startup.ts";
 
-const DEFAULT_IMAGE = "pi-agent-work:0.12.0";
+const DEFAULT_IMAGE = "pi-agent-work:0.12.1";
 const DEFAULT_IMAGE_ARCH = process.arch === "arm64" ? "aarch64" : "x86_64";
 const DEFAULT_IMAGE_CONFIG = path.join(import.meta.dirname, "images", "pi-agent-work.build.json");
 const SEARCH_MAX_BYTES = DEFAULT_MAX_BYTES;

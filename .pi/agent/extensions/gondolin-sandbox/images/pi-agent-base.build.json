@@ -21,6 +21,7 @@
       "openssh",
       "ripgrep",
       "findutils",
+      "fd",
       "jq",
       "zsh",
       "nodejs",

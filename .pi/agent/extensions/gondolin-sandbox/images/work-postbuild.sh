@@ -25,10 +25,6 @@ DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet tool install --global csharpier
 DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet tool install --global dotnet-outdated-tool
 DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet tool install --global dotnet-ef
 
-pip config set global.trusted-host pypi.org
-pip config set global.trusted-host files.pythonhosted.org
-pip install --break-system-packages --no-cache-dir azure-cli
-
 curl -kfsSL --retry 3 --retry-all-errors -o /tmp/dapr.tar.gz "https://github.com/dapr/cli/releases/download/v1.18.0/${dapr_asset}"
 tar -xzf /tmp/dapr.tar.gz -C /usr/local/bin dapr
 chmod 0755 /usr/local/bin/dapr
