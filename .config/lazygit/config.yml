@@ -16,7 +16,6 @@ customCommands:
         key: CommitMsg
         command: |
           zsh -c "
-          source ~/.zshrc
           # Check for staged changes without reading the diff
           if git diff --cached --quiet; then
             echo \"No changes in staging. Add changes first.\"
@@ -26,7 +25,7 @@ customCommands:
           SELECTED_TYPE=\"ai-defined\"
           COMMITS_TO_SUGGEST=8
 
-          pi-chat --thinking off --no-tools --no-session --no-extensions --no-context-files \"
+          PI_SKIP_VERSION_CHECK=1 \$HOME/.local/bin/pi-chat --thinking off --no-tools --no-session --no-extensions --no-context-files \"
 
           You are an expert at writing Git commits. Your job is to write commit messages that follow the Conventional Commits format.
 
@@ -87,7 +86,6 @@ customCommands:
           \$(git log --oneline -10)
 
           Changes to analyze:
-          \$(git diff --cached --stat)
           \$(git diff --cached)
           \"
           "
@@ -139,7 +137,6 @@ customCommands:
         key: CommitMsg
         command: |
           zsh -c "
-          source ~/.zshrc
           # Check for staged changes without reading the diff
           if git diff --cached --quiet; then
             echo \"No changes in staging. Add changes first.\"
@@ -149,7 +146,7 @@ customCommands:
           SELECTED_TYPE=\"{{.Form.Type}}\"
           COMMITS_TO_SUGGEST=8
 
-          pi-chat --thinking off --no-tools --no-session --no-extensions --no-context-files \"
+          PI_SKIP_VERSION_CHECK=1 \$HOME/.local/bin/pi-chat --thinking off --no-tools --no-session --no-extensions --no-context-files \"
 
           You are an expert at writing Git commits. Your job is to write commit messages that follow the Conventional Commits format.
 
@@ -210,7 +207,6 @@ customCommands:
           \$(git log --oneline -10)
 
           Changes to analyze:
-          \$(git diff --cached --stat)
           \$(git diff --cached)
           \"
           "
