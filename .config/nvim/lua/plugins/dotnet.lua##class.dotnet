@@ -28,8 +28,8 @@ local function roslyn_settings(full_solution)
       dotnet_show_name_completion_suggestions = true,
     },
     ["csharp|background_analysis"] = {
-      background_analysis_dotnet_compiler_diagnostics_scope = analysis_scope,
-      background_analysis_dotnet_analyzers_diagnostics_scope = analysis_scope,
+      dotnet_compiler_diagnostics_scope = analysis_scope,
+      dotnet_analyzer_diagnostics_scope = analysis_scope,
     },
     ["csharp|symbol_search"] = {
       dotnet_search_reference_assemblies = full_solution,
@@ -41,14 +41,37 @@ local function restart_roslyn(full_solution)
   local client_name = require("easy-dotnet.constants").lsp_client_name
   local client = vim.lsp.get_clients({ name = client_name, bufnr = 0 })[1]
 
+  if not client then
+    vim.notify("No Roslyn client attached to this buffer", vim.log.levels.WARN)
+    return
+  end
+
   vim.env.NVIM_DOTNET_PROFILE = full_solution and "full" or "fast"
-  vim.lsp.config[client_name] = vim.tbl_deep_extend("force", vim.lsp.config[client_name], {
-    settings = roslyn_settings(full_solution),
-  })
+  require("easy-dotnet.options").options.lsp.auto_refresh_codelens = full_solution
+  local config = vim.deepcopy(vim.lsp.config[client_name])
+  config.settings = vim.tbl_deep_extend("force", config.settings or {}, roslyn_settings(full_solution))
+
+  local cmd = vim.deepcopy(config.cmd)
+  local profile_flags = {
+    ["--daemon-mode"] = true,
+    ["--roslynator"] = true,
+    ["--easy-dotnet-analyzer"] = true,
+  }
+  cmd = vim.tbl_filter(function(arg)
+    return not profile_flags[arg]
+  end, cmd)
+  if full_solution then
+    table.insert(cmd, "--roslynator")
+    table.insert(cmd, "--easy-dotnet-analyzer")
+  else
+    table.insert(cmd, "--daemon-mode")
+  end
+  config.cmd = cmd
+  vim.lsp.config[client_name] = config
 
   local root_dir = client.config.root_dir
   client:stop(true)
-  vim.lsp.start(vim.tbl_deep_extend("force", vim.lsp.config[client_name], { root_dir = root_dir }))
+  vim.lsp.start(vim.tbl_deep_extend("force", config, { root_dir = root_dir }))
   vim.notify((full_solution and "Full" or "Fast") .. " Roslyn mode")
 end
 
@@ -139,6 +162,13 @@ return {
         auto_register_dap = true,
       },
       lsp = {
+        auto_refresh_codelens = full_solution,
+        daemon_mode = not full_solution,
+        roslynator_enabled = full_solution,
+        easy_dotnet_analyzer_enabled = full_solution,
+        razor = {
+          enabled = false,
+        },
         config = {
           settings = initial_roslyn_settings,
         },
