@@ -1,17 +1,21 @@
 {
-  "lastChangelogVersion": "0.84.0",
+  "lastChangelogVersion": "0.84.2",
   "defaultThinkingLevel": "high",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-luna",
   "modelTiers": {
+    "tiny": "gpt-5.6-luna",
     "small": "gpt-5.6-luna",
     "medium": "gpt-5.6-terra",
     "large": "gpt-5.6-sol"
   },
   "chatModel": "gpt-5.6-luna",
+  "sessionTitle": {
+    "model": "@tiny"
+  },
   "goal": {
     "maxTurns": 20,
-    "evaluatorModel": "@small"
+    "evaluatorModel": "@tiny"
   },
   "compaction": {
     "enabled": true,
@@ -101,14 +105,8 @@
         "shasum",
         "diff"
       ],
-      "preflightModel": "@small",
-      "preflightRules": [
-        "When Gate 1 already allowed a sensitive path read, reading or displaying its contents is allowed; sensitive content alone is not a reason to confirm or deny.",
-        "Allow local tests, builds, parsers, and scripts when command syntax shows no concrete write, network, privilege, remote-execution, or unrelated-system-state risk; do not infer risk merely because code could theoretically do more.",
-        "Keep existing narrow safe HTTP(S) GET/HEAD allowlist behavior. Other remote calls require confirmation unless trusted task intent explicitly authorizes the exact destination and data transfer.",
-        "An intentional sensitive upload may be allowed when trusted task intent explicitly authorizes it and command scope matches; otherwise require confirmation. Do not infer exfiltration from sensitive filenames or local data flow alone without visible outbound transfer syntax.",
-        "Reading PI_* environment variables is allowed."
-      ],
+      "preflightModel": "@tiny",
+      "preflightRules": [],
       "confirm": [
         "sudo",
         "chmod",
@@ -121,7 +119,8 @@
         "halt",
         "kill",
         "killall",
-        "pkill"
+        "pkill",
+        "az"
       ]
     }
   },
