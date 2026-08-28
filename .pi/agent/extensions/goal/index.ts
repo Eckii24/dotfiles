@@ -52,6 +52,19 @@ const DEFAULT_EVALUATOR_MODEL = "@small";
 const DIRTY_REPO_GUARD_BYPASS_EVENT = "dirty-repo-guard:bypass";
 const HERDR_BLOCKED_EVENT = "herdr:blocked";
 
+export async function withHerdrBlockedPrompt<T>(
+	pi: Pick<ExtensionAPI, "events">,
+	label: string,
+	run: () => Promise<T>,
+): Promise<T> {
+	pi.events.emit(HERDR_BLOCKED_EVENT, { active: true, label });
+	try {
+		return await run();
+	} finally {
+		pi.events.emit(HERDR_BLOCKED_EVENT, { active: false });
+	}
+}
+
 const VERDICT_REGEX =
 	/\[GOAL_VERDICT\]\s*MET:\s*(YES|NO)\s*REASON:\s*([\s\S]*?)\s*\[\/GOAL_VERDICT\]/i;
 
@@ -599,14 +612,18 @@ function clearStatus(ctx: ExtensionContext): void {
 
 // ── Model picker ─────────────────────────────────────────────────────
 
-async function pickEvaluatorModel(ctx: ExtensionContext): Promise<string | undefined> {
+async function pickEvaluatorModel(pi: ExtensionAPI, ctx: ExtensionContext): Promise<string | undefined> {
 	if (!ctx.hasUI) return DEFAULT_EVALUATOR_MODEL;
 
 	const available = ctx.modelRegistry.getAvailable();
 	if (available.length === 0) return DEFAULT_EVALUATOR_MODEL;
 
 	const options = available.map((m) => `${m.provider}/${m.id}`);
-	const choice = await ctx.ui.select("Select evaluator model:", options);
+	const choice = await withHerdrBlockedPrompt(
+		pi,
+		"Goal — evaluator model selection needed",
+		() => ctx.ui.select("Select evaluator model:", options),
+	);
 	return choice ?? undefined;
 }
 
@@ -736,7 +753,7 @@ export default function (pi: ExtensionAPI) {
 					let evaluatorModel = settings.evaluatorModel ?? DEFAULT_EVALUATOR_MODEL;
 
 					if (!settings.evaluatorModel) {
-						const picked = await pickEvaluatorModel(ctx);
+						const picked = await pickEvaluatorModel(pi, ctx);
 						if (!picked) {
 							ctx.ui.notify("Goal cancelled — no evaluator model selected", "info");
 							return;
@@ -923,9 +940,13 @@ export default function (pi: ExtensionAPI) {
 			};
 
 			if (ctx.hasUI) {
-				const confirmed = await ctx.ui.confirm(
-					"Goal met",
-					`${result.reason}\n\nClear the goal?`,
+				const confirmed = await withHerdrBlockedPrompt(
+					pi,
+					"Goal — completion confirmation needed",
+					() => ctx.ui.confirm(
+						"Goal met",
+						`${result.reason}\n\nClear the goal?`,
+					),
 				);
 				if (confirmed) {
 					pi.appendEntry(GOAL_STATE_ENTRY_TYPE, metState);

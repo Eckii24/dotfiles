@@ -15,6 +15,7 @@ import goalExtension, {
   pauseGoalState,
   readSettings,
   resumeGoalState,
+  withHerdrBlockedPrompt,
   writeGoalSettings,
 } from "../goal/index.ts";
 
@@ -28,6 +29,28 @@ afterEach(() => {
   else process.env.PI_AGENT_DIR = previousAgentDir;
   if (previousCodingAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousCodingAgentDir;
+});
+
+test("goal blocking prompts always clear Herdr state", async () => {
+  const events: Array<{ name: string; data: unknown }> = [];
+  const pi = {
+    events: {
+      emit(name: string, data: unknown) {
+        events.push({ name, data });
+      },
+    },
+  };
+
+  await expect(
+    withHerdrBlockedPrompt(pi as never, "Goal — test prompt", async () => {
+      throw new Error("dialog closed");
+    }),
+  ).rejects.toThrow("dialog closed");
+
+  expect(events).toEqual([
+    { name: "herdr:blocked", data: { active: true, label: "Goal — test prompt" } },
+    { name: "herdr:blocked", data: { active: false } },
+  ]);
 });
 
 test("goal settings merge global and project fields using the active context cwd", () => {
