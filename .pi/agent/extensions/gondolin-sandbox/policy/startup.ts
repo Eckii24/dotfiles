@@ -83,28 +83,42 @@ export async function parseStartupPolicyFlags(values: StartupPolicyFlagValues, d
 }
 
 /** Strictly revalidate an inherited session overlay before a child VM can use it. */
+export async function parseSandboxSettings(raw: unknown, where = "sandbox settings"): Promise<SandboxPolicy> {
+  if (raw === undefined) return mergePolicies({}, {});
+  const policy = object(raw, where);
+  onlyKeys(policy, ["mounts", "environment", "network"], where);
+  const values: StartupPolicyFlagValues = {};
+  if (policy.mounts !== undefined) {
+    const mounts = object(policy.mounts, `${where} mounts`);
+    onlyKeys(mounts, ["readOnly", "readWrite"], `${where} mounts`);
+    if (mounts.readOnly !== undefined) values["sandbox-mount-ro"] = JSON.stringify(mounts.readOnly);
+    if (mounts.readWrite !== undefined) values["sandbox-mount-rw"] = JSON.stringify(mounts.readWrite);
+  }
+  if (policy.network !== undefined) {
+    const network = object(policy.network, `${where} network`);
+    onlyKeys(network, ["allow", "deny"], `${where} network`);
+    if (network.allow !== undefined) values["sandbox-network-allow"] = JSON.stringify(network.allow);
+    if (network.deny !== undefined) values["sandbox-network-deny"] = JSON.stringify(network.deny);
+  }
+  let environment: Record<string, string> | undefined;
+  if (policy.environment !== undefined) {
+    const input = object(policy.environment, `${where} environment`);
+    environment = {};
+    for (const [name, value] of Object.entries(input)) {
+      if (!name || typeof value !== "string") throw new Error(`${where} environment values must be strings`);
+      environment[name] = value;
+    }
+  }
+  return mergePolicies({}, { ...(await parseStartupPolicyFlags(values)), ...(environment === undefined ? {} : { environment }) });
+}
+
 export async function parseSerializedSessionPolicy(raw: string | undefined): Promise<SandboxPolicy> {
   if (raw === undefined) return mergePolicies({}, {});
   if (Buffer.byteLength(raw, "utf8") > MAX_SANDBOX_SESSION_POLICY_BYTES) throw new Error("inherited sandbox session policy exceeds 64KB");
   let parsed: unknown;
   try { parsed = JSON.parse(raw); }
   catch { throw new Error("inherited sandbox session policy is invalid JSON"); }
-  const policy = object(parsed, "inherited sandbox session policy");
-  onlyKeys(policy, ["mounts", "network"], "inherited sandbox session policy");
-  const values: StartupPolicyFlagValues = {};
-  if (policy.mounts !== undefined) {
-    const mounts = object(policy.mounts, "inherited sandbox session policy mounts");
-    onlyKeys(mounts, ["readOnly", "readWrite"], "inherited sandbox session policy mounts");
-    if (mounts.readOnly !== undefined) values["sandbox-mount-ro"] = JSON.stringify(mounts.readOnly);
-    if (mounts.readWrite !== undefined) values["sandbox-mount-rw"] = JSON.stringify(mounts.readWrite);
-  }
-  if (policy.network !== undefined) {
-    const network = object(policy.network, "inherited sandbox session policy network");
-    onlyKeys(network, ["allow", "deny"], "inherited sandbox session policy network");
-    if (network.allow !== undefined) values["sandbox-network-allow"] = JSON.stringify(network.allow);
-    if (network.deny !== undefined) values["sandbox-network-deny"] = JSON.stringify(network.deny);
-  }
-  return parseStartupPolicyFlags(values);
+  return parseSandboxSettings(parsed, "inherited sandbox session policy");
 }
 
 const compactPolicy = (policy: SandboxPolicy): SandboxPolicy => {
@@ -114,13 +128,14 @@ const compactPolicy = (policy: SandboxPolicy): SandboxPolicy => {
   const deny = policy.network?.deny ?? [];
   return {
     ...(readOnly.length || readWrite.length ? { mounts: { ...(readOnly.length ? { readOnly } : {}), ...(readWrite.length ? { readWrite } : {}) } } : {}),
+    ...(policy.environment === undefined ? {} : { environment: policy.environment }),
     ...(allow.length || deny.length ? { network: { ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) } } : {}),
   };
 };
 
 export function serializeSessionPolicy(policy: SandboxPolicy): string | undefined {
   const compact = compactPolicy(policy);
-  if (!compact.mounts && !compact.network) return undefined;
+  if (!compact.mounts && !compact.environment && !compact.network) return undefined;
   const value = JSON.stringify(compact);
   if (Buffer.byteLength(value, "utf8") > MAX_SANDBOX_SESSION_POLICY_BYTES) throw new Error("sandbox session policy exceeds 64KB");
   return value;

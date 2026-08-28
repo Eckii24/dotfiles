@@ -12,6 +12,7 @@ type Handler = (event: any, ctx: any) => any;
 
 function harness(options: {
   flag?: boolean; flagValues?: Record<string, unknown>; env?: NodeJS.ProcessEnv; image?: string; vm?: any; sourcePath?: string; toolNames?: string[];
+  sandboxSettings?: unknown;
   ensureDefaultImage?: (image: string) => Promise<string>;
 } = {}) {
   const tools = new Map<string, any>();
@@ -30,6 +31,7 @@ function harness(options: {
   };
   const extension = createGondolinSandboxExtension({
     cwd: "/host/repo", env: options.env ?? {}, image: options.image, createVm: async () => vm,
+    sandboxSettings: options.sandboxSettings ?? {},
     ensureDefaultImage: options.ensureDefaultImage ?? (async () => { imageEnsures++; return "/images/pi-agent-base"; }),
   });
   const api = {
@@ -123,6 +125,25 @@ test("session-only CLI policy is effective now, exported after startup, and rest
   assert.ok(pi.notices.some((value) => value.includes(`${canonicalTmp} -> ${canonicalTmp} (ro)`) && value.includes('network={"allow":["*.example.org","api.example.com"],"deny":["blocked.example.org"]}')));
   await pi.handlers.get("session_shutdown")!({}, pi.ctx());
   assert.equal(process.env.PI_SANDBOX, undefined); assert.equal(process.env[SANDBOX_SESSION_POLICY_ENV], undefined);
+});
+
+test("sandbox settings contribute mounts and guest environment", async (t) => {
+  const beforePolicy = process.env[SANDBOX_SESSION_POLICY_ENV];
+  t.after(() => {
+    if (beforePolicy === undefined) delete process.env[SANDBOX_SESSION_POLICY_ENV];
+    else process.env[SANDBOX_SESSION_POLICY_ENV] = beforePolicy;
+  });
+  delete process.env[SANDBOX_SESSION_POLICY_ENV];
+  const pi = harness({ flag: true, sandboxSettings: {
+    mounts: { readOnly: [{ hostPath: "/tmp", guestPath: "/repo-path", required: true }] },
+    environment: { REPO_PATH: "/repo-path" },
+  } });
+  await pi.handlers.get("session_start")!({}, pi.ctx());
+  const policy = JSON.parse(process.env[SANDBOX_SESSION_POLICY_ENV]!);
+  assert.deepEqual(policy.mounts.readOnly, [{ hostPath: realpathSync("/tmp"), guestPath: "/repo-path", required: true }]);
+  assert.deepEqual(policy.environment, { REPO_PATH: "/repo-path" });
+  await pi.commands.get("sandbox").handler("status", pi.ctx());
+  assert.ok(pi.notices.some((value) => value.includes(`${realpathSync("/tmp")} -> /repo-path (ro)`)));
 });
 
 test("running parent propagates the sandbox marker to inherited child environments", async (t) => {

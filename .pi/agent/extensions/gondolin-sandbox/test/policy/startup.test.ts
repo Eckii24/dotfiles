@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   MAX_SANDBOX_SESSION_POLICY_BYTES,
+  parseSandboxSettings,
   parseSerializedSessionPolicy,
   parseStartupPolicyFlags,
   serializeSessionPolicy,
@@ -60,5 +61,13 @@ describe("session startup policy", () => {
     await expect(parseSerializedSessionPolicy(JSON.stringify({ network: { allow: ["bad"] } }))).rejects.toThrow("invalid host pattern");
     await expect(parseSerializedSessionPolicy("x".repeat(MAX_SANDBOX_SESSION_POLICY_BYTES + 1))).rejects.toThrow("64KB");
     expect(serializeSessionPolicy({})).toBeUndefined();
+  });
+
+  test("accepts environment settings and rejects malformed values", async () => {
+    const policy = await parseSandboxSettings({ environment: { REPO_PATH: "/repo-path" } });
+    expect(policy.environment).toEqual({ REPO_PATH: "/repo-path" });
+    expect(await parseSerializedSessionPolicy(serializeSessionPolicy(policy))).toEqual(policy);
+    await expect(parseSandboxSettings({ environment: { BAD: 42 } })).rejects.toThrow("environment values must be strings");
+    await expect(parseSandboxSettings({ surprise: true })).rejects.toThrow("unknown sandbox settings key");
   });
 });

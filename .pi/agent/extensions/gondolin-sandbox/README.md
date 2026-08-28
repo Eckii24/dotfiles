@@ -4,7 +4,7 @@ Pi execution inside one Gondolin micro-VM per Pi process. The sandbox is dormant
 
 ## Model
 
-Mounts and network rules are **startup parameters**, not persisted policy and not TUI mutations.
+Mounts, guest environment, and network rules are fixed at startup. They can come from the global/project `sandbox` settings or session-only CLI parameters; they are not TUI mutations.
 
 | Surface | Default |
 | --- | --- |
@@ -26,9 +26,50 @@ pi --sandbox
 
 This makes the canonical current working directory available read/write as `/workspace`. On first use of the bundled default image, the extension builds a host-native image and imports it into Gondolin's local image store. That initial build may require network access on a trusted machine.
 
+## Configure persistent startup policy
+
+Global `~/.pi/agent/settings.json` and trusted project `.pi/settings.json` may contain a `sandbox` block. Project values merge over global values; mount lists combine. CLI parameters add a session overlay.
+
+```json
+{
+  "sandbox": {
+    "mounts": {
+      "readOnly": [
+        {
+          "hostPath": "/absolute/path/reference-docs",
+          "guestPath": "/reference",
+          "required": true
+        }
+      ],
+      "readWrite": [
+        {
+          "hostPath": "/absolute/path/generated",
+          "guestPath": "/generated",
+          "required": true
+        }
+      ]
+    },
+    "environment": {
+      "REFERENCE_PATH": "/reference",
+      "GENERATED_PATH": "/generated"
+    }
+  }
+}
+```
+
+| Settings key | Guest behavior | Typical use |
+| --- | --- | --- |
+| `sandbox.mounts.readOnly` | Writes fail | Sources, docs, SDKs, fixtures |
+| `sandbox.mounts.readWrite` | Writes change host files directly | Explicit output, build, or cache paths |
+| `sandbox.environment` | Sets guest-only environment variables | Stable names for mounted guest paths |
+
+Read/write mounts grant the sandbox authority to modify the corresponding host path. Prefer narrow directories. Mount entries use the same strict object format and validation rules as CLI mounts below.
+
+The policy is applied only when the sandbox is activated with `--sandbox` (or inherited by a sandboxed child).
+
 ## Add mounts at startup
 
-All mount and network configuration is session-only. It affects this Pi process and its sandboxed child Pi processes, but does not write `settings.json` or any project file.
+CLI mount and network parameters are session-only. They affect this Pi process and its sandboxed child Pi processes, but do not write `settings.json` or any project file.
 
 ### One read-only mount
 

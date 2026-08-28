@@ -19,6 +19,7 @@ import {
   truncateTail,
   type EditOperations,
   type WriteOperations,
+  SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
   buildAssets,
@@ -39,6 +40,7 @@ import {
   SANDBOX_SESSION_POLICY_ENV,
   STARTUP_POLICY_FLAGS,
   hasStartupPolicyFlags,
+  parseSandboxSettings,
   parseSerializedSessionPolicy,
   parseStartupPolicyFlags,
   serializeSessionPolicy,
@@ -63,6 +65,7 @@ type ExtensionDeps = {
   image?: string;
   createVm?: () => Promise<VmLike>;
   ensureDefaultImage?: (image: string) => Promise<string>;
+  sandboxSettings?: unknown;
 };
 
 /** Policy wins over explicit injection; invalid injection fails before VM creation. */
@@ -637,8 +640,20 @@ export function createGondolinSandboxExtension(deps: ExtensionDeps = {}) {
         if (startupFlagsSupplied && sandboxFlag !== true) throw new Error("startup mount/network flags require explicit --sandbox");
         if (!deps.createVm) canonicalCwd = await realpath(cwd);
         const inheritedOverlay = await parseSerializedSessionPolicy(env[SANDBOX_SESSION_POLICY_ENV]);
+        let settingsOverlay: SandboxPolicy;
+        if (deps.sandboxSettings !== undefined) {
+          settingsOverlay = await parseSandboxSettings(deps.sandboxSettings);
+        } else {
+          const settings = SettingsManager.create(cwd, undefined, { projectTrusted: ctx.isProjectTrusted() });
+          const globalSandbox = (settings.getGlobalSettings() as Record<string, unknown>).sandbox;
+          const projectSandbox = (settings.getProjectSettings() as Record<string, unknown>).sandbox;
+          settingsOverlay = mergePolicies(
+            await parseSandboxSettings(globalSandbox, "global sandbox settings"),
+            await parseSandboxSettings(projectSandbox, "project sandbox settings"),
+          );
+        }
         const cliOverlay = await parseStartupPolicyFlags(startupFlagValues);
-        const sessionOverlay = mergePolicies(inheritedOverlay, cliOverlay);
+        const sessionOverlay = mergePolicies(mergePolicies(inheritedOverlay, settingsOverlay), cliOverlay);
         effectivePolicy = sessionOverlay;
         sessionPolicyText = serializeSessionPolicy(sessionOverlay);
         backend = resolveBackend(effectivePolicy, env);
