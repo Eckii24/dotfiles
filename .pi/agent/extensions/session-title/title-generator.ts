@@ -1,17 +1,41 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
+
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 import { resolveModelReference } from "../shared/model-reference.ts";
 
-const TITLE_MODEL = "@small";
+const DEFAULT_TITLE_MODEL = "@tiny";
 const MAX_TITLE_LENGTH = 80;
+
+type SessionTitleSettings = {
+	model?: string;
+};
+
+function readSessionTitleSettings(path: string): SessionTitleSettings {
+	if (!existsSync(path)) return {};
+	try {
+		const settings: unknown = JSON.parse(readFileSync(path, "utf8"));
+		if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return {};
+		const sessionTitle = (settings as Record<string, unknown>).sessionTitle;
+		if (typeof sessionTitle !== "object" || sessionTitle === null || Array.isArray(sessionTitle)) return {};
+		const model = (sessionTitle as Record<string, unknown>).model;
+		return typeof model === "string" && model.trim() ? { model: model.trim() } : {};
+	} catch {
+		return {};
+	}
+}
+
+export function loadSessionTitleModel(agentDir = getAgentDir()): string {
+	return readSessionTitleSettings(join(agentDir, "settings.json")).model ?? DEFAULT_TITLE_MODEL;
+}
 
 export function shouldGenerateTitle(attempted: boolean, sessionFile: string | undefined, sessionName: string | undefined): boolean {
 	return !attempted && Boolean(sessionFile) && !sessionName;
 }
 
-export function buildTitleArgs(firstMessage: string, model = resolveModelReference(TITLE_MODEL)): string[] {
+export function buildTitleArgs(firstMessage: string, model = resolveModelReference(DEFAULT_TITLE_MODEL)): string[] {
 	const prompt = [
 		"Create one concise session title for the user message below.",
 		"Output only the title: no quotes, markdown, label, explanation, or punctuation at the end.",
@@ -54,8 +78,13 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	return { command: "pi", args };
 }
 
-export async function generateTitle(firstMessage: string, cwd: string, timeoutMs = 30_000): Promise<string | undefined> {
-	const invocation = getPiInvocation(buildTitleArgs(firstMessage));
+export async function generateTitle(
+	firstMessage: string,
+	cwd: string,
+	timeoutMs = 30_000,
+	model = loadSessionTitleModel(),
+): Promise<string | undefined> {
+	const invocation = getPiInvocation(buildTitleArgs(firstMessage, resolveModelReference(model)));
 	return new Promise((resolve) => {
 		const child = spawn(invocation.command, invocation.args, {
 			cwd,

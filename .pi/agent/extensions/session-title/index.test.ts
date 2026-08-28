@@ -1,9 +1,17 @@
-import { describe, expect, it } from "bun:test";
-import { buildTitleArgs, sanitizeTitle, shouldGenerateTitle } from "./title-generator.ts";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildTitleArgs, loadSessionTitleModel, sanitizeTitle, shouldGenerateTitle } from "./title-generator.ts";
 import { registerSessionTitle } from "./index.ts";
 
 describe("session-title generator", () => {
-	it("builds an isolated ephemeral small-model invocation from only the first message", () => {
+	const temporaryDirectories: string[] = [];
+	afterEach(() => {
+		for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+	});
+
+	it("builds an isolated ephemeral title-model invocation from only the first message", () => {
 		const args = buildTitleArgs("Investigate native Pi session names", "openai-codex/gpt-5.6-luna");
 
 		expect(args).toEqual([
@@ -21,6 +29,19 @@ describe("session-title generator", () => {
 			"--thinking",
 			"off",
 		]);
+	});
+
+	it("uses @tiny by default and accepts a configured model", () => {
+		const defaultAgentDir = mkdtempSync(join(tmpdir(), "session-title-default-"));
+		temporaryDirectories.push(defaultAgentDir);
+		expect(loadSessionTitleModel(defaultAgentDir)).toBe("@tiny");
+
+		const configuredAgentDir = mkdtempSync(join(tmpdir(), "session-title-configured-"));
+		temporaryDirectories.push(configuredAgentDir);
+		writeFileSync(join(configuredAgentDir, "settings.json"), JSON.stringify({
+			sessionTitle: { model: "@small" },
+		}));
+		expect(loadSessionTitleModel(configuredAgentDir)).toBe("@small");
 	});
 
 	it("normalizes a one-line title and rejects empty model output", () => {

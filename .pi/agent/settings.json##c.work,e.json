@@ -10,6 +10,9 @@
     "large": "gpt-5.6-sol"
   },
   "chatModel": "github-copilot/gpt-5.6-luna",
+  "sessionTitle": {
+    "model": "@tiny"
+  },
   "goal": {
     "maxTurns": 20,
     "evaluatorModel": "@tiny"
