@@ -1,6 +1,6 @@
 ---
 name: fetch-website-to-markdown
-description: Fetch public URLs/articles/docs/blogs and save clean Markdown with source URL, headings, lists, links, and code blocks. Use when the source is a URL. Not for converting local files (use markitdown) or condensing/summarizing content (use the /summarize-article prompt).
+description: Use when a public webpage must become a durable local Markdown source. Saves one source-preserving file per URL; not for quick fact lookup, summaries, or local-file conversion.
 compatibility:
   tools: bash, read, write
 ---
