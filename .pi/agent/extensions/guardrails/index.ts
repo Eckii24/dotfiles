@@ -8,7 +8,7 @@
 // - read  -> `paths.confirmRead` requires confirmation
 // - write -> `paths.allowWrite` whitelist + `paths.confirmWrite` confirmation list
 // - edit  -> same rules as `write`
-// - bash  -> `bash.confirm` command checks + path-based read/write detection
+// - bash  -> token-aware `bash.rules` + path-based read/write detection
 //
 // Bash parsing:
 // - AST-based via shfmt when available (no false positives on quoted strings)
@@ -94,13 +94,11 @@
 //     ]
 //   },
 //   "bash": {
-//     "deny": [
-//       "rm",
-//       "sudo",
-//       "dd",
-//       "mkfs",
-//       "chmod",
-//       "chown"
+//     "rules": [
+//       { "command": ["rm"], "decision": "confirm" },
+//       { "command": ["sudo"], "decision": "confirm" },
+//       { "command": ["az", "boards", "work-item", "show"], "decision": "allow" },
+//       { "command": ["az"], "decision": "confirm" }
 //     ]
 //   }
 // }
@@ -114,7 +112,11 @@
 //     "confirmWrite": ["**/*"]
 //   },
 //   "bash": {
-//     "deny": ["rm", "sudo", "dd", "mkfs", "curl", "wget"]
+//     "rules": [
+//       { "command": ["rm"], "decision": "deny" },
+//       { "command": ["sudo"], "decision": "deny" },
+//       { "command": ["curl"], "decision": "confirm" }
+//     ]
 //   }
 // }
 //
@@ -203,7 +205,7 @@ async function confirmBashViolation(
 ): Promise<ConfirmResult> {
   const violationTexts = violations.map(v => {
     if (v.type === "denied_command") {
-      return `• Denied command: ${v.command}`;
+      return `• Command ${v.decision === "deny" ? "denied" : "requires confirmation"}: ${v.command}`;
     } else if (v.type === "file_read_detected") {
       return `• File read detected: ${v.details}`;
     } else if (v.type === "preflight_flagged") {
@@ -616,6 +618,15 @@ export default function (pi: ExtensionAPI) {
 
       // Hard bash checks always run before a session approval can suppress a prompt.
       const result = checkBash(command, ctx.cwd, currentConfig, { patternCwd });
+      if (result.denied) {
+        const reasons = result.violations
+          .filter((violation) => violation.decision === "deny")
+          .map((violation) => `  • ${violation.details ?? violation.command}`)
+          .join("\n");
+        if (ctx.hasUI) ctx.ui.notify(`🛡️ Bash denied:\n${reasons}`, "warning");
+        recordDecision(ctx, "bash-blocked-deny-rule", { toolName: "bash", command, violations: result.violations });
+        return { block: true, reason: `[Guardrails] Bash blocked by deny rule:\n${reasons}` };
+      }
       if (sessionAllow.isAllowed(sessionScope, command)) {
         recordDecision(ctx, "bash-allowed-session-reuse", { toolName: "bash", command, checkedViolations: result.violations });
         return undefined;
@@ -656,7 +667,7 @@ export default function (pi: ExtensionAPI) {
 
         if (confirmResult === "deny") {
           const violationLines = activeViolations.map(v => {
-            if (v.type === "denied_command") return `  • Denied command: ${v.command}`;
+            if (v.type === "denied_command") return `  • Command requires confirmation: ${v.command}`;
             if (v.type === "file_read_detected") return `  • File read detected: ${v.details}`;
             if (v.type === "preflight_flagged") return `  • Preflight flagged: ${v.details}`;
             return `  • File write detected: ${v.details}`;
@@ -860,8 +871,7 @@ export default function (pi: ExtensionAPI) {
       `Confirm Write:  ${cfg.paths?.confirmWrite?.length ? cfg.paths.confirmWrite.join(", ") : "(none)"}`,
       "",
       "─── Bash ───",
-      `Confirm:     ${cfg.bash?.confirm?.length ? cfg.bash.confirm.join(", ") : "(none)"}`,
-      `Gate 1 allow: ${cfg.bash?.allow?.length ? cfg.bash.allow.join(", ") : "(defaults only)"}`,
+      `Rules: ${cfg.bash?.rules?.length ? cfg.bash.rules.map((rule) => `${rule.command.join(" ")} → ${rule.decision}`).join(" | ") : "(none; Gate 1 defaults apply)"}`,
       `Gate 2 model: ${cfg.bash?.preflightModel ?? DEFAULT_PREFLIGHT_MODEL}`,
       `Gate 2 rules: ${formatPreflightRulesForDisplay(cfg.bash?.preflightRules)}`,
     ];

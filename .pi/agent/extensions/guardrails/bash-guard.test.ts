@@ -5,7 +5,7 @@ const baseConfig = {
   timeout: 300000,
   paths: {},
   bash: {
-    confirm: ["echo"],
+    rules: [{ command: ["echo"], decision: "confirm" as const }],
   },
 };
 
@@ -14,7 +14,7 @@ describe("checkBash parsing", () => {
     const config = {
       timeout: 300000,
       paths: {},
-      bash: { confirm: ["rm"] },
+      bash: { rules: [{ command: ["rm"], decision: "confirm" as const }] },
     };
 
     for (const command of [
@@ -28,6 +28,37 @@ describe("checkBash parsing", () => {
     }
   });
 
+  it("lets the longest subcommand rule override a generic command rule", () => {
+    const config = {
+      paths: {},
+      bash: {
+        rules: [
+          { command: ["az", "boards", "work-item", "show"], decision: "allow" as const },
+          { command: ["az"], decision: "confirm" as const },
+        ],
+      },
+    };
+
+    for (const forceFallback of [false, true]) {
+      expect(checkBash("az boards work-item show --id 123", process.cwd(), config, { forceFallback }).allowed).toBe(true);
+      const blocked = checkBash("az boards work-item update --id 123", process.cwd(), config, { forceFallback });
+      expect(blocked.allowed).toBe(false);
+      expect(blocked.denied).toBe(false);
+      expect(blocked.violations[0]?.decision).toBe("confirm");
+    }
+  });
+
+  it("marks deny rules for non-interactive blocking", () => {
+    const result = checkBash("az login", process.cwd(), {
+      paths: {},
+      bash: { rules: [{ command: ["az"], decision: "deny" }] },
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.denied).toBe(true);
+    expect(result.violations[0]?.decision).toBe("deny");
+  });
+
   it("checks commands after standalone background separators", () => {
     const result = checkBash("pwd & echo hi", process.cwd(), baseConfig, { forceFallback: true });
 
@@ -37,7 +68,8 @@ describe("checkBash parsing", () => {
         type: "denied_command",
         command: "echo",
         segment: "echo hi",
-        details: "Command 'echo' is in the deny list",
+        details: "Command matches CONFIRM rule: echo",
+        decision: "confirm",
       },
     ]);
   });

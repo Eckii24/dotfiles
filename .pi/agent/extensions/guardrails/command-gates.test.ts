@@ -116,14 +116,27 @@ describe("evaluateBashCommandGates", () => {
     }
   });
 
-  it("uses configured gate-1 allow commands only when executed standalone", () => {
-    const result = evaluateBashCommandGates("node --version", process.cwd(), {
+  it("uses configured gate-1 allow rules only when executed standalone", () => {
+    const config = {
       ...baseConfig,
-      bash: { allow: ["node"] },
-    });
+      bash: {
+        rules: [
+          { command: ["az", "boards", "work-item", "show"], decision: "allow" as const },
+          { command: ["az"], decision: "confirm" as const },
+        ],
+      },
+    };
 
-    expect(result.gate).toBe(1);
-    expect(result.decision).toBe("allow");
+    for (const forceFallback of [false, true]) {
+      const allowed = evaluateBashCommandGates("az boards work-item show --id 123", process.cwd(), config, { forceFallback });
+      const confirmed = evaluateBashCommandGates("az boards work-item update --id 123", process.cwd(), config, { forceFallback });
+      const tokenBoundary = evaluateBashCommandGates("az boards work-item show-extra --id 123", process.cwd(), config, { forceFallback });
+
+      expect(allowed.gate).toBe(1);
+      expect(allowed.decision).toBe("allow");
+      expect(confirmed.gate).toBe(2);
+      expect(tokenBoundary.gate).toBe(2);
+    }
   });
 
   it("preserves gate-1 allowlist behavior in fallback mode", () => {

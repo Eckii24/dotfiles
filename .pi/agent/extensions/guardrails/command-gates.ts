@@ -1,4 +1,5 @@
 import type { GuardrailsConfig } from "./types.js";
+import { matchBashRule } from "./bash-rules.js";
 import { parseShellAST, walkShellCommands, wordToString, type ShellFile } from "./shell-ast.js";
 
 export interface CommandGateResult {
@@ -50,11 +51,6 @@ const WRAPPER_COMMANDS = new Set(["bash", "sh", "zsh", "fish", "eval", "xargs", 
 
 function hasPlaceholderToken(value: string): boolean {
   return /\$\{?[A-Za-z_]/.test(value) || value.includes("$(__cmd_subst__)") || value.includes("$((…))") || value.includes("<(…)") || value.includes("`");
-}
-
-function getConfiguredAllow(config: GuardrailsConfig): Set<string> {
-  const configured = config.bash?.allow ?? [];
-  return new Set([...DEFAULT_GATE1_ALLOW, ...configured].map((v) => v.toLowerCase()));
 }
 
 function isReadOnlyGitCommand(args: string[]): boolean {
@@ -278,10 +274,11 @@ function isSafeWgetGet(args: string[]): boolean {
 }
 
 function isDeterministicSafeSimpleCommand(commandName: string, args: string[], config: GuardrailsConfig): boolean {
-  const allowSet = getConfiguredAllow(config);
   const lowerName = commandName.toLowerCase();
   if (hasUnsafeAllowedCommandArguments(lowerName, args)) return false;
-  if (allowSet.has(lowerName)) return true;
+  const rule = matchBashRule(commandName, args, config);
+  if (rule) return rule.decision === "allow";
+  if (DEFAULT_GATE1_ALLOW.has(lowerName)) return true;
   if (lowerName === "git") return isReadOnlyGitCommand(args);
   if (isTestCommand(lowerName, args)) return true;
   if (lowerName === "curl") return isSafeCurlGet(args);

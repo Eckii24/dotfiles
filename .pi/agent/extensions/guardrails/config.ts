@@ -19,7 +19,7 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { GuardrailsConfig } from "./types.js";
+import type { BashRule, GuardrailsConfig } from "./types.js";
 import { getEffectiveCwd } from "./effective-cwd.js";
 
 export const DEFAULT_CONFIG: GuardrailsConfig = {
@@ -184,6 +184,22 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
+function isBashRuleArray(value: unknown): value is BashRule[] {
+  if (!Array.isArray(value) || value.length > 100) return false;
+  const seen = new Set<string>();
+  for (const rule of value) {
+    if (typeof rule !== "object" || rule === null || Array.isArray(rule)) return false;
+    const candidate = rule as { command?: unknown; decision?: unknown };
+    if (!Array.isArray(candidate.command) || candidate.command.length === 0 || candidate.command.length > 20) return false;
+    if (!candidate.command.every((token) => typeof token === "string" && token.length > 0 && token.length <= 200 && !/\s/.test(token))) return false;
+    if (!["allow", "confirm", "deny"].includes(candidate.decision as string)) return false;
+    const key = candidate.command.map((token) => (token as string).toLowerCase()).join("\0");
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
 function normalizePreflightRules(value: string[]): string[] {
   return value.map((rule) => rule.trim()).filter((rule) => rule.length > 0);
 }
@@ -254,20 +270,18 @@ function validateConfig(raw: Partial<GuardrailsConfig>, source: string): {
   if (raw.bash !== undefined) {
     if (typeof raw.bash === "object" && raw.bash !== null && !Array.isArray(raw.bash)) {
       config.bash = {};
-
-      if (raw.bash.confirm !== undefined) {
-        if (isStringArray(raw.bash.confirm)) {
-          config.bash.confirm = raw.bash.confirm;
-        } else {
-          errors.push({ field: "bash.confirm", message: "must be an array of strings" });
+      const rawBash = raw.bash as Record<string, unknown>;
+      for (const removedField of ["allow", "confirm"]) {
+        if (removedField in rawBash) {
+          errors.push({ field: `bash.${removedField}`, message: "was removed; use bash.rules" });
         }
       }
 
-      if (raw.bash.allow !== undefined) {
-        if (isStringArray(raw.bash.allow)) {
-          config.bash.allow = raw.bash.allow;
+      if (raw.bash.rules !== undefined) {
+        if (isBashRuleArray(raw.bash.rules)) {
+          config.bash.rules = raw.bash.rules;
         } else {
-          errors.push({ field: "bash.allow", message: "must be an array of strings" });
+          errors.push({ field: "bash.rules", message: "must be at most 100 unique { command: non-empty token[], decision: allow|confirm|deny } rules" });
         }
       }
 
@@ -333,8 +347,7 @@ function mergeConfigs(base: GuardrailsConfig, override: Partial<GuardrailsConfig
   if (override.bash) {
     result.bash = {
       ...base.bash,
-      confirm: mergeArrays(base.bash?.confirm, override.bash.confirm),
-      allow: mergeArrays(base.bash?.allow, override.bash.allow),
+      rules: override.bash.rules ?? base.bash?.rules,
       preflightModel: override.bash.preflightModel ?? base.bash?.preflightModel,
       preflightRules: mergeArrays(base.bash?.preflightRules, override.bash.preflightRules),
     };

@@ -20,7 +20,7 @@ describe("loadConfig", () => {
           confirmRead: ["**/.env"],
           confirmWrite: ["**/.git/**"],
         },
-        bash: { confirm: ["rm"] },
+        bash: { rules: [{ command: ["rm"], decision: "confirm" }] },
       },
     }));
 
@@ -28,18 +28,21 @@ describe("loadConfig", () => {
 
     expect(config.paths?.confirmRead).toContain("**/.env");
     expect(config.paths?.confirmWrite).toContain("**/.git/**");
-    expect(config.bash?.confirm).toContain("rm");
+    expect(config.bash?.rules).toEqual([{ command: ["rm"], decision: "confirm" }]);
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("accepts bash.allow, bash.preflightModel and bash.preflightRules from project settings", () => {
+  it("accepts bash.rules, bash.preflightModel and bash.preflightRules from project settings", () => {
     const cwd = makeTempDir();
     const piDir = join(cwd, ".pi");
     mkdirSync(piDir, { recursive: true });
     writeFileSync(join(piDir, "settings.json"), JSON.stringify({
       guardrails: {
         bash: {
-          allow: ["pwd", "ls"],
+          rules: [
+            { command: ["pwd"], decision: "allow" },
+            { command: ["az"], decision: "deny" },
+          ],
           preflightModel: "github-copilot/claude-haiku-4.5",
           preflightRules: ["  Confirm package publishing  ", "", "Deny curl piped to shell"],
         },
@@ -48,14 +51,34 @@ describe("loadConfig", () => {
 
     const config = loadConfig(cwd, { force: true });
 
-    expect(config.bash?.allow).toEqual(["pwd", "ls"]);
+    expect(config.bash?.rules).toEqual([
+      { command: ["pwd"], decision: "allow" },
+      { command: ["az"], decision: "deny" },
+    ]);
     expect(config.bash?.preflightModel).toBe("github-copilot/claude-haiku-4.5");
     expect(config.bash?.preflightRules).toEqual(["Confirm package publishing", "Deny curl piped to shell"]);
 
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("ignores invalid bash.allow values", () => {
+  it("does not load removed bash.allow and bash.confirm fields", () => {
+    const baselineCwd = makeTempDir();
+    const baseline = loadConfig(baselineCwd, { force: true });
+    const cwd = makeTempDir();
+    const piDir = join(cwd, ".pi");
+    mkdirSync(piDir, { recursive: true });
+    writeFileSync(join(piDir, "settings.json"), JSON.stringify({
+      guardrails: { bash: { allow: ["node"], confirm: ["rm"] } },
+    }));
+
+    const config = loadConfig(cwd, { force: true });
+
+    expect(config.bash?.rules).toEqual(baseline.bash?.rules);
+    rmSync(baselineCwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("ignores invalid or duplicate bash.rules values", () => {
     const baselineCwd = makeTempDir();
     const baseline = loadConfig(baselineCwd, { force: true });
 
@@ -65,14 +88,17 @@ describe("loadConfig", () => {
     writeFileSync(join(piDir, "settings.json"), JSON.stringify({
       guardrails: {
         bash: {
-          allow: ["pwd", 42],
+          rules: [
+            { command: ["az"], decision: "allow" },
+            { command: ["AZ"], decision: "confirm" },
+          ],
         },
       },
     }));
 
     const config = loadConfig(cwd, { force: true });
 
-    expect(config.bash?.allow).toEqual(baseline.bash?.allow);
+    expect(config.bash?.rules).toEqual(baseline.bash?.rules);
 
     rmSync(baselineCwd, { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });

@@ -17,12 +17,19 @@ export interface PathsConfig {
   confirmWrite?: string[];
 }
 
+export type BashRuleDecision = "allow" | "confirm" | "deny";
+
+/** Token-aware bash command rule. The longest matching command prefix wins. */
+export interface BashRule {
+  /** Command and subcommand tokens, for example ["az", "boards", "work-item", "show"]. */
+  command: string[];
+  decision: BashRuleDecision;
+}
+
 /** Configuration for bash command guardrails */
 export interface BashConfig {
-  /** Command names that require confirmation before execution */
-  confirm?: string[];
-  /** Command names that can bypass preflight when AST proves a single simple read-only call */
-  allow?: string[];
+  /** Token-aware command rules. The longest matching command prefix wins. */
+  rules?: BashRule[];
   /** provider/model id used for the Gate-2 preflight judge */
   preflightModel?: string;
   /** Additive soft rules appended to the Gate-2 preflight prompt. Cannot weaken core policy. */
@@ -65,8 +72,10 @@ export interface ExtractedCommand {
 
 /** Result of checking a bash command against guardrails */
 export interface BashCheckResult {
-  /** Whether the command is allowed */
+  /** Whether the command needs no hard-policy intervention */
   allowed: boolean;
+  /** Whether a matching deny rule requires blocking without confirmation */
+  denied: boolean;
   /** List of violations found */
   violations: BashViolation[];
 }
@@ -81,6 +90,8 @@ export interface BashViolation {
   segment: string;
   /** Additional details (e.g., target path for file writes) */
   details?: string;
+  /** Command-rule decision that produced this violation, when applicable. */
+  decision?: "confirm" | "deny";
 }
 
 export const DEFAULT_TIMEOUT = 300000; // 5 minutes

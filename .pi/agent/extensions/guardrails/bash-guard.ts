@@ -15,7 +15,7 @@
  *    - Best-effort but may produce false positives on quoted content
  *
  * Both paths apply the same guardrails checks:
- * - Command name deny list
+ * - Token-aware command rules with longest-prefix precedence
  * - File write detection (redirections, cp, mv, tee, etc.)
  * - File read detection (cat, head, tail, grep, etc.)
  * - Wrapper/prefix command unwrapping (sudo, bash -c, eval, etc.)
@@ -23,6 +23,7 @@
  */
 
 import type { GuardrailsConfig, BashCheckResult, BashViolation, ExtractedCommand } from "./types.js";
+import { matchBashRule } from "./bash-rules.js";
 import { matchesConfirmWrite, matchesConfirmRead, checkAllowWrite } from "./path-guard.js";
 import { resolve } from "node:path";
 import {
@@ -232,9 +233,7 @@ function processASTCommand(
   shellCwd: string,
   patternCwd: string,
   config: GuardrailsConfig,
-  denySet: Set<string>,
   violations: BashViolation[],
-  hasDenyRules: boolean,
   hasDenyWrite: boolean,
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
@@ -249,28 +248,32 @@ function processASTCommand(
   const cmdArgs = allArgs.slice(realIdx + 1);
   const segment = `${cmdName} ${cmdArgs.join(" ")}`.trim();
 
-  // ─── Check command name against deny list ───
-  if (hasDenyRules && denySet.has(cmdName.toLowerCase())) {
+  // ─── Check command against token-aware rules ───
+  const ruleMatch = matchBashRule(cmdName, cmdArgs, config);
+  if (ruleMatch && ruleMatch.decision !== "allow") {
     violations.push({
       type: "denied_command",
       command: cmdName,
       segment,
-      details: `Command '${cmdName}' is in the deny list`,
+      details: `Command matches ${ruleMatch.decision.toUpperCase()} rule: ${ruleMatch.rule.command.join(" ")}`,
+      decision: ruleMatch.decision,
     });
   }
 
-  // `find -exec command ...` executes an embedded command. Its capability must
-  // be checked before a top-level `find` can qualify for Gate 1.
+  // `find -exec command ...` executes an embedded command. Check its rule too.
   if (cmdName === "find") {
     for (let index = 0; index < cmdArgs.length; index++) {
       if (!["-exec", "-execdir", "-ok", "-okdir"].includes(cmdArgs[index]!)) continue;
       const nestedName = cmdArgs[index + 1];
-      if (nestedName && denySet.has(nestedName.toLowerCase())) {
+      if (!nestedName) continue;
+      const nestedRule = matchBashRule(nestedName, cmdArgs.slice(index + 2), config);
+      if (nestedRule && nestedRule.decision !== "allow") {
         violations.push({
           type: "denied_command",
           command: nestedName,
           segment,
-          details: `Command '${nestedName}' executed by find is in the deny list`,
+          details: `Command '${nestedName}' executed by find matches ${nestedRule.decision.toUpperCase()} rule: ${nestedRule.rule.command.join(" ")}`,
+          decision: nestedRule.decision,
         });
       }
     }
@@ -341,8 +344,6 @@ function processASTCommand(
         shellCwd,
         patternCwd,
         config,
-        denySet,
-        hasDenyRules,
         hasDenyWrite,
         hasAllowWrite,
         hasDenyRead,
@@ -360,8 +361,6 @@ function checkBashInner(
   cwd: string,
   patternCwd: string,
   config: GuardrailsConfig,
-  denySet: Set<string>,
-  hasDenyRules: boolean,
   hasDenyWrite: boolean,
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
@@ -371,10 +370,10 @@ function checkBashInner(
   // Try AST parsing
   const ast = parseShellAST(command);
   if (ast) {
-    checkBashViaAST(ast, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaAST(ast, cwd, patternCwd, config, violations, hasDenyWrite, hasAllowWrite, hasDenyRead);
   } else {
     // Fallback to string-based parsing
-    checkBashViaFallback(command, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaFallback(command, cwd, patternCwd, config, violations, hasDenyWrite, hasAllowWrite, hasDenyRead);
   }
 
   return violations;
@@ -395,9 +394,7 @@ function checkBashViaAST(
   cwd: string,
   patternCwd: string,
   config: GuardrailsConfig,
-  denySet: Set<string>,
   violations: BashViolation[],
-  hasDenyRules: boolean,
   hasDenyWrite: boolean,
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
@@ -429,9 +426,7 @@ function checkBashViaAST(
       shellCwd,
       patternCwd,
       config,
-      denySet,
       violations,
-      hasDenyRules,
       hasDenyWrite,
       hasAllowWrite,
       hasDenyRead,
@@ -852,9 +847,7 @@ function checkBashViaFallback(
   cwd: string,
   patternCwd: string,
   config: GuardrailsConfig,
-  denySet: Set<string>,
   violations: BashViolation[],
-  hasDenyRules: boolean,
   hasDenyWrite: boolean,
   hasAllowWrite: boolean,
   hasDenyRead: boolean,
@@ -873,12 +866,14 @@ function checkBashViaFallback(
   for (const cmd of allCommands) {
     const shellCwd = segmentCwdMap.get(cmd.fullSegment) ?? cwd;
 
-    if (hasDenyRules && denySet.has(cmd.name.toLowerCase())) {
+    const ruleMatch = matchBashRule(cmd.name, cmd.args, config);
+    if (ruleMatch && ruleMatch.decision !== "allow") {
       violations.push({
         type: "denied_command",
         command: cmd.name,
         segment: cmd.fullSegment,
-        details: `Command '${cmd.name}' is in the deny list`,
+        details: `Command matches ${ruleMatch.decision.toUpperCase()} rule: ${ruleMatch.rule.command.join(" ")}`,
+        decision: ruleMatch.decision,
       });
     }
 
@@ -929,25 +924,22 @@ export function checkBash(
 ): BashCheckResult {
   const violations: BashViolation[] = [];
   const patternCwd = options.patternCwd ?? cwd;
-  const denyList = config.bash?.confirm ?? [];
-  const denySet = new Set(denyList.map((c) => c.toLowerCase()));
-
-  const hasDenyRules = denySet.size > 0;
+  const hasCommandRules = (config.bash?.rules?.length ?? 0) > 0;
   const hasDenyWrite = (config.paths?.confirmWrite?.length ?? 0) > 0;
   const hasAllowWrite = config.paths?.allowWrite !== undefined;
   const hasDenyRead = (config.paths?.confirmRead?.length ?? 0) > 0;
 
-  if (!hasDenyRules && !hasDenyWrite && !hasAllowWrite && !hasDenyRead) {
-    return { allowed: true, violations: [] };
+  if (!hasCommandRules && !hasDenyWrite && !hasAllowWrite && !hasDenyRead) {
+    return { allowed: true, denied: false, violations: [] };
   }
 
   // Try AST-based analysis first
   const ast = options.forceFallback ? null : parseShellAST(command);
   if (ast) {
-    checkBashViaAST(ast, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaAST(ast, cwd, patternCwd, config, violations, hasDenyWrite, hasAllowWrite, hasDenyRead);
   } else {
     // Fallback to string-based analysis
-    checkBashViaFallback(command, cwd, patternCwd, config, denySet, violations, hasDenyRules, hasDenyWrite, hasAllowWrite, hasDenyRead);
+    checkBashViaFallback(command, cwd, patternCwd, config, violations, hasDenyWrite, hasAllowWrite, hasDenyRead);
   }
 
   // Deduplicate violations
@@ -963,6 +955,7 @@ export function checkBash(
 
   return {
     allowed: unique.length === 0,
+    denied: unique.some((violation) => violation.decision === "deny"),
     violations: unique,
   };
 }
