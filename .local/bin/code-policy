@@ -10,7 +10,7 @@ usage() {
 Usage: code-policy <command> [--json]
 
 Commands:
-  changed             Scan files changed from HEAD (staged and unstaged).
+  changed             Scan files changed from HEAD (staged, unstaged, and untracked).
   staged              Scan files staged in the Git index.
   branch <base>       Scan files changed from the merge-base with <base>.
   all                 Scan the current directory.
@@ -45,9 +45,15 @@ scan_json() {
 
 scan_files() {
   local mode="$1"
-  shift
+  local include_untracked="$2"
+  shift 2
   local diff
-  diff="$(git diff --name-only --diff-filter=ACMR "$@")"
+  diff="$({
+    git diff --name-only --diff-filter=ACMR "$@"
+    if [[ "$include_untracked" == 'true' ]]; then
+      git ls-files --others --exclude-standard
+    fi
+  })"
   [[ -z "$diff" ]] && return 0
 
   local -a files
@@ -66,9 +72,9 @@ main() {
     changed)
       require_ast_grep && require_git_repository || return $?
       if (( $# == 0 )); then
-        scan_files short HEAD
+        scan_files short true HEAD
       elif (( $# == 1 )) && [[ "$1" == '--json' ]]; then
-        scan_files json HEAD
+        scan_files json true HEAD
       else
         usage >&2
         return 2
@@ -77,12 +83,12 @@ main() {
     staged)
       require_ast_grep && require_git_repository || return $?
       (( $# == 0 )) || { usage >&2; return 2; }
-      scan_files short --cached
+      scan_files short false --cached
       ;;
     branch)
       require_ast_grep && require_git_repository || return $?
       (( $# == 1 )) || { usage >&2; return 2; }
-      scan_files short "${1}...HEAD"
+      scan_files short false "${1}...HEAD"
       ;;
     all)
       require_ast_grep || return $?

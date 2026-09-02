@@ -6,7 +6,7 @@ Personal, repository-independent ast-grep policy baseline.
 
 The `code-policy` wrapper uses `~/.config/code-policy/sgconfig.yml` and must be run from the target Git worktree for Git-based scans:
 
-- `code-policy changed` — scan staged and unstaged files changed from `HEAD`
+- `code-policy changed` — scan staged, unstaged, and untracked files changed from `HEAD`
 - `code-policy changed --json` — emit newline-delimited JSON for changed files
 - `code-policy staged` — scan files staged in the Git index
 - `code-policy branch <base>` — scan files changed from `<base>...HEAD`
