@@ -4,9 +4,10 @@ A free Markdown memo is bound to each Herdr workspace ID.
 
 ## Use
 
-- `Ctrl+y`, then `m`: open the memo as an overlay for the current workspace.
+- `Ctrl+y`, then `m`: open the memo in a 75% × 75% popup for the current workspace.
 - Edit freely in `$EDITOR`; default is `vi`.
-- Exit the editor to close the overlay.
+- In `vi`, `vim`, or `nvim`, press `Ctrl+y`, then `m` again to save and close the popup.
+- With another editor, exit it normally to close the popup.
 - A `✎` marker appears in the workspace sidebar only when the memo is non-empty.
 
 ## Lifecycle

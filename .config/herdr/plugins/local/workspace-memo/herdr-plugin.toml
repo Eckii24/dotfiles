@@ -21,5 +21,7 @@ command = ["python3", "src/workspace_memo.py", "workspace-closed"]
 [[panes]]
 id = "editor"
 title = "Workspace memo"
-placement = "overlay"
+placement = "popup"
+width = "75%"
+height = "75%"
 command = ["python3", "src/workspace_memo.py", "edit"]

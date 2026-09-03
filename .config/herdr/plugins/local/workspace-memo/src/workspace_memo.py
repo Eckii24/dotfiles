@@ -15,6 +15,12 @@ from typing import Any
 PLUGIN_ID = "matthias.workspace-memo"
 MARKER = "✎"
 SAFE_WORKSPACE_ID = re.compile(r"^[A-Za-z0-9:_-]+$")
+VIM_EDITORS = {"nvim", "vi", "vim"}
+VIM_TOGGLE_MAPPINGS = (
+    r"nnoremap <silent> <C-y>m :wqall<CR>",
+    r"inoremap <silent> <C-y>m <Esc>:wqall<CR>",
+    r"xnoremap <silent> <C-y>m <Esc>:wqall<CR>",
+)
 
 
 class MemoStore:
@@ -122,6 +128,9 @@ def memo_editor() -> list[str]:
     command = shlex.split(editor)
     if not command:
         raise RuntimeError("EDITOR is empty")
+    if Path(command[0]).name in VIM_EDITORS:
+        for mapping in VIM_TOGGLE_MAPPINGS:
+            command.extend(["-c", mapping])
     return command
 
 
@@ -141,19 +150,8 @@ def edit() -> int:
 
 
 def toggle() -> int:
-    store = state_store()
     workspace_id = current_workspace_id()
-    open_path = store.open_path_for(workspace_id)
-    if open_path.is_file():
-        pane_id = open_path.read_text(encoding="utf-8").strip()
-        if pane_id:
-            result = run_herdr("plugin", "pane", "close", pane_id, check=False)
-            if result.returncode == 0:
-                open_path.unlink(missing_ok=True)
-                return 0
-        open_path.unlink(missing_ok=True)
-
-    result = run_herdr(
+    run_herdr(
         "plugin",
         "pane",
         "open",
@@ -161,15 +159,9 @@ def toggle() -> int:
         PLUGIN_ID,
         "--entrypoint",
         "editor",
-        "--placement",
-        "overlay",
-        "--workspace",
-        workspace_id,
+        "--env",
+        f"HERDR_WORKSPACE_ID={workspace_id}",
     )
-    payload = json.loads(result.stdout)
-    pane_id = payload["result"]["pane"]["pane_id"]
-    open_path.parent.mkdir(parents=True, exist_ok=True)
-    open_path.write_text(pane_id, encoding="utf-8")
     return 0
 
 
