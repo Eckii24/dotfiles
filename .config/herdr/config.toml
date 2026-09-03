@@ -22,12 +22,24 @@ rename_tab = "prefix+shift+c"
 rename_pane = "prefix+shift+v"
 split_horizontal = "prefix+s"  
 
+[[keys.command]]
+key = "prefix+m"
+type = "plugin_action"
+command = "matthias.workspace-memo.toggle"
+description = "toggle workspace memo"
+
 [ui]
 confirm_close = false
 pane_gaps = false
 prompt_new_tab_name = false
 hide_tab_bar_when_single_tab = true
 tab_bar_position = "bottom"
+
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace", "$memo"],
+  ["branch", "git_status"],
+]
 
 
 [ui.toast]

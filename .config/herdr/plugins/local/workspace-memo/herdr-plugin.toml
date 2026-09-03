@@ -1,0 +1,25 @@
+id = "matthias.workspace-memo"
+name = "Workspace Memo"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Persistent Markdown memo per Herdr workspace."
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["python3", "src/workspace_memo.py", "startup"]
+
+[[actions]]
+id = "toggle"
+title = "Toggle workspace memo"
+contexts = ["workspace"]
+command = ["python3", "src/workspace_memo.py", "toggle"]
+
+[[events]]
+on = "workspace.closed"
+command = ["python3", "src/workspace_memo.py", "workspace-closed"]
+
+[[panes]]
+id = "editor"
+title = "Workspace memo"
+placement = "overlay"
+command = ["python3", "src/workspace_memo.py", "edit"]
