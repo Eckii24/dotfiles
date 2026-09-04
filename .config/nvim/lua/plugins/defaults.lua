@@ -1,3 +1,13 @@
+local function add_file_fields(item)
+  local path = item.file
+  if type(path) ~= "string" or path == "" then
+    return item
+  end
+
+  item.ext = vim.fn.fnamemodify(path, ":e")
+  return item
+end
+
 local function is_test_picker_item(item)
   local path = Snacks.picker.util.path(item)
   if not path or path == "" then
@@ -106,6 +116,7 @@ return {
           no_tests = { icon = "x" },
         },
         transform = function(item, ctx)
+          add_file_fields(item)
           if ctx.picker.opts.no_tests and is_test_picker_item(item) then
             return false
           end
