@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'Usage: %s <input> [-o <output>]\n' "${0##*/}" >&2
+}
+
+input=''
+output=''
+
+while (($#)); do
+  case $1 in
+    -o|--output)
+      (($# >= 2)) || { printf 'Error: %s requires a path.\n' "$1" >&2; usage; exit 2; }
+      output=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -* )
+      printf 'Error: unknown option: %s\n' "$1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      if [[ -n $input ]]; then
+        printf 'Error: only one input file is allowed.\n' >&2
+        usage
+        exit 2
+      fi
+      input=$1
+      shift
+      ;;
+  esac
+done
+
+if [[ -z $input ]]; then
+  printf 'Error: input file is required.\n' >&2
+  usage
+  exit 2
+fi
+
+if [[ -z $output ]]; then
+  if [[ $input == *.* ]]; then
+    output="${input%.*}.mp4"
+  else
+    output="$input.mp4"
+  fi
+fi
+
+command -v ffmpeg >/dev/null 2>&1 || {
+  printf 'Error: ffmpeg was not found in PATH.\n' >&2
+  exit 127
+}
+
+ffmpeg -i "$input" \
+  -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p \
+  -c:a aac -b:a 128k "$output"
